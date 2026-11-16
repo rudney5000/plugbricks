@@ -1,0 +1,42 @@
+{
+  "description": "a volume known to neither retainedVolumes nor pendingDeletion is never pruned",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "retainedVolumes": []
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Retained volumes: none\nPending deletion: none",
+      "unchanged": true
+    }
+  ],
+  "expectPrune": []
+}

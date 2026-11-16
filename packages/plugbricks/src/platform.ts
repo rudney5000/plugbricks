@@ -63,6 +63,8 @@ export interface Lock {
   bricks: Record<string, LockedBrick>;
   capabilities: Record<string, string>;
   retainedVolumes: VolumeRef[];
+  /** The only volumes a driver may delete, and only with --prune-volumes. */
+  pendingDeletion: VolumeRef[];
 }
 
 /** A refusal. Carries one or more issues; the first one gives the headline code. */
@@ -190,7 +192,7 @@ export interface Project {
 }
 
 function emptyLock(): Lock {
-  return { $schema: LOCK_SCHEMA_ID, lockfileVersion: 1, bricks: {}, capabilities: {}, retainedVolumes: [] };
+  return { $schema: LOCK_SCHEMA_ID, lockfileVersion: 1, bricks: {}, capabilities: {}, retainedVolumes: [], pendingDeletion: [] };
 }
 
 /** Creates platform.json, platform.lock and .platform/bricks/. Refuses to overwrite an existing platform. */
@@ -228,13 +230,46 @@ export function readProject(root: string): Project {
   for (const b of Object.keys(l.bricks)) {
     if (!p.bricks[b]) fail("LOCK_OUT_OF_SYNC", { brick: b, detail: "it is in platform.lock but not in platform.json" });
   }
+  checkVolumeLists(l);
   return { root: dir, platform: p, lock: l };
 }
 
+const volumeKey = (r: VolumeRef) => `${r.brick}/${r.service}/${r.name}`;
+const byKey = (a: VolumeRef, b: VolumeRef) => volumeKey(a).localeCompare(volumeKey(b));
+
+/**
+ * The two volume lists must never contradict each other or the installed bricks: a volume
+ * pending deletion that is also retained, or that belongs to an installed brick, would let a
+ * driver delete live data.
+ */
+function checkVolumeLists(lock: Lock): void {
+  const retained = new Set(lock.retainedVolumes.map(volumeKey));
+  for (const v of lock.pendingDeletion) {
+    if (retained.has(volumeKey(v))) {
+      fail("LOCK_INCONSISTENT", { volume: volumeKey(v), detail: "both in retainedVolumes and in pendingDeletion" });
+    }
+  }
+  for (const [list, entries] of [["retainedVolumes", lock.retainedVolumes], ["pendingDeletion", lock.pendingDeletion]] as const) {
+    for (const v of entries) {
+      if (lock.bricks[v.brick]) {
+        fail("LOCK_INCONSISTENT", { volume: volumeKey(v), detail: `in ${list} although brick "${v.brick}" is installed` });
+      }
+    }
+  }
+}
+
+/**
+ * Volumes a driver may delete when run with --prune-volumes: exactly lock.pendingDeletion.
+ * Never derived from what is missing from the lock: a volume in neither list is kept.
+ */
+export function volumesToPrune(lock: Lock): VolumeRef[] {
+  checkVolumeLists(lock);
+  return [...lock.pendingDeletion].sort(byKey);
+}
+
 function save(project: Project): void {
-  project.lock.retainedVolumes.sort((a, b) =>
-    `${a.brick}/${a.service}/${a.name}`.localeCompare(`${b.brick}/${b.service}/${b.name}`),
-  );
+  project.lock.retainedVolumes.sort(byKey);
+  project.lock.pendingDeletion.sort(byKey);
   // Lock first: if the second write fails, readProject reports LOCK_OUT_OF_SYNC instead of silently drifting.
   writeFileAtomic(join(project.root, LOCK_FILE), canonicalJson(project.lock));
   writeFileAtomic(join(project.root, PLATFORM_FILE), canonicalJson(project.platform));
@@ -247,6 +282,8 @@ export interface AddResult {
   version: string;
   status: "added" | "unchanged";
   reattachedVolumes: VolumeRef[];
+  /** Volumes of this brick that were pending deletion; adding the brick back cancels that. */
+  cancelledDeletions: VolumeRef[];
 }
 
 /**
@@ -272,7 +309,9 @@ export function addBrick(root: string, brickPath: string): AddResult {
   const { lock, platform } = project;
   const installed = lock.bricks[m.name];
   if (installed) {
-    if (installed.integrity === integrity) return { name: m.name, version: m.version, status: "unchanged", reattachedVolumes: [] };
+    if (installed.integrity === integrity) {
+      return { name: m.name, version: m.version, status: "unchanged", reattachedVolumes: [], cancelledDeletions: [] };
+    }
     fail("BRICK_NAME_CONFLICT", { name: m.name, source: installed.source });
   }
 
@@ -329,9 +368,11 @@ export function addBrick(root: string, brickPath: string): AddResult {
   for (const cap of Object.keys(m.provides ?? {})) lock.capabilities[cap] = m.name;
   const reattachedVolumes = lock.retainedVolumes.filter((r) => r.brick === m.name);
   lock.retainedVolumes = lock.retainedVolumes.filter((r) => r.brick !== m.name);
+  const cancelledDeletions = lock.pendingDeletion.filter((r) => r.brick === m.name);
+  lock.pendingDeletion = lock.pendingDeletion.filter((r) => r.brick !== m.name);
   platform.bricks[m.name] = { source };
   save(project);
-  return { name: m.name, version: m.version, status: "added", reattachedVolumes };
+  return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions };
 }
 
 // ---------- remove ----------
@@ -339,8 +380,8 @@ export function addBrick(root: string, brickPath: string): AddResult {
 export interface RemoveResult {
   name: string;
   retainedVolumes: VolumeRef[];
-  /** Not deleted by remove: there is no runtime yet. The driver deletes them at the next `up`, as they are no longer in the lock. */
-  volumesToDelete: VolumeRef[];
+  /** Added to lock.pendingDeletion. Nothing is deleted here; a driver deletes them only with --prune-volumes. */
+  pendingDeletion: VolumeRef[];
 }
 
 /** Uninstalls a brick unless another brick still requires a capability it provides. */
@@ -361,19 +402,22 @@ export function removeBrick(root: string, name: string): RemoveResult {
 
   const ref = (v: LockedBrick["volumes"][number]): VolumeRef => ({ brick: name, service: v.service, name: v.name });
   const retainedVolumes = brick.volumes.filter((v) => v.retention === "retain").map(ref);
-  const volumesToDelete = brick.volumes.filter((v) => v.retention === "delete").map(ref);
+  const pendingDeletion = brick.volumes.filter((v) => v.retention === "delete").map(ref);
 
   delete lock.bricks[name];
   for (const cap of brick.provides) delete lock.capabilities[cap];
-  const key = (r: VolumeRef) => `${r.brick}/${r.service}/${r.name}`;
-  const known = new Set(lock.retainedVolumes.map(key));
-  lock.retainedVolumes.push(...retainedVolumes.filter((r) => !known.has(key(r))));
+  const add = (list: VolumeRef[], entries: VolumeRef[]) => {
+    const known = new Set(list.map(volumeKey));
+    list.push(...entries.filter((r) => !known.has(volumeKey(r))));
+  };
+  add(lock.retainedVolumes, retainedVolumes);
+  add(lock.pendingDeletion, pendingDeletion);
   delete platform.bricks[name];
   save(project);
 
   const copy = join(project.root, BRICKS_DIR, name);
   if (resolve(copy).startsWith(resolve(project.root, BRICKS_DIR) + sep)) rmSync(copy, { recursive: true, force: true });
-  return { name, retainedVolumes, volumesToDelete };
+  return { name, retainedVolumes, pendingDeletion };
 }
 
 // ---------- status ----------
@@ -383,6 +427,7 @@ export interface StatusResult {
   bricks: (LockedBrick & { name: string })[];
   capabilities: Record<string, string>;
   retainedVolumes: VolumeRef[];
+  pendingDeletion: VolumeRef[];
   /** Empty when everything matches the lock. */
   problems: Issue[];
 }
@@ -398,5 +443,12 @@ export function platformStatus(root: string): StatusResult {
       else if (brickIntegrity(copy, name) !== lock.bricks[name].integrity) problems.push(issue("BRICK_MODIFIED", "", { brick: name }));
       return { name, ...lock.bricks[name] };
     });
-  return { name: platform.name, bricks, capabilities: lock.capabilities, retainedVolumes: lock.retainedVolumes, problems };
+  return {
+    name: platform.name,
+    bricks,
+    capabilities: lock.capabilities,
+    retainedVolumes: lock.retainedVolumes,
+    pendingDeletion: lock.pendingDeletion,
+    problems,
+  };
 }

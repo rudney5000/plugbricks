@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
+import { volumesToPrune, type Lock } from "../src/platform.js";
 import { lockSchema, platformSchema, schemaIssues } from "../src/schemas.js";
 
 // One folder per scenario in test/fixtures/cli/<name>/:
@@ -30,6 +31,8 @@ interface Step {
   mutate?: {
     append?: { file: string; text: string };
     writeJson?: { file: string; json: unknown };
+    /** Shallow merge of top-level keys into an existing JSON file (a hand edit). */
+    patchJson?: { file: string; set: Record<string, unknown> };
     symlink?: { path: string; target: string };
   };
   exit?: number;
@@ -42,6 +45,8 @@ interface Scenario {
   steps: Step[];
   exists?: string[];
   absent?: string[];
+  /** Volumes ("brick/service/name") a driver could delete with --prune-volumes, after the last step. */
+  expectPrune?: string[];
 }
 
 const pkg = fileURLToPath(new URL("../", import.meta.url));
@@ -71,6 +76,10 @@ function snapshot(dir: string): Record<string, string> {
 function mutate(work: string, m: NonNullable<Step["mutate"]>): void {
   if (m.append) appendFileSync(join(work, m.append.file), m.append.text);
   if (m.writeJson) writeFileSync(join(work, m.writeJson.file), JSON.stringify(m.writeJson.json, null, 2) + "\n");
+  if (m.patchJson) {
+    const file = join(work, m.patchJson.file);
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), ...m.patchJson.set }, null, 2) + "\n");
+  }
   if (m.symlink) {
     mkdirSync(dirname(join(work, m.symlink.path)), { recursive: true });
     symlinkSync(m.symlink.target, join(work, m.symlink.path));
@@ -106,9 +115,15 @@ describe("plugbricks CLI scenarios", () => {
 
     for (const p of sc.exists ?? []) expect(existsSync(join(work, p)), `${p} should exist`).toBe(true);
     for (const p of sc.absent ?? []) expect(existsSync(join(work, p)), `${p} should not exist`).toBe(false);
+    if (sc.expectPrune) {
+      const lock: Lock = JSON.parse(readFileSync(join(work, "platform.lock"), "utf8"));
+      expect(volumesToPrune(lock).map((v) => `${v.brick}/${v.service}/${v.name}`), `${name}: volumes a driver may prune`).toEqual(
+        sc.expectPrune,
+      );
+    }
 
     // Whatever the scenario did, the files it left must match their schemas.
-    if (existsSync(join(work, "platform.lock")) && !sc.steps.some((s) => s.mutate?.writeJson)) {
+    if (existsSync(join(work, "platform.lock")) && !sc.steps.some((s) => s.mutate?.writeJson || s.mutate?.patchJson)) {
       expect(schemaIssues(platformSchema.validate, JSON.parse(readFileSync(join(work, "platform.json"), "utf8")))).toEqual([]);
       expect(schemaIssues(lockSchema.validate, JSON.parse(readFileSync(join(work, "platform.lock"), "utf8")))).toEqual([]);
     }

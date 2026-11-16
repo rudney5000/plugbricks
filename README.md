@@ -18,7 +18,7 @@ npx plugbricks remove orders
 `plugbricks` manages three things in a project:
 
 - `platform.json` — what you want: installed bricks and where each came from.
-- `platform.lock` — what was resolved: versions, an integrity hash per brick, which brick provides each capability, wait settings with their defaults made explicit, and the volumes kept after a removal. Deterministic: the same `add` twice leaves identical files.
+- `platform.lock` — what was resolved: versions, an integrity hash per brick, which brick provides each capability, wait settings with their defaults made explicit, the volumes kept after a removal (`retainedVolumes`) and the volumes marked for deletion (`pendingDeletion`). A driver deletes only the volumes in `pendingDeletion`, and only with `up --prune-volumes` (milestone 3); see `docs/decisions.md`. Deterministic: the same `add` twice leaves identical files.
 - `.platform/bricks/<name>/` — a copy of each installed brick; `status` reports a copy that was edited.
 
 Every refusal prints `error <CODE>: <message>` with a stable code from `src/messages.ts`. Exit codes: 0 success, 1 refused or inconsistent, 2 usage error.

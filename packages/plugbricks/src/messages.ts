@@ -43,6 +43,7 @@ export const MESSAGES = {
   PLATFORM_FILE_INVALID: "{file} does not match its schema; see the issues below",
   LOCK_MISSING: 'platform.lock is missing in {dir}; it is written by "plugbricks init"',
   LOCK_OUT_OF_SYNC: "platform.json and platform.lock disagree on brick \"{brick}\"; {detail}",
+  LOCK_INCONSISTENT: "platform.lock lists volume {volume} {detail}; fix the lock before going further",
 
   // add
   BRICK_NOT_FOUND: "no plugin.json found at {path}",

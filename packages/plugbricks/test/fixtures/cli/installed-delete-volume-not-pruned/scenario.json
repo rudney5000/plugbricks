@@ -1,0 +1,25 @@
+{
+  "description": "a retention-delete volume of an installed brick is never pruned",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Pending deletion: none"
+    }
+  ],
+  "expectPrune": []
+}

@@ -27,5 +27,6 @@
       ],
       "stdout": "re-attached retained volume postgres/db/data"
     }
-  ]
+  ],
+  "expectPrune": []
 }

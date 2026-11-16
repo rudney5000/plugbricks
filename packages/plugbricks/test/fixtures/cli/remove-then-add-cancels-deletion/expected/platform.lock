@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "cache": {
+      "integrity": "sha256-b65ee1a4c40db2e3304eca02acc518e2327ea1751879e2afd6f6e7d86885be74",
+      "provides": [],
+      "requires": {},
+      "source": "bricks/cache",
+      "version": "1.0.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "delete",
+          "service": "redis"
+        }
+      ]
+    }
+  },
+  "capabilities": {},
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

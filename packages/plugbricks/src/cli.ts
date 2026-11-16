@@ -97,6 +97,7 @@ export function main(argv: string[], io: Io): number {
         if (r.status === "unchanged") io.stdout(`${r.name} ${r.version} is already installed; nothing changed`);
         else io.stdout(`Added ${r.name} ${r.version}`);
         for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);
+        for (const v of r.cancelledDeletions) io.stdout(`  cancelled the pending deletion of volume ${vol(v)}`);
         return 0;
       }
       case "remove": {
@@ -104,7 +105,9 @@ export function main(argv: string[], io: Io): number {
         const r = removeBrick(root, args[0]);
         io.stdout(`Removed ${r.name}`);
         for (const v of r.retainedVolumes) io.stdout(`  volume ${vol(v)} kept (retention: retain)`);
-        for (const v of r.volumesToDelete) io.stdout(`  volume ${vol(v)} will be deleted at the next "up" (retention: delete)`);
+        for (const v of r.pendingDeletion) {
+          io.stdout(`  volume ${vol(v)} marked for deletion (retention: delete); only "up --prune-volumes" deletes it`);
+        }
         return 0;
       }
       case "status": {
@@ -122,6 +125,7 @@ export function main(argv: string[], io: Io): number {
             io.stdout(`  ${b.name} ${b.version}${parts.length ? `  ${parts.join("; ")}` : ""}`);
           }
           io.stdout(`Retained volumes: ${s.retainedVolumes.length ? s.retainedVolumes.map(vol).join(", ") : "none"}`);
+          io.stdout(`Pending deletion: ${s.pendingDeletion.length ? s.pendingDeletion.map(vol).join(", ") : "none"}`);
         }
         printIssues(io, s.problems);
         return s.problems.length ? 1 : 0;

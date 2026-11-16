@@ -1,5 +1,5 @@
 {
-  "description": "a volume with retention delete is not retained",
+  "description": "removing a brick puts its retention-delete volume in pendingDeletion, the only list a driver may prune",
   "steps": [
     {
       "run": [
@@ -19,10 +19,13 @@
         "remove",
         "cache"
       ],
-      "stdout": "volume cache/redis/data will be deleted at the next \"up\" (retention: delete)"
+      "stdout": "volume cache/redis/data marked for deletion (retention: delete); only \"up --prune-volumes\" deletes it"
     }
   ],
   "absent": [
     ".platform/bricks/cache"
+  ],
+  "expectPrune": [
+    "cache/redis/data"
   ]
 }

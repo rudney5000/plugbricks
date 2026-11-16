@@ -1,0 +1,32 @@
+{
+  "description": "adding a removed brick back takes its volumes out of pendingDeletion",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ],
+      "stdout": "cancelled the pending deletion of volume cache/redis/data"
+    }
+  ],
+  "expectPrune": []
+}

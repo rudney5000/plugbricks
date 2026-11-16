@@ -1,0 +1,49 @@
+{
+  "description": "a volume both retained and pending deletion is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "pendingDeletion": [
+              {
+                "brick": "postgres",
+                "service": "db",
+                "name": "data"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "LOCK_INCONSISTENT"
+      ]
+    }
+  ]
+}

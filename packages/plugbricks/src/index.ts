@@ -14,6 +14,7 @@ export {
   PlugbricksError,
   readProject,
   removeBrick,
+  volumesToPrune,
   type AddResult,
   type Lock,
   type Platform,

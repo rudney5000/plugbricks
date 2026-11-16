@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {},
+  "capabilities": {},
+  "lockfileVersion": 1,
+  "pendingDeletion": [
+    {
+      "brick": "cache",
+      "name": "data",
+      "service": "redis"
+    }
+  ],
+  "retainedVolumes": []
+}

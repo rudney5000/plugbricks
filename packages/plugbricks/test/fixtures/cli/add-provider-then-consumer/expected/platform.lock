@@ -36,5 +36,6 @@
     "database": "postgres"
   },
   "lockfileVersion": 1,
+  "pendingDeletion": [],
   "retainedVolumes": []
 }

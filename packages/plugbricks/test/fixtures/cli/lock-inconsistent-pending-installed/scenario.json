@@ -1,0 +1,54 @@
+{
+  "description": "a lock that marks a volume of an installed brick for deletion is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "pendingDeletion": [
+              {
+                "brick": "cache",
+                "service": "redis",
+                "name": "data"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "LOCK_INCONSISTENT"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ],
+      "exit": 1,
+      "codes": [
+        "LOCK_INCONSISTENT"
+      ],
+      "unchanged": true
+    }
+  ]
+}

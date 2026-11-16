@@ -1,0 +1,20 @@
+{
+  "name": "cache",
+  "version": "1.0.0",
+  "description": "A cache whose data can be thrown away.",
+  "services": [
+    {
+      "name": "redis",
+      "image": "redis:7.4.1-alpine",
+      "port": 6379,
+      "volumes": [
+        {
+          "name": "data",
+          "mountPath": "/data",
+          "retention": "delete"
+        }
+      ]
+    }
+  ],
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json"
+}

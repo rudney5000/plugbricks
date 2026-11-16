@@ -9,7 +9,7 @@ them and of what they need from each other.
 | Path | What it is | Commit it? | Edit it by hand? |
 |---|---|---|---|
 | `platform.json` | **What you want**: the list of installed bricks and where each came from. | yes | no, use `plugbricks add` / `remove` |
-| `platform.lock` | **What plugbricks resolved**: exact versions, a fingerprint of every brick, which brick provides which capability, and the volumes kept after a removal. | yes | never |
+| `platform.lock` | **What plugbricks resolved**: exact versions, a fingerprint of every brick, which brick provides which capability, the volumes kept after a removal, and the volumes waiting to be deleted (deleted only when you ask for it explicitly). | yes | never |
 | `.platform/bricks/` | A **copy of every installed brick**, so the project does not depend on where a brick came from. `plugbricks status` warns if a copy was changed. | yes | never |
 | `services/` | **Your own services.** Each folder is a brick: a `plugin.json` that says what the service is, plus its files. `services/orders/` is an example to start from. | yes | yes, this is your code |
 | `config/` | **Your non-secret settings** that services read. | yes | yes |

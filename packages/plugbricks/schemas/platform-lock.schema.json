@@ -5,7 +5,7 @@
   "description": "Resolved state of the platform, written by plugbricks only. Every default is made explicit here so drivers never guess. Commit it; never edit it by hand.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["lockfileVersion", "bricks", "capabilities", "retainedVolumes"],
+  "required": ["lockfileVersion", "bricks", "capabilities", "retainedVolumes", "pendingDeletion"],
   "properties": {
     "$schema": { "type": "string" },
     "lockfileVersion": { "const": 1 },
@@ -23,6 +23,11 @@
     "retainedVolumes": {
       "type": "array",
       "description": "Volumes of removed bricks whose retention is retain. Drivers keep them; adding the brick again re-attaches them.",
+      "items": { "$ref": "#/$defs/volumeRef" }
+    },
+    "pendingDeletion": {
+      "type": "array",
+      "description": "Volumes of removed bricks whose retention is delete. The ONLY volumes a driver may delete, and only when run with --prune-volumes. A volume in neither list is never deleted. Adding the brick again removes its entries.",
       "items": { "$ref": "#/$defs/volumeRef" }
     }
   },

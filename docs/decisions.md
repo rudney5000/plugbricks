@@ -77,6 +77,38 @@ end yet.
 
 ---
 
+## D3. A volume is deleted only when it is listed, and only with --prune-volumes
+
+- **Status:** accepted. The lock side is implemented (milestone 2); the driver side comes
+  with milestone 3.
+- **Context:** the first version of `remove` dropped volumes with `retention: delete` from
+  the lock and relied on the driver to delete "whatever is no longer in the lock". Deleting
+  by absence is unsafe: a hand-edited lock, a lock from another branch, a failed write or a
+  volume created outside plugbricks would all look like "absent", and the data would be gone.
+- **Decision:**
+  - `platform.lock` has two explicit lists, both required by its schema:
+    - `retainedVolumes`: volumes of removed bricks with `retention: retain`. Never deleted.
+    - `pendingDeletion`: volumes of removed bricks with `retention: delete`.
+  - `plugbricks remove` writes these lists. Adding the brick back removes its entries from both:
+    a retained volume is re-attached, a pending deletion is cancelled.
+  - A driver deletes **only** the volumes in `pendingDeletion`, and **only** when run with an
+    explicit flag: `plugbricks up --prune-volumes` (milestone 3). Without the flag, nothing is
+    deleted and the pending list stays as it is. After a successful deletion the driver removes
+    the entry from `pendingDeletion`.
+  - A volume that is in neither list is **never** deleted, whatever the runtime contains.
+  - The drivers get the list from `volumesToPrune(lock)` (in `src/platform.ts`), never by
+    comparing the runtime with the lock.
+  - `plugbricks` refuses a lock where the two lists contradict each other or the installed
+    bricks (`LOCK_INCONSISTENT`): a volume both retained and pending deletion, or a volume of
+    an installed brick in either list. Such a lock could make a driver delete live data.
+- **Tests (scenarios in `test/fixtures/cli/`):** `remove-deletes-volume`,
+  `remove-retains-volume`, `remove-then-add-reattaches`, `remove-then-add-cancels-deletion`,
+  `volume-in-no-list-is-kept`, `installed-delete-volume-not-pruned`,
+  `lock-inconsistent-pending-installed`, `lock-inconsistent-both-lists`. Each checks what
+  `volumesToPrune` would return.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
