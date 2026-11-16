@@ -27,6 +27,9 @@ function warning(io, code, params = {}) {
  * SecurityIdentifier), which always gives real SIDs (icacls /save writes aliases such as LA for
  * the built-in Administrator account), and prints it as JSON. The path comes from an environment
  * variable, so no quoting is involved.
+ * The .NET methods are called directly: the Get-Acl and Set-Acl cmdlets live in a module that
+ * failed to load on windows-latest ("the module could not be loaded"), and the folder was left
+ * with its inherited ACL.
  */
 export const WINDOWS_ACL_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
@@ -37,8 +40,8 @@ export const WINDOWS_ACL_SCRIPT = [
   "$inherit = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'",
   "$rule = New-Object System.Security.AccessControl.FileSystemAccessRule($user, [System.Security.AccessControl.FileSystemRights]::FullControl, $inherit, [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)",
   "$acl.AddAccessRule($rule)",
-  "Set-Acl -LiteralPath $path -AclObject $acl",
-  "$check = Get-Acl -LiteralPath $path",
+  "[System.IO.Directory]::SetAccessControl($path, $acl)",
+  "$check = [System.IO.Directory]::GetAccessControl($path)",
   "$rules = $check.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])",
   "[pscustomobject]@{ user = $user.Value; protected = $check.AreAccessRulesProtected; rules = @($rules | ForEach-Object { [pscustomobject]@{ sid = $_.IdentityReference.Value; type = [string]$_.AccessControlType; inherited = [bool]$_.IsInherited; rights = [string]$_.FileSystemRights } }) } | ConvertTo-Json -Compress -Depth 4",
 ].join("; ");

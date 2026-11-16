@@ -179,7 +179,8 @@ describe("restrictToCurrentUser: the Windows branch, with a fake PowerShell (run
 
   it("the script replaces the whole DACL (protected, one rule) and reads SIDs back, never names or SDDL aliases", () => {
     expect(WINDOWS_ACL_SCRIPT).toContain("SetAccessRuleProtection($true, $false)");
-    expect(WINDOWS_ACL_SCRIPT).toContain("Set-Acl -LiteralPath $path -AclObject $acl");
+    expect(WINDOWS_ACL_SCRIPT).toContain("[System.IO.Directory]::SetAccessControl($path, $acl)");
+    expect(WINDOWS_ACL_SCRIPT).not.toMatch(/\b(Get|Set)-Acl\b/); // module cmdlets: not used any more
     expect(WINDOWS_ACL_SCRIPT).toContain("GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])");
     expect(WINDOWS_ACL_SCRIPT).toContain("$env:PLUGBRICKS_SECRETS_DIR");
     expect(WINDOWS_ACL_SCRIPT).not.toContain(dir);

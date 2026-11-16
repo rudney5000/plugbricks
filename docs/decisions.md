@@ -153,6 +153,10 @@ end yet.
     is the built-in Administrator account, written `LA`), so a SID comparison on that output
     reports the user as a foreign account. Earlier versions parsed the text output of `icacls`,
     which also depended on the console code page; neither applies any more.
+  - Second CI run: the `Set-Acl` cmdlet failed on `windows-latest` ("the module could not be
+    loaded"), so the folder kept its inherited ACL and the generator correctly reported it. The
+    script now calls `[System.IO.Directory]::GetAccessControl` / `SetAccessControl` directly,
+    which needs no module. A test forbids `Get-Acl` and `Set-Acl` in the script.
   - Members of Administrators can still take ownership of the folder and read it, as root can on
     Linux and macOS. The protection is against other ordinary accounts.
   - If any step fails, on any OS, the generator prints
