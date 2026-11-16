@@ -6,8 +6,14 @@
   "license": "UNLICENSED",
   "private": true,
   "engines": { "node": ">=20" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./schema.json": "./schemas/plugin-manifest.schema.json"
+  },
+  "files": ["dist", "schemas"],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
