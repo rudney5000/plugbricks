@@ -140,19 +140,21 @@ end yet.
 - **`.secrets/` permissions.**
   - Linux, macOS: `chmod 700`, then `stat` to confirm the mode is exactly 700.
   - Windows: POSIX modes do not exist (Node's `chmod` only toggles read-only), so
-    `npm create plugbricks` works with **SIDs, never account names**:
-    1. the current user's SID from `whoami /user /fo csv /nh`;
-    2. `icacls .secrets /inheritance:r /grant:r *<SID>:(OI)(CI)F`;
-    3. `icacls .secrets /save <file>`, which writes the ACL as SDDL in UTF-16, then the check:
-       the DACL is protected, no entry is inherited (`ID`), every allow entry is the user's
-       SID, and the user has full control (`FA`). The temporary file is removed.
-    SIDs and SDDL are ASCII, so neither the project path, nor an account name that contains the
-    user's name (`BOX\banana` for `ana`), nor a missing `USERDOMAIN`, nor the console code page
-    can make another account pass or the user's own entry look foreign. Output that does not
-    have the expected shape counts as a failure.
-  - The code-page limit recorded in the previous version of this decision (non-ASCII account
-    names or paths garbled in `icacls` text output) no longer applies: that text output is not
-    parsed any more.
+    `npm create plugbricks` runs one PowerShell script (`WINDOWS_ACL_SCRIPT` in
+    `create-plugbricks/lib/create.js`, folder passed through an environment variable) that
+    **replaces the whole DACL** with a new protected one holding a single entry: full control for
+    the current user's SID. It reads the ACL back with
+    `GetAccessRules(..., [SecurityIdentifier])` and prints it as JSON; the generator then checks
+    that the DACL is protected, nothing is inherited, every allow entry is the user's SID, and
+    the user has full control. Only SIDs are compared, never names.
+  - Why not icacls: the first CI run on `windows-latest` showed that
+    `icacls /inheritance:r /grant:r` leaves explicit entries in place (`BUILTIN\Administrators`
+    kept access), and that `icacls /save` writes SDDL aliases instead of SIDs (the runner's user
+    is the built-in Administrator account, written `LA`), so a SID comparison on that output
+    reports the user as a foreign account. Earlier versions parsed the text output of `icacls`,
+    which also depended on the console code page; neither applies any more.
+  - Members of Administrators can still take ownership of the folder and read it, as root can on
+    Linux and macOS. The protection is against other ordinary accounts.
   - If any step fails, on any OS, the generator prints
     `warning SECRETS_NOT_RESTRICTED: …` with the reason and still creates the project (exit 0):
     the folder is empty at that point. Nothing fails silently.

@@ -60,7 +60,8 @@ describe("published package", () => {
     });
     const r = JSON.parse(out);
     expect(r).toMatchObject({ ok: true, rejectsInvalid: true });
-    expect(r.from).toContain(join(unpacked, "dist", "index.js"));
+    // import.meta.resolve gives a file: URL (file:///D:/... on Windows): compare as paths.
+    expect(fileURLToPath(r.from)).toBe(join(unpacked, "dist", "index.js"));
   });
 
   it("declares the plugbricks bin, with a node shebang", () => {

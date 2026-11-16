@@ -1,4 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MANIFEST_SCHEMA_ID, validateManifest } from "../src/manifest.js";
 import { MESSAGES } from "../src/messages.js";
@@ -8,6 +11,18 @@ const read = (p: string) => readFileSync(new URL(p, root), "utf8");
 const load = (p: string) => JSON.parse(read(p));
 
 const EXAMPLES = ["postgres", "orders"];
+
+/**
+ * Windows has no executable bit in the file system (mode & 0o111 is always 0), so there the mode
+ * recorded in git (100755) is what ships to Linux and macOS users. Elsewhere, the file mode.
+ */
+function isExecutable(file: URL): boolean {
+  if (process.platform !== "win32") return (statSync(file).mode & 0o111) !== 0;
+  const path = fileURLToPath(file);
+  const r = spawnSync("git", ["ls-files", "--stage", "--", basename(path)], { cwd: dirname(path), encoding: "utf8" });
+  if (r.status !== 0 || !r.stdout.trim()) throw new Error(`cannot read the git mode of ${path}: ${r.stderr || "not tracked"}`);
+  return r.stdout.startsWith("100755 ");
+}
 const INVALID_DIR = "test/fixtures/invalid/";
 const expected: Record<string, { code: keyof typeof MESSAGES; path: string; why: string }> = load(
   `${INVALID_DIR}expected.json`,
@@ -32,7 +47,7 @@ describe("example manifests (milestone 1 criterion)", () => {
           expect(p.provision.scripts, `${name}: command uses /provision but no scripts dir`).toBeDefined();
           const file = new URL(`examples/${name}/${p.provision.scripts}/${arg.slice("/provision/".length)}`, root);
           expect(existsSync(file), `${name}: missing ${arg}`).toBe(true);
-          expect(statSync(file).mode & 0o111, `${name}: ${arg} not executable`).not.toBe(0);
+          expect(isExecutable(file), `${name}: ${arg} not executable`).toBe(true);
         }
       }
     }
