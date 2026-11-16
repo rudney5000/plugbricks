@@ -56,7 +56,14 @@
         "wait": {
           "enum": ["healthy", "started"],
           "default": "healthy",
-          "description": "When the consumer may start: once the provider passes its healthcheck (healthy) or as soon as its container runs (started)."
+          "description": "When the consumer may start: once the provider's ready command succeeds (healthy) or as soon as its container runs (started)."
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900,
+          "default": 120,
+          "description": "How long the consumer waits for the provider before giving up. Docker Compose: the driver stops waiting and fails with WAIT_TIMEOUT. Kubernetes: the wait initContainer itself exits non-zero after timeoutSeconds, the pod ends in Init:Error then CrashLoopBackOff, and `plugbricks status` reports that state as WAIT_TIMEOUT."
         }
       }
     },
@@ -97,6 +104,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["exec"],
+          "description": "Readiness of this service. Docker Compose: healthcheck. Kubernetes: readinessProbe (never a livenessProbe), plus a startupProbe when startPeriodSeconds > 0. A service without healthcheck is reported as running with unknown health, never as healthy.",
           "properties": {
             "exec": {
               "type": "array",
@@ -105,7 +113,19 @@
               "description": "Command run inside the container. Exec probes only: they translate to both runtimes."
             },
             "intervalSeconds": { "type": "integer", "minimum": 1, "default": 5 },
-            "retries": { "type": "integer", "minimum": 1, "default": 10 }
+            "timeoutSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 3,
+              "description": "Limit for one attempt. Always set explicitly by the drivers, because Kubernetes defaults to 1s and Docker Compose to 30s."
+            },
+            "retries": { "type": "integer", "minimum": 1, "default": 10 },
+            "startPeriodSeconds": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Grace period after start during which failures do not count (Compose start_period, Kubernetes startupProbe)."
+            }
           }
         },
         "env": {
@@ -119,11 +139,31 @@
     "provide": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["service", "provision", "inject"],
+      "required": ["service", "ready", "provision", "inject"],
       "properties": {
         "service": {
           "type": "string",
           "description": "Name of the service (in this manifest) that serves the capability."
+        },
+        "ready": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exec"],
+          "description": "How a consumer checks, from outside the provider, that the capability accepts connections. Drivers run it before a consumer with wait=healthy starts (Kubernetes: an initContainer).",
+          "properties": {
+            "exec": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string" },
+              "description": "Command, without a shell, that exits 0 when the capability is ready. Must target ${provider.host}; may use ${provider.port}."
+            },
+            "image": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Image to run the command in. Default: the image of provides.<capability>.service. Same pinning rule as services[].image."
+            },
+            "intervalSeconds": { "type": "integer", "minimum": 1, "default": 2 }
+          }
         },
         "provision": {
           "type": "object",

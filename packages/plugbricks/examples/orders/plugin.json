@@ -12,7 +12,7 @@
     }
   ],
   "requires": {
-    "database": { "wait": "healthy" }
+    "database": { "wait": "healthy", "timeoutSeconds": 120 }
   },
   "subgraph": {
     "service": "app",

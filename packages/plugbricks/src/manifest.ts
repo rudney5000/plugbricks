@@ -79,7 +79,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
 
   const m = manifest as {
     services: { name: string; image: string }[];
-    provides?: Record<string, { service: string; provision: { image: string } }>;
+    provides?: Record<string, { service: string; ready: { exec: string[]; image?: string }; provision: { image: string } }>;
     subgraph?: { service: string };
   };
   const issues: ManifestIssue[] = [];
@@ -97,6 +97,10 @@ export function validateManifest(manifest: unknown): ValidationResult {
     if (!names.has(p.service)) {
       issues.push(issue("UNKNOWN_SERVICE", `/provides/${cap}/service`, { name: p.service }));
     }
+    if (!p.ready.exec.some((arg) => arg.includes("${provider.host}"))) {
+      issues.push(issue("READY_NOT_TARGETING_PROVIDER", `/provides/${cap}/ready/exec`, { capability: cap }));
+    }
+    if (p.ready.image !== undefined) checkImage(p.ready.image, `/provides/${cap}/ready/image`, issues);
     checkImage(p.provision.image, `/provides/${cap}/provision/image`, issues);
   }
   if (m.subgraph && !names.has(m.subgraph.service)) {

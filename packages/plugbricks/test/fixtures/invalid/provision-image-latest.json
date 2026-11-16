@@ -30,6 +30,18 @@
   "provides": {
     "database": {
       "service": "db",
+      "ready": {
+        "exec": [
+          "pg_isready",
+          "-q",
+          "-h",
+          "${provider.host}",
+          "-p",
+          "${provider.port}",
+          "-t",
+          "2"
+        ]
+      },
       "provision": {
         "image": "postgres:latest",
         "command": [

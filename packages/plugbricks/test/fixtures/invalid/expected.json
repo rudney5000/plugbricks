@@ -83,5 +83,30 @@
     "code": "INVALID_VALUE",
     "path": "/services/0/volumes/0/retention",
     "why": "retention is retain or delete"
+  },
+  "ready-missing.json": {
+    "code": "MISSING_FIELD",
+    "path": "/provides/database/ready",
+    "why": "every capability must say how a consumer checks it is ready"
+  },
+  "ready-not-targeting-provider.json": {
+    "code": "READY_NOT_TARGETING_PROVIDER",
+    "path": "/provides/database/ready/exec",
+    "why": "localhost would probe the waiting container, not the provider"
+  },
+  "ready-image-latest.json": {
+    "code": "IMAGE_FLOATING_TAG",
+    "path": "/provides/database/ready/image",
+    "why": "the ready image is pinned like any other image"
+  },
+  "requires-timeout-too-large.json": {
+    "code": "OUT_OF_RANGE",
+    "path": "/requires/database/timeoutSeconds",
+    "why": "waits are capped at 900 seconds"
+  },
+  "healthcheck-timeout-zero.json": {
+    "code": "OUT_OF_RANGE",
+    "path": "/services/0/healthcheck/timeoutSeconds",
+    "why": "an attempt needs at least one second"
   }
 }

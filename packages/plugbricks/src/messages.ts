@@ -22,6 +22,11 @@ export const MESSAGES = {
   IMAGE_INVALID: 'image reference "{image}" is not valid: {reason}',
   IMAGE_NOT_PINNED: 'image "{image}" must be pinned to a version or a digest',
   IMAGE_FLOATING_TAG: 'image "{image}" uses floating tag "{tag}"; pin an exact version such as 1.2.3 or a sha256 digest',
+  READY_NOT_TARGETING_PROVIDER:
+    'ready command of capability "{capability}" must target ${provider.host}, otherwise it probes the waiting container itself',
+
+  // Runtime (drivers and `plugbricks status`, milestone 3).
+  WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
 } as const;
 
 export type IssueCode = keyof typeof MESSAGES;
