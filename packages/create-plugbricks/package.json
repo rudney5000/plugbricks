@@ -1,0 +1,11 @@
+{
+  "name": "create-plugbricks",
+  "version": "0.0.1",
+  "description": "Scaffold a new plugbricks project (stub).",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "bin": { "create-plugbricks": "bin/create-plugbricks.js" },
+  "files": ["bin"]
+}

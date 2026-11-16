@@ -6,18 +6,25 @@ Status: **milestone 1** — the plugin manifest JSON Schema and its two example 
 
 ## Layout
 
-- `schemas/plugin-manifest.schema.json` — the plugin contract (runtime-independent).
-- `examples/postgres/` — a base brick that provides the `database` capability.
-- `examples/orders/` — an API that requires `database` and exposes a federation v2 subgraph.
-- `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned image tags, referenced services exist).
+An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `typecheck` in every package.
+
+- `packages/plugbricks/` — the core library.
+  - `schemas/plugin-manifest.schema.json` — the plugin contract (runtime-independent).
+  - `examples/postgres/` — a base brick that provides the `database` capability.
+  - `examples/orders/` — an API that requires `database` and exposes a federation v2 subgraph.
+  - `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned image tags, referenced services exist).
+  - `test/` — Vitest suite.
+- `packages/create-plugbricks/` — `npm create plugbricks` entry point (stub for now).
 
 ## Develop
 
 ```bash
-npm install
+npm ci
 npm test
 npm run typecheck
 ```
+
+Run a script in one package only with `npm test -w plugbricks`.
 
 ## Roadmap
 
