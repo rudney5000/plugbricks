@@ -1,0 +1,22 @@
+{
+  "name": "plugbricks",
+  "version": "0.0.1",
+  "description": "Add plugins and infrastructure bricks to a federated GraphQL project, on Docker Compose or Kubernetes, from one manifest.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

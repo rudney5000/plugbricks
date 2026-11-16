@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plugbricks.dev/schemas/plugin-manifest.schema.json",
+  "title": "plugbricks plugin manifest",
+  "description": "Describes what a plugin is (image, port, dependencies), never how to run it. No Docker Compose or Kubernetes YAML belongs here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "services"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$",
+      "description": "Plugin identity. Used in network names: <plugin>-<service>."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
+      "description": "Published plugin version (semver)."
+    },
+    "description": { "type": "string" },
+    "services": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/service" }
+    },
+    "provides": {
+      "type": "object",
+      "description": "Capabilities this plugin provides, keyed by capability name (e.g. database, queue).",
+      "propertyNames": { "$ref": "#/$defs/capabilityName" },
+      "additionalProperties": { "$ref": "#/$defs/provide" }
+    },
+    "requires": {
+      "type": "array",
+      "description": "Capabilities this plugin needs. The resolver activates a missing provider.",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/capabilityName" }
+    },
+    "subgraph": { "$ref": "#/$defs/subgraph" },
+    "extends": {
+      "type": "array",
+      "description": "Entities owned by another plugin that this subgraph extends. The resolver activates the owner.",
+      "items": { "$ref": "#/$defs/extends" }
+    }
+  },
+  "dependentRequired": { "extends": ["subgraph"] },
+  "$defs": {
+    "capabilityName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "image", "port"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Image reference. Pin a version; a floating tag such as :latest is rejected by the resolver."
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "mountPath"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+              "mountPath": { "type": "string", "pattern": "^/" }
+            }
+          }
+        },
+        "healthcheck": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exec"],
+          "properties": {
+            "exec": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string" },
+              "description": "Command run inside the container. Exec probes only: they translate to both runtimes."
+            },
+            "intervalSeconds": { "type": "integer", "minimum": 1, "default": 5 },
+            "retries": { "type": "integer", "minimum": 1, "default": 10 }
+          }
+        },
+        "env": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/envName" },
+          "additionalProperties": { "type": "string" },
+          "description": "Static variables. Values may use templates such as ${secrets.password}; never put a secret in clear here."
+        }
+      }
+    },
+    "provide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "provision", "inject"],
+      "properties": {
+        "service": {
+          "type": "string",
+          "description": "Name of the service (in this manifest) that serves the capability."
+        },
+        "provision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "command"],
+          "description": "One-shot task run once per consumer, before it starts. Must be idempotent (create if absent).",
+          "properties": {
+            "image": { "type": "string", "minLength": 1 },
+            "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "env": {
+              "type": "object",
+              "propertyNames": { "$ref": "#/$defs/envName" },
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        },
+        "inject": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/envName" },
+          "additionalProperties": { "type": "string" },
+          "description": "Variables added to the consumer's environment. Templates: ${consumer.name}, ${provider.host}, ${provider.port}, ${secrets.password}."
+        }
+      }
+    },
+    "subgraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "schema", "path"],
+      "properties": {
+        "service": { "type": "string", "description": "Service that serves the subgraph." },
+        "schema": {
+          "type": "string",
+          "description": "Path of the SDL file shipped with the plugin, relative to the manifest. Composition never uses introspection."
+        },
+        "path": { "type": "string", "pattern": "^/", "default": "/graphql" }
+      }
+    },
+    "extends": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plugin", "entities"],
+      "properties": {
+        "plugin": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$" },
+        "entities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" }
+        }
+      }
+    }
+  }
+}
