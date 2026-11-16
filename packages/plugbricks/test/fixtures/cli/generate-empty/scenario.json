@@ -1,0 +1,17 @@
+{
+  "description": "an empty platform generates a valid, empty compose file",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    }
+  ]
+}

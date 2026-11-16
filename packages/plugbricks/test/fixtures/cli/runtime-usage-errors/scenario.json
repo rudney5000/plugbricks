@@ -1,0 +1,58 @@
+{
+  "description": "--runtime and --prune-volumes are checked before anything runs",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "swarm"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "generate",
+        "--prune-volumes"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "extra"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_UNEXPECTED_ARGUMENT"
+      ],
+      "unchanged": true
+    }
+  ]
+}

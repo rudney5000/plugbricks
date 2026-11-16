@@ -16,7 +16,7 @@
       "volumes": []
     },
     "postgres": {
-      "integrity": "sha256-4535cc90326db8ef4f21da7b7cf76d4b9adb9d34f5a9cfb604bf8bf7bde02533",
+      "integrity": "sha256-6d46102aa4c0852f79ac5a0cf44a7d37f7733d98943fcfc6890eb980c08c4b47",
       "provides": [
         "database"
       ],

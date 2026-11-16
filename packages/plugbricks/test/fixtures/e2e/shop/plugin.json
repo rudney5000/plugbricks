@@ -1,0 +1,17 @@
+{
+  "name": "shop",
+  "version": "0.1.0",
+  "description": "End-to-end test consumer: a PostgreSQL client image that only needs DATABASE_URL. The test runs psql inside it.",
+  "services": [
+    {
+      "name": "api",
+      "image": "postgres:16.4-alpine",
+      "port": 5432,
+      "healthcheck": { "exec": ["pg_isready", "-U", "postgres"] },
+      "env": { "POSTGRES_HOST_AUTH_METHOD": "trust", "PRICE": "costs $5" }
+    }
+  ],
+  "requires": {
+    "database": { "wait": "healthy", "timeoutSeconds": 60 }
+  }
+}

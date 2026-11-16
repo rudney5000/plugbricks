@@ -1,6 +1,7 @@
 import { checkImagePin } from "./image.js";
 import { issue, type Issue } from "./issues.js";
 import { MANIFEST_SCHEMA_ID, manifestSchema, schemaIssues } from "./schemas.js";
+import { allowedList, parseTemplate, type TemplateContext } from "./templates.js";
 
 export { MANIFEST_SCHEMA_ID };
 
@@ -19,14 +20,31 @@ function checkImage(image: string, path: string, issues: ManifestIssue[]): void 
   else issues.push(issue(r.code, path, { image }));
 }
 
+function checkTemplate(value: string, path: string, context: TemplateContext, issues: ManifestIssue[]): void {
+  const r = parseTemplate(value, context);
+  if ("unknown" in r) issues.push(issue("TEMPLATE_UNKNOWN", path, { template: r.unknown, allowed: allowedList(context) }));
+}
+
+function checkTemplates(values: Record<string, string> | string[] | undefined, path: string, context: TemplateContext, issues: ManifestIssue[]): void {
+  for (const [k, v] of Object.entries(values ?? {})) checkTemplate(v, `${path}/${k}`, context, issues);
+}
+
 /** Validates a parsed manifest against the JSON Schema, then the cross-field rules a schema cannot express. */
 export function validateManifest(manifest: unknown): ValidationResult {
   const schemaProblems = schemaIssues(manifestSchema.validate, manifest);
   if (schemaProblems.length) return { ok: false, issues: schemaProblems };
 
   const m = manifest as {
-    services: { name: string; image: string }[];
-    provides?: Record<string, { service: string; ready: { exec: string[]; image?: string }; provision: { image: string } }>;
+    services: { name: string; image: string; env?: Record<string, string> }[];
+    provides?: Record<
+      string,
+      {
+        service: string;
+        ready: { exec: string[]; image?: string };
+        provision: { image: string; command: string[]; env?: Record<string, string> };
+        inject: Record<string, string>;
+      }
+    >;
     subgraph?: { service: string };
   };
   const issues: ManifestIssue[] = [];
@@ -38,6 +56,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
     }
     names.add(s.name);
     checkImage(s.image, `/services/${i}/image`, issues);
+    checkTemplates(s.env, `/services/${i}/env`, "serviceEnv", issues);
   });
 
   for (const [cap, p] of Object.entries(m.provides ?? {})) {
@@ -49,6 +68,10 @@ export function validateManifest(manifest: unknown): ValidationResult {
     }
     if (p.ready.image !== undefined) checkImage(p.ready.image, `/provides/${cap}/ready/image`, issues);
     checkImage(p.provision.image, `/provides/${cap}/provision/image`, issues);
+    checkTemplates(p.ready.exec, `/provides/${cap}/ready/exec`, "readyExec", issues);
+    checkTemplates(p.provision.command, `/provides/${cap}/provision/command`, "provisionCommand", issues);
+    checkTemplates(p.provision.env, `/provides/${cap}/provision/env`, "provisionEnv", issues);
+    checkTemplates(p.inject, `/provides/${cap}/inject`, "inject", issues);
   }
   if (m.subgraph && !names.has(m.subgraph.service)) {
     issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: m.subgraph.service }));

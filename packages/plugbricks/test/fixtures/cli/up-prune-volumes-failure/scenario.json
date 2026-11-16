@@ -1,0 +1,44 @@
+{
+  "description": "a volume that cannot be deleted stays in pendingDeletion and up exits 1",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--prune-volumes"
+      ],
+      "exit": 1,
+      "codes": [
+        "VOLUME_PRUNE_FAILED"
+      ],
+      "fake": [
+        {
+          "match": "volume rm",
+          "status": 1,
+          "stderr": "Error response from daemon: remove demo_cache-redis-data: volume is in use"
+        }
+      ]
+    }
+  ],
+  "expectPrune": [
+    "cache/redis/data"
+  ]
+}

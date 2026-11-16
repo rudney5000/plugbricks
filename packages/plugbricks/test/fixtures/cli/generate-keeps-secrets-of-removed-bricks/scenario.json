@@ -1,0 +1,54 @@
+{
+  "description": "removing a brick keeps its secrets: a retained volume attached again still needs its password",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".secrets/secrets.env": "PB_POSTGRES__ORDERS__CONSUMER_PASSWORD=secret0001\n"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "description": "a wait task that gave up (exit 124) is reported as WAIT_TIMEOUT",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "exit": 1,
+      "codes": [
+        "WAIT_TIMEOUT"
+      ],
+      "fake": [
+        {
+          "match": "up --detach",
+          "status": 1,
+          "stderr": "service \"orders-wait-database\" didn't complete successfully: exit 124"
+        },
+        {
+          "match": "ps --all",
+          "stdout": "{\"Service\":\"orders-wait-database\",\"ExitCode\":124}\n{\"Service\":\"postgres-db\",\"ExitCode\":0}\n"
+        }
+      ],
+      "stderr": "\"orders\" gave up waiting for capability \"database\" from \"postgres\" after 120s",
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env ps --all --format json"
+      ]
+    }
+  ]
+}

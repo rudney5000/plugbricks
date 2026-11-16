@@ -1,0 +1,47 @@
+{
+  "description": "up keeps a volume pending deletion until --prune-volumes, which deletes exactly that volume and updates the lock",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "stdout": "Pending deletion, kept until \"plugbricks up --prune-volumes\": cache/redis/data",
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--prune-volumes"
+      ],
+      "stdout": "deleted volume cache/redis/data",
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans",
+        "docker volume rm demo_cache-redis-data"
+      ]
+    }
+  ],
+  "expectPrune": []
+}

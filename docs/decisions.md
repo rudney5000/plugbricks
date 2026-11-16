@@ -1,13 +1,15 @@
 # Design decisions
 
 Decisions taken before they are implemented, with the evidence behind them.
-Each entry says which milestone implements it. Status: **accepted** = agreed, not built yet.
+Each entry says which milestone implements it. Status: **accepted** = agreed, not built yet;
+**implemented** = built and tested; **superseded** = replaced by a later decision, kept for its evidence.
 
 ---
 
 ## D1. plugbricks ships its own pinned Score provisioners
 
-- **Status:** accepted, implemented in milestone 3 (drivers).
+- **Status:** superseded by D5 (milestone 3): the drivers do not use Score at all. The concern
+  behind D1 (no floating image tag reaches the runtime) holds, and D5 meets it without Score.
 - **Context:** experiment D showed that the built-in score-k8s `postgres` provisioner runs
   `mirror.gcr.io/postgres:17-alpine`, a floating tag. Our manifests forbid floating tags
   (`IMAGE_FLOATING_TAG`), so a brick delivered by Score would bypass that rule.
@@ -52,7 +54,8 @@ end yet.
 
 ## D2. The wait patch depends on one score-k8s annotation only, guarded by a contract test
 
-- **Status:** accepted, implemented in milestone 3 (Kubernetes driver).
+- **Status:** superseded by D5 (milestone 3): without score-k8s there is no annotation to depend
+  on and no patch; the wait init container is written by the Kubernetes driver itself.
 - **Context:** the experiment D patch template finds the consumer Deployment through
   `k8s.score.dev/workload-name` (set by score-k8s itself on the Deployment) and the
   provider Service through `k8s.score.dev/source-workload` (set by the built-in
@@ -79,8 +82,8 @@ end yet.
 
 ## D3. A volume is deleted only when it is listed, and only with --prune-volumes
 
-- **Status:** accepted. The lock side is implemented (milestone 2); the driver side comes
-  with milestone 3.
+- **Status:** implemented. Lock side in milestone 2; driver side in milestone 3
+  (`up --prune-volumes`, `confirmPruned`).
 - **Context:** the first version of `remove` dropped volumes with `retention: delete` from
   the lock and relied on the driver to delete "whatever is no longer in the lock". Deleting
   by absence is unsafe: a hand-edited lock, a lock from another branch, a failed write or a
@@ -92,7 +95,9 @@ end yet.
   - `plugbricks remove` writes these lists. Adding the brick back removes its entries from both:
     a retained volume is re-attached, a pending deletion is cancelled.
   - A driver deletes **only** the volumes in `pendingDeletion`, and **only** when run with an
-    explicit flag: `plugbricks up --prune-volumes` (milestone 3). Without the flag, nothing is
+    explicit flag: `plugbricks up --prune-volumes`. Compose: `docker volume rm <platform>_<volume>`
+    (a volume already gone counts as deleted); Kubernetes: `kubectl delete persistentvolumeclaim`.
+    A failed deletion is reported as `VOLUME_PRUNE_FAILED` and the entry stays pending. Without the flag, nothing is
     deleted and the pending list stays as it is. After a successful deletion the driver removes
     the entry from `pendingDeletion`.
   - A volume that is in neither list is **never** deleted, whatever the runtime contains.
@@ -162,8 +167,12 @@ end yet.
   - If any step fails, on any OS, the generator prints
     `warning SECRETS_NOT_RESTRICTED: …` with the reason and still creates the project (exit 0):
     the folder is empty at that point. Nothing fails silently.
-  - Milestone 3 (writing secrets) must run the same check and **refuse** to write a secret into a
-    `.secrets/` that is not restricted, with the same code.
+  - `plugbricks generate` and `up` run the same check before writing any secret (milestone 3,
+    `ensureSecretsDir` in `src/secrets.ts`): a missing `.secrets/` is created and restricted, an
+    existing one is only checked (owner and mode 700 on Linux and macOS; on Windows the same ACL
+    rules, read with `WINDOWS_ACL_CHECK_SCRIPT`, which changes nothing). Not restricted: refused
+    with `SECRETS_NOT_RESTRICTED`, nothing written. The restriction code moved from
+    `create-plugbricks` into `plugbricks`, which re-exports it.
 - **Symbolic links.** Creating one needs Developer Mode or administrator rights on Windows. The
   scenario that checks that bricks with symlinks are refused declares `"needs": ["symlinks"]`;
   the runner probes once whether a symlink can be created and, if not, skips that scenario with
@@ -178,12 +187,92 @@ end yet.
   Windows `npm.cmd` sits next to `node_modules/npm/bin/npm-cli.js`). `npm pack` tarballs are extracted in
   JavaScript (the `tar` found first on Windows runners may be GNU tar from Git, which reads
   `C:\…` as a remote host).
-- **Tools.** `tools.json` pins score-k8s 0.23.0, score-compose 0.50.0, k3d v5.9.0 and kubectl
-  v1.37.2 for linux, darwin and windows on amd64 and arm64, each entry with its version and the
-  sha256 from the official release checksum file. score-k8s, score-compose and k3d publish no
-  windows/arm64 build: those entries say so explicitly (`available: false` and a reason). The
-  checksum files were fetched over HTTPS from the official release pages; their sigstore
-  signatures (published for score-k8s and score-compose) were not verified.
+- **Tools.** `tools.json` pins k3d v5.9.0 and kubectl v1.37.2 for linux, darwin and windows on
+  amd64 and arm64, each entry with its version and the sha256 from the official release checksum
+  file (score-k8s and score-compose were removed with D5). k3d publishes no windows/arm64 build:
+  that entry says so explicitly (`available: false` and a reason). The checksum files were
+  fetched over HTTPS from the official release pages. On 2026-11-17 the linux-amd64 binaries of
+  k3d and kubectl were downloaded and matched their sha256.
+- **Docker installed as a snap** (Ubuntu) cannot see `/tmp`: a bind mount from there arrives
+  empty in the container. The tests work under the package's `.test-work/`, inside the home
+  folder.
+
+---
+
+## D5. The drivers render their files themselves; Score is not used
+
+- **Status:** implemented (milestone 3), replaces D1 and D2.
+- **Context:** first run of score-compose 0.50.0 with a provisioner written by us (2026-11-17,
+  binary verified against `tools.json`):
+  1. `generate` adds a `wait-for-resources` service with image `alpine`, a floating tag that
+     our manifests forbid (`IMAGE_FLOATING_TAG`), the same problem D1 was about;
+  2. the consumer only waits for the provision task to be **started**
+     (`condition: service_started`), not completed: it can start before its database exists;
+  3. a Score workload is one pod or one Compose service named `<workload>-<container>`; our
+     convention (one network name `<brick>-<service>` per service) does not map onto it.
+  All three can be patched with patch templates, but each driver would then depend on an
+  external binary, its state file (`.score-compose/state.yaml`, with secrets in clear) and
+  its version, and would no longer be a pure function plan → files.
+- **Decision:**
+  - `src/plan.ts` builds a runtime-independent plan from `platform.lock` and the installed
+    copies (integrity checked, manifests re-validated). `src/drivers/compose.ts` and
+    `src/drivers/k8s.ts` are pure functions plan → files, tested by golden files
+    (`test/fixtures/cli/generate-*`), with no Docker and no cluster.
+  - Order of start, identical on both runtimes, for each consumer and required capability:
+    provider started → **wait** (only with `wait: healthy`: the provider's `ready` command,
+    from outside, every `ready.intervalSeconds`, at most `timeoutSeconds`) → **provision**
+    (the provider's task, idempotent) → the consumer's services. Compose: one-shot services
+    `<consumer>-wait-<cap>` and `<consumer>-provision-<cap>` chained with
+    `service_completed_successfully`. Kubernetes: init containers `wait-<cap>` and
+    `provision-<cap>` in each consumer pod; provision scripts come from a ConfigMap.
+  - The wait script needs `/bin/sh`, `date` and `sleep` in the `ready` image (default: the
+    provider's image).
+  - Nothing is published on the host until the router exists (milestone 4).
+  - Runtime names must be unique and valid DNS labels (≤ 63 characters): services, tasks,
+    volumes (including volumes kept after a removal, so a new brick never attaches another
+    brick's data), secrets, ConfigMaps. `add` refuses a brick that would break this
+    (`RUNTIME_NAME_CONFLICT`, `RUNTIME_NAME_INVALID`) before writing anything.
+  - Kubernetes: `up` applies the namespace, the Secret, then the resources; deletes the
+    Deployments, Services and ConfigMaps of removed bricks by label (never a
+    PersistentVolumeClaim, never the Secret); then waits for each rollout. `down` deletes the
+    same kinds for all bricks and keeps the data.
+- **Consequences:** `tools.json` no longer pins score-k8s and score-compose; it keeps k3d and
+  kubectl for a Kubernetes end-to-end test. The Compose driver is tested end to end against a
+  real Docker engine (`test/e2e-compose.test.ts`, skipped with its reason where no Linux engine
+  answers). The Kubernetes driver is tested by golden files and a fake `kubectl`; it has not run
+  on a cluster yet.
+
+---
+
+## D6. Templates and secrets
+
+- **Status:** implemented (milestone 3).
+- **Templates** are checked when a brick is added (`TEMPLATE_UNKNOWN`), per field:
+
+  | Field | Allowed |
+  |---|---|
+  | `services[].env` | `${secrets.<name>}` |
+  | `provides.<cap>.ready.exec` | `${provider.host}`, `${provider.port}` |
+  | `provides.<cap>.provision.command` | `${provider.host}`, `${provider.port}`, `${consumer.name}` |
+  | `provides.<cap>.provision.env`, `inject` | all four |
+
+  Secrets never go on a command line, where every process can read them (`ps`). Any other
+  `${...}` is refused, so a typo never reaches a container as literal text. A lone `$` is
+  literal; the drivers double it, because Compose and Kubernetes both read `$$` as `$`.
+- **Scope of a secret:** a secret name that the brick's own `services[].env` uses belongs to
+  the brick (`PB_<BRICK>__<NAME>`, e.g. the postgres superuser password), even when `provision`
+  or `inject` use it too. Any other secret used in `provision.env` or `inject` is generated
+  **per consumer** (`PB_<PROVIDER>__<CONSUMER>__<NAME>`, e.g. each consumer's own database
+  password). Two keys that would map to the same variable are refused.
+- **Storage:** `.secrets/secrets.env` (`KEY=value`, mode 0600), 32 random letters and digits
+  per secret (no escaping needed in a URL, an env file or YAML). Compose reads it with
+  `--env-file`, and the Compose file refers to `${PB_X:?…}`, so a missing secret stops Compose
+  instead of starting with an empty password. Kubernetes: `.secrets/k8s-secret.yaml` (a Secret
+  holding only the secrets in use); containers read each secret into its own variable and
+  refer to it as `$(PB_X)`. No secret value is ever written to `.generated/`.
+- **Never deleted:** removing a brick keeps its secrets. A retained volume attached again still
+  needs the password it was initialised with (PostgreSQL reads `POSTGRES_PASSWORD` only on its
+  first start).
 
 ---
 
@@ -191,10 +280,11 @@ end yet.
 
 Points 1 to 3 of experiment D are in the manifest schema:
 
-- `requires.<capability>.timeoutSeconds` (default 120, maximum 900). On expiry: Compose
-  driver fails with `WAIT_TIMEOUT`; on Kubernetes the initContainer exits non-zero, the
-  pod ends in `Init:Error` / `CrashLoopBackOff`, and `plugbricks status` maps that to
-  `WAIT_TIMEOUT`.
+- `requires.<capability>.timeoutSeconds` (default 120, maximum 900). On expiry the wait
+  script exits 124. Compose: `up` finds the wait task that exited 124 and reports
+  `WAIT_TIMEOUT`. Kubernetes: the init container exits 124, the pod goes to `Init:Error` /
+  `CrashLoopBackOff`, the rollout times out, and `up` reports `WAIT_TIMEOUT` from the init
+  container status.
 - `provides.<capability>.ready` (required): an exec array that must target
   `${provider.host}` (`READY_NOT_TARGETING_PROVIDER` otherwise).
 - `healthcheck.timeoutSeconds` (default 3) and `healthcheck.startPeriodSeconds` (default 0),

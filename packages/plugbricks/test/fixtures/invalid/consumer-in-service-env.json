@@ -1,0 +1,65 @@
+{
+  "$schema": "../../../schemas/plugin-manifest.schema.json",
+  "name": "postgres",
+  "version": "1.0.0",
+  "description": "Base brick: a PostgreSQL instance with one role and one database per consumer.",
+  "services": [
+    {
+      "name": "db",
+      "image": "postgres:16.4-alpine",
+      "port": 5432,
+      "volumes": [
+        {
+          "name": "data",
+          "mountPath": "/var/lib/postgresql/data",
+          "retention": "retain"
+        }
+      ],
+      "healthcheck": {
+        "exec": [
+          "pg_isready",
+          "-U",
+          "postgres"
+        ]
+      },
+      "env": {
+        "POSTGRES_PASSWORD": "${secrets.superuser_password}",
+        "OWNER": "${consumer.name}"
+      }
+    }
+  ],
+  "provides": {
+    "database": {
+      "service": "db",
+      "ready": {
+        "exec": [
+          "pg_isready",
+          "-q",
+          "-h",
+          "${provider.host}",
+          "-p",
+          "${provider.port}"
+        ]
+      },
+      "provision": {
+        "image": "postgres:16.4-alpine",
+        "command": [
+          "/bin/sh",
+          "/provision/create-database.sh"
+        ],
+        "scripts": "provision",
+        "env": {
+          "PGHOST": "${provider.host}",
+          "PGPORT": "${provider.port}",
+          "PGPASSWORD": "${secrets.superuser_password}",
+          "APP_ROLE": "${consumer.name}",
+          "APP_DATABASE": "${consumer.name}",
+          "APP_PASSWORD": "${secrets.consumer_password}"
+        }
+      },
+      "inject": {
+        "DATABASE_URL": "postgres://${consumer.name}:${secrets.consumer_password}@${provider.host}:${provider.port}/${consumer.name}"
+      }
+    }
+  }
+}

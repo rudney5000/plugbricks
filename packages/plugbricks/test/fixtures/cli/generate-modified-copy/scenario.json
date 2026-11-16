@@ -1,0 +1,36 @@
+{
+  "description": "generate refuses a platform whose installed copy was edited",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "append": {
+          "file": ".platform/bricks/postgres/plugin.json",
+          "text": "\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_MODIFIED"
+      ],
+      "unchanged": true
+    }
+  ]
+}

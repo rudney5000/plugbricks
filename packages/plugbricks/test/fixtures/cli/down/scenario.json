@@ -1,0 +1,38 @@
+{
+  "description": "down stops the platform and never deletes a volume",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "down"
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo down --remove-orphans"
+      ]
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s"
+      ],
+      "commands": [
+        "kubectl version --client",
+        "kubectl --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks --ignore-not-found"
+      ]
+    }
+  ]
+}

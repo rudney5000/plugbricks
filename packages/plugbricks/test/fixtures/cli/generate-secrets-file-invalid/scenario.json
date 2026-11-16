@@ -1,0 +1,41 @@
+{
+  "description": "a hand-edited secrets file that is not KEY=value is refused, not rewritten",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "mutate": {
+        "append": {
+          "file": ".secrets/secrets.env",
+          "text": "PB_X=has space\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "SECRETS_FILE_INVALID"
+      ],
+      "unchanged": true
+    }
+  ]
+}

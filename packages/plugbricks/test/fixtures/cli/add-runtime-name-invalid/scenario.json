@@ -1,0 +1,24 @@
+{
+  "description": "a service name ending with a dash cannot be a Kubernetes name and is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/edge"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_NAME_INVALID",
+        "RUNTIME_NAME_INVALID"
+      ],
+      "unchanged": true
+    }
+  ]
+}

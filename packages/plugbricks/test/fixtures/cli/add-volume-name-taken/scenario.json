@@ -1,0 +1,36 @@
+{
+  "description": "a new brick can never attach the retained volume of another brick that had the same runtime name",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/aa"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "aa"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/aa-b"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_NAME_CONFLICT"
+      ],
+      "unchanged": true,
+      "stderr": "\"aa-b-c-d\""
+    }
+  ]
+}

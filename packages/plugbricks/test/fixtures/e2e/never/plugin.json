@@ -1,0 +1,21 @@
+{
+  "name": "never",
+  "version": "0.1.0",
+  "description": "End-to-end test provider whose capability never becomes ready: its ready command probes a closed port.",
+  "services": [
+    {
+      "name": "db",
+      "image": "postgres:16.4-alpine",
+      "port": 5432,
+      "env": { "POSTGRES_HOST_AUTH_METHOD": "trust" }
+    }
+  ],
+  "provides": {
+    "slow": {
+      "service": "db",
+      "ready": { "exec": ["pg_isready", "-q", "-h", "${provider.host}", "-p", "1"], "intervalSeconds": 1 },
+      "provision": { "image": "postgres:16.4-alpine", "command": ["true"] },
+      "inject": { "SLOW_HOST": "${provider.host}" }
+    }
+  }
+}

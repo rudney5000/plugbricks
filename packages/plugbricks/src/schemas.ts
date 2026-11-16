@@ -36,4 +36,11 @@ export const MANIFEST_DEFAULTS = {
   wait: manifestSchema.schema.$defs.require.properties.wait.default as "healthy" | "started",
   timeoutSeconds: manifestSchema.schema.$defs.require.properties.timeoutSeconds.default as number,
   retention: manifestSchema.schema.$defs.service.properties.volumes.items.properties.retention.default as "retain" | "delete",
+  healthcheck: Object.fromEntries(
+    ["intervalSeconds", "timeoutSeconds", "retries", "startPeriodSeconds"].map((k) => [
+      k,
+      manifestSchema.schema.$defs.service.properties.healthcheck.properties[k].default as number,
+    ]),
+  ) as { intervalSeconds: number; timeoutSeconds: number; retries: number; startPeriodSeconds: number },
+  readyIntervalSeconds: manifestSchema.schema.$defs.provide.properties.ready.properties.intervalSeconds.default as number,
 };
