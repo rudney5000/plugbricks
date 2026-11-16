@@ -1,0 +1,28 @@
+{
+  "$schema": "../../../schemas/plugin-manifest.schema.json",
+  "name": "orders",
+  "version": "0.1.0",
+  "description": "Example API: a GraphQL subgraph that stores orders in PostgreSQL.",
+  "services": [
+    {
+      "name": "app",
+      "image": "ghcr.io/example/orders-app:0.1.0",
+      "port": 4000,
+      "healthcheck": {
+        "exec": [
+          "wget",
+          "-qO-",
+          "http://localhost:4000/health"
+        ]
+      }
+    }
+  ],
+  "requires": [
+    "database"
+  ],
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}

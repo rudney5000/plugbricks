@@ -1,0 +1,87 @@
+{
+  "missing-name.json": {
+    "code": "MISSING_FIELD",
+    "path": "/name",
+    "why": "name is required"
+  },
+  "unknown-top-level-field.json": {
+    "code": "UNKNOWN_FIELD",
+    "path": "/depends_on",
+    "why": "Compose YAML leaking into the manifest"
+  },
+  "duplicate-service.json": {
+    "code": "DUPLICATE_SERVICE",
+    "path": "/services/1/name",
+    "why": "two services named app"
+  },
+  "image-latest.json": {
+    "code": "IMAGE_FLOATING_TAG",
+    "path": "/services/0/image",
+    "why": ":latest moves"
+  },
+  "image-major-only.json": {
+    "code": "IMAGE_FLOATING_TAG",
+    "path": "/services/0/image",
+    "why": "a major-only tag moves with every minor release"
+  },
+  "image-no-tag.json": {
+    "code": "IMAGE_NOT_PINNED",
+    "path": "/services/0/image",
+    "why": "no tag means latest"
+  },
+  "image-registry-port-no-tag.json": {
+    "code": "IMAGE_NOT_PINNED",
+    "path": "/services/0/image",
+    "why": "5000 is a registry port, not a tag"
+  },
+  "image-bad-digest.json": {
+    "code": "IMAGE_INVALID",
+    "path": "/services/0/image",
+    "why": "truncated digest"
+  },
+  "provision-image-latest.json": {
+    "code": "IMAGE_FLOATING_TAG",
+    "path": "/provides/database/provision/image",
+    "why": "the provision task image is pinned like a service image"
+  },
+  "provision-scripts-escape.json": {
+    "code": "INVALID_FORMAT",
+    "path": "/provides/database/provision/scripts",
+    "why": "scripts must stay inside the plugin directory"
+  },
+  "provider-unknown-service.json": {
+    "code": "UNKNOWN_SERVICE",
+    "path": "/provides/database/service",
+    "why": "provider points at a service that does not exist"
+  },
+  "subgraph-unknown-service.json": {
+    "code": "UNKNOWN_SERVICE",
+    "path": "/subgraph/service",
+    "why": "subgraph points at a service that does not exist"
+  },
+  "extends-without-subgraph.json": {
+    "code": "DEPENDENT_FIELD",
+    "path": "/extends",
+    "why": "extends needs a subgraph"
+  },
+  "requires-as-array.json": {
+    "code": "INVALID_TYPE",
+    "path": "/requires",
+    "why": "old array form of requires"
+  },
+  "requires-bad-wait.json": {
+    "code": "INVALID_VALUE",
+    "path": "/requires/database/wait",
+    "why": "wait is healthy or started"
+  },
+  "requires-unknown-option.json": {
+    "code": "UNKNOWN_FIELD",
+    "path": "/requires/database/timeout",
+    "why": "strict schema: no unknown options"
+  },
+  "volume-bad-retention.json": {
+    "code": "INVALID_VALUE",
+    "path": "/services/0/volumes/0/retention",
+    "why": "retention is retain or delete"
+  }
+}

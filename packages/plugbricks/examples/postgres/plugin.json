@@ -8,7 +8,7 @@
       "name": "db",
       "image": "postgres:16.4-alpine",
       "port": 5432,
-      "volumes": [{ "name": "data", "mountPath": "/var/lib/postgresql/data" }],
+      "volumes": [{ "name": "data", "mountPath": "/var/lib/postgresql/data", "retention": "retain" }],
       "healthcheck": { "exec": ["pg_isready", "-U", "postgres"] },
       "env": { "POSTGRES_PASSWORD": "${secrets.superuser_password}" }
     }
@@ -19,8 +19,10 @@
       "provision": {
         "image": "postgres:16.4-alpine",
         "command": ["/bin/sh", "/provision/create-database.sh"],
+        "scripts": "provision",
         "env": {
           "PGHOST": "${provider.host}",
+          "PGPORT": "${provider.port}",
           "PGPASSWORD": "${secrets.superuser_password}",
           "APP_ROLE": "${consumer.name}",
           "APP_DATABASE": "${consumer.name}",

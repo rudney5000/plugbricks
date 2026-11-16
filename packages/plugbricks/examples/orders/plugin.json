@@ -11,7 +11,9 @@
       "healthcheck": { "exec": ["wget", "-qO-", "http://localhost:4000/health"] }
     }
   ],
-  "requires": ["database"],
+  "requires": {
+    "database": { "wait": "healthy" }
+  },
   "subgraph": {
     "service": "app",
     "schema": "schema.graphql",

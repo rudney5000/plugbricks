@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://plugbricks.dev/schemas/plugin-manifest.schema.json",
+  "$id": "https://plugbricks.dev/schemas/plugin-manifest/v1.json",
   "title": "plugbricks plugin manifest",
   "description": "Describes what a plugin is (image, port, dependencies), never how to run it. No Docker Compose or Kubernetes YAML belongs here.",
   "type": "object",
@@ -31,10 +31,10 @@
       "additionalProperties": { "$ref": "#/$defs/provide" }
     },
     "requires": {
-      "type": "array",
-      "description": "Capabilities this plugin needs. The resolver activates a missing provider.",
-      "uniqueItems": true,
-      "items": { "$ref": "#/$defs/capabilityName" }
+      "type": "object",
+      "description": "Capabilities this plugin needs, keyed by capability name. The resolver activates a missing provider.",
+      "propertyNames": { "$ref": "#/$defs/capabilityName" },
+      "additionalProperties": { "$ref": "#/$defs/require" }
     },
     "subgraph": { "$ref": "#/$defs/subgraph" },
     "extends": {
@@ -48,6 +48,17 @@
     "capabilityName": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "require": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wait": {
+          "enum": ["healthy", "started"],
+          "default": "healthy",
+          "description": "When the consumer may start: once the provider passes its healthcheck (healthy) or as soon as its container runs (started)."
+        }
+      }
     },
     "envName": {
       "type": "string",
@@ -73,7 +84,12 @@
             "required": ["name", "mountPath"],
             "properties": {
               "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-              "mountPath": { "type": "string", "pattern": "^/" }
+              "mountPath": { "type": "string", "pattern": "^/" },
+              "retention": {
+                "enum": ["retain", "delete"],
+                "default": "retain",
+                "description": "What happens to the data when the plugin is removed: retain keeps the volume, delete removes it."
+              }
             }
           }
         },
@@ -115,8 +131,13 @@
           "required": ["image", "command"],
           "description": "One-shot task run once per consumer, before it starts. Must be idempotent (create if absent).",
           "properties": {
-            "image": { "type": "string", "minLength": 1 },
+            "image": { "type": "string", "minLength": 1, "description": "Image reference. Same pinning rule as services[].image." },
             "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "scripts": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$",
+              "description": "Directory shipped with the plugin, relative to the manifest, mounted read-only at /provision in the task container."
+            },
             "env": {
               "type": "object",
               "propertyNames": { "$ref": "#/$defs/envName" },
