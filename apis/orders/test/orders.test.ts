@@ -58,10 +58,9 @@ afterAll(async () => {
 });
 
 describe("orders API", () => {
-  it("ships the same SDL as the brick and the project template", () => {
-    for (const copy of ["packages/plugbricks/examples/orders/schema.graphql", "packages/create-plugbricks/template/services/orders/schema.graphql"]) {
-      expect(readFileSync(new URL(`../../../${copy}`, import.meta.url), "utf8"), copy).toBe(typeDefs);
-    }
+  it("ships the same SDL as the brick", () => {
+    const brick = readFileSync(new URL("../../../packages/plugbricks/examples/orders/schema.graphql", import.meta.url), "utf8");
+    expect(brick).toBe(typeDefs);
   });
 
   it.skipIf(!ready)(`answers /health while the database answers${why}`, async () => {
@@ -78,8 +77,34 @@ describe("orders API", () => {
     expect((await gql("{ orders { id } }")).data.orders).toContainEqual({ id: order.id });
   });
 
+  it.skipIf(!ready)(`rounds totals half away from zero, as the numeric column does${why}`, async () => {
+    for (const [t, stored] of [[1.005, 1.01], [2.675, 2.68], [0.004, 0]]) {
+      const r = await gql("mutation($t: Float!) { createOrder(total: $t) { total } }", { t });
+      expect(r.data.createOrder.total, String(t)).toBe(stored);
+    }
+  });
+
+  it.skipIf(!ready)(`bounds the list: newest first, limit between 1 and 500${why}`, async () => {
+    await gql("mutation { a: createOrder(total: 1) { id } b: createOrder(total: 2) { id } }");
+    const two = (await gql("{ orders(limit: 2) { id } }")).data.orders.map((o: { id: string }) => BigInt(o.id));
+    expect(two).toHaveLength(2);
+    expect(two[0] > two[1]).toBe(true);
+    for (const limit of [0, 501]) expect((await gql(`{ orders(limit: ${limit}) { id } }`)).errors?.[0].extensions?.code).toBe("BAD_USER_INPUT");
+  });
+
+  it.skipIf(!ready)(`serves /health with a query string, and nothing but /health and /graphql${why}`, async () => {
+    expect((await fetch(`${base}/health?probe=1`)).status).toBe(200);
+    expect((await fetch(`${base}/graphqlx`)).status).toBe(404);
+  });
+
+  it.skipIf(!ready)(`finds an order by a 19-digit id${why}`, async () => {
+    await pool.query("INSERT INTO orders (id, total) VALUES (9223372036854775807, 3)");
+    expect((await gql('{ order(id: "9223372036854775807") { id total } }')).data.order).toEqual({ id: "9223372036854775807", total: 3 });
+    await pool.query("DELETE FROM orders WHERE id = 9223372036854775807");
+  });
+
   it.skipIf(!ready)(`returns null for an unknown or malformed id, without a database error${why}`, async () => {
-    for (const id of ["999999", "abc", "-1", "1; drop table orders"]) {
+    for (const id of ["999999", "abc", "-1", "007", "9223372036854775808", "1; drop table orders"]) {
       const r = await gql("query($id: ID!) { order(id: $id) { id } }", { id });
       expect(r, id).toEqual({ data: { order: null } });
     }

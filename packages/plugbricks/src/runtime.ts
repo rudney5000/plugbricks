@@ -210,6 +210,11 @@ export function removedBricksSelector(plan: Plan): string {
   return installed.length ? `${MANAGED_BY}=plugbricks,${BRICK_LABEL},${BRICK_LABEL} notin (${installed.join(",")})` : `${MANAGED_BY}=plugbricks,${BRICK_LABEL}`;
 }
 
+/** How long `docker compose up --wait` may take: the longest chain of waits, plus time to pull images and start. */
+function composeWaitTimeout(plan: Plan): number {
+  return Math.max(0, ...plan.services.map((s) => rolloutTimeout(plan, s.name)));
+}
+
 /** How long `up` waits for one Deployment: its own wait timeouts, plus time to pull images and start. */
 function rolloutTimeout(plan: Plan, service: string): number {
   const s = plan.services.find((x) => x.name === service)!;
@@ -243,8 +248,10 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
     requireTool(deps, dir, "docker", ["compose", "version"], "docker compose", "install Docker with the Compose v2 plugin");
     // --remove-orphans removes the containers of removed bricks; their volumes stay. Compose
     // refuses "up" on a project without services: with no brick left, "down" does the same job.
+    // --wait: return only once every service runs (and is healthy when it has a healthcheck) and
+    // every wait and provision task has exited 0, as `kubectl rollout status` does on Kubernetes.
     const args = plan.services.length
-      ? [...composeBase(plan), "up", "--detach", "--remove-orphans"]
+      ? [...composeBase(plan), "up", "--detach", "--remove-orphans", "--wait", "--wait-timeout", String(composeWaitTimeout(plan))]
       : ["compose", "--project-name", plan.platform, "down", "--remove-orphans"];
     const r = run(deps, dir, "docker", args);
     if (r.status !== 0) {

@@ -38,6 +38,9 @@ jobs:
           # Exact Node 22 version, shared with local development; matches the dev container image.
           node-version-file: .node-version
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apis/orders/package-lock.json
 
       - run: node --version
 

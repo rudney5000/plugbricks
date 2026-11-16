@@ -10,11 +10,17 @@ import { createOrder, findOrder, listOrders } from "./db.js";
 export const typeDefs = readFileSync(new URL("../schema.graphql", import.meta.url), "utf8");
 
 const MAX_TOTAL = 9_999_999_999.99;
+const MAX_LIMIT = 500;
 
 function resolvers(pool: pg.Pool) {
   return {
     Query: {
-      orders: () => listOrders(pool),
+      orders: (_: unknown, args: { limit: number }) => {
+        if (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > MAX_LIMIT) {
+          throw new GraphQLError(`limit must be between 1 and ${MAX_LIMIT}`, { extensions: { code: "BAD_USER_INPUT" } });
+        }
+        return listOrders(pool, args.limit);
+      },
       order: (_: unknown, args: { id: string }) => findOrder(pool, args.id),
     },
     Mutation: {
@@ -23,7 +29,8 @@ function resolvers(pool: pg.Pool) {
           // A GraphQLError is shown to the client as is; any other error is masked by Yoga.
           throw new GraphQLError(`total must be between 0 and ${MAX_TOTAL}`, { extensions: { code: "BAD_USER_INPUT" } });
         }
-        return createOrder(pool, Math.round(args.total * 100) / 100);
+        // The numeric(12, 2) column rounds half away from zero; rounding here in floating point would not (1.005).
+        return createOrder(pool, args.total);
       },
     },
     Order: {
@@ -41,14 +48,15 @@ export function createApp(pool: pg.Pool): Server {
   const schema = buildSubgraphSchema([{ typeDefs: parse(typeDefs), resolvers: resolvers(pool) as never }]);
   const yoga = createYoga({ schema, graphqlEndpoint: "/graphql", landingPage: false, logging: "warn" });
   return createServer((req: IncomingMessage, res: ServerResponse) => {
-    if (req.url === "/health") {
+    const path = new URL(req.url ?? "/", "http://localhost").pathname;
+    if (path === "/health") {
       pool
         .query("SELECT 1")
         .then(() => res.writeHead(200, { "content-type": "text/plain" }).end("ok\n"))
         .catch(() => res.writeHead(503, { "content-type": "text/plain" }).end("database unavailable\n"));
       return;
     }
-    if (req.url?.startsWith("/graphql")) return yoga(req, res);
+    if (path === "/graphql") return yoga(req, res);
     res.writeHead(404, { "content-type": "text/plain" }).end("not found\n");
   });
 }

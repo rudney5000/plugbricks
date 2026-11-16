@@ -10,7 +10,8 @@ if (!url) {
 }
 const port = Number(process.env.PORT ?? 4000);
 
-const pool = new pg.Pool({ connectionString: url, max: 10 });
+// Bounded waits: an unreachable database makes /health answer 503 within seconds instead of hanging.
+const pool = new pg.Pool({ connectionString: url, max: 10, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 20_000 });
 // An idle client that loses its connection must not crash the process; the next query reconnects.
 pool.on("error", (e) => console.error(`orders: idle database connection lost: ${e.message}`));
 
@@ -23,7 +24,16 @@ server.listen(port, () => console.log(`orders: listening on :${port} (/graphql, 
 // docker stop and Kubernetes send SIGTERM: finish the requests in flight, then close the pool.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.once(signal, () => {
-    server.close(() => void pool.end().then(() => process.exit(0)));
     setTimeout(() => process.exit(1), 10_000).unref();
+    server.close(async (err) => {
+      if (err) console.error(`orders: closing the server: ${err.message}`);
+      try {
+        await pool.end();
+      } catch (e) {
+        console.error(`orders: closing the database pool: ${(e as Error).message}`);
+        process.exit(1);
+      }
+      process.exit(err ? 1 : 0);
+    });
   });
 }

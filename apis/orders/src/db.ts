@@ -57,13 +57,16 @@ export interface OrderRow {
 
 const COLUMNS = "id::text AS id, total::float8 AS total, status";
 
-export async function listOrders(pool: pg.Pool): Promise<OrderRow[]> {
-  return (await pool.query<OrderRow>(`SELECT ${COLUMNS} FROM orders ORDER BY id`)).rows;
+/** Newest first, at most `limit` rows (the caller bounds it). */
+export async function listOrders(pool: pg.Pool, limit: number): Promise<OrderRow[]> {
+  return (await pool.query<OrderRow>(`SELECT ${COLUMNS} FROM orders ORDER BY id DESC LIMIT $1`, [limit])).rows;
 }
 
-/** null for an id that does not exist or is not a positive integer. */
+const MAX_BIGINT = 9_223_372_036_854_775_807n;
+
+/** null for an id that does not exist, or that is not a canonical positive bigint (no sign, no leading zero). */
 export async function findOrder(pool: pg.Pool, id: string): Promise<OrderRow | null> {
-  if (!/^[1-9]\d{0,17}$/.test(id)) return null;
+  if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > MAX_BIGINT) return null;
   return (await pool.query<OrderRow>(`SELECT ${COLUMNS} FROM orders WHERE id = $1`, [id])).rows[0] ?? null;
 }
 
