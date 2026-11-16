@@ -2,17 +2,26 @@
   "$schema": "../../schemas/plugin-manifest.schema.json",
   "name": "orders",
   "version": "0.1.0",
-  "description": "Example API: a GraphQL subgraph that stores orders in PostgreSQL.",
+  "description": "Example API: a GraphQL subgraph that stores orders in PostgreSQL. Its source is apis/orders; build the image with: docker build -t plugbricks-example/orders:0.1.0 apis/orders",
   "services": [
     {
       "name": "app",
-      "image": "ghcr.io/example/orders-app:0.1.0",
+      "image": "plugbricks-example/orders:0.1.0",
       "port": 4000,
-      "healthcheck": { "exec": ["wget", "-qO-", "http://localhost:4000/health"] }
+      "healthcheck": {
+        "exec": [
+          "wget",
+          "-qO-",
+          "http://localhost:4000/health"
+        ]
+      }
     }
   ],
   "requires": {
-    "database": { "wait": "healthy", "timeoutSeconds": 120 }
+    "database": {
+      "wait": "healthy",
+      "timeoutSeconds": 120
+    }
   },
   "subgraph": {
     "service": "app",

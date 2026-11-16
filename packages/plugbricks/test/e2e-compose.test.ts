@@ -74,6 +74,55 @@ describe("Docker Compose driver against a real Docker engine", () => {
   );
 
   it.skipIf(!ready)(
+    `runs the orders API on its own database: data kept across down/up, no access to another consumer's database${why}`,
+    () => {
+      const repo = fileURLToPath(new URL("../../../", import.meta.url));
+      const build = spawnSync("docker", ["build", "--quiet", "--tag", "plugbricks-example/orders:0.1.0", join(repo, "apis/orders")], {
+        encoding: "utf8",
+      });
+      expect(build.status, build.stderr).toBe(0);
+
+      const name = "pbtest-orders";
+      const work = project(name, ["shop"]);
+      cpSync(join(pkg, "examples/orders"), join(work, "orders"), { recursive: true });
+      for (const args of [["init", "--name", name], ["add", "postgres"], ["add", "orders"], ["add", "shop"]]) expect(cli(work, args).code).toBe(0);
+      const up = cli(work, ["up"]);
+      expect(up.code, up.err).toBe(0);
+
+      // Nothing is published on the host: query the API by its network name from a throwaway container.
+      const gql = (query: string) => {
+        const r = spawnSync(
+          "docker",
+          ["run", "--rm", "--network", `${name}_default`, "node:22.23.5-alpine", "wget", "-qO-", "--header", "content-type: application/json",
+            "--post-data", JSON.stringify({ query }), "http://orders-app:4000/graphql"],
+          { encoding: "utf8" },
+        );
+        expect(r.status, r.stderr).toBe(0);
+        return JSON.parse(r.stdout);
+      };
+      const created = gql("mutation { createOrder(total: 42.5) { id total status } }");
+      expect(created.data.createOrder).toMatchObject({ total: 42.5, status: "pending" });
+      const id = created.data.createOrder.id;
+
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(cli(work, ["up"]).code).toBe(0);
+      expect(gql(`{ order(id: "${id}") { id total } }`)).toEqual({ data: { order: { id, total: 42.5 } } });
+
+      // orders' role cannot even connect to shop's database (the provision task revokes PUBLIC).
+      const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8");
+      const pw = /^PB_POSTGRES__ORDERS__CONSUMER_PASSWORD=(\w+)$/m.exec(secrets)![1];
+      const probe = spawnSync(
+        "docker",
+        ["compose", "--project-name", name, "exec", "-T", "shop-api", "psql", `postgres://orders:${pw}@postgres-db:5432/shop`, "-Atc", "select 1"],
+        { encoding: "utf8" },
+      );
+      expect(probe.status).not.toBe(0);
+      expect(probe.stderr).toMatch(/permission denied for database "shop"/);
+    },
+    600_000,
+  );
+
+  it.skipIf(!ready)(
     `reports WAIT_TIMEOUT when a capability never becomes ready${why}`,
     () => {
       const name = "pbtest-timeout";

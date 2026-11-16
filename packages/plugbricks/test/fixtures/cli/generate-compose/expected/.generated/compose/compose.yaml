@@ -2,7 +2,7 @@
 name: demo
 services:
   orders-app:
-    image: ghcr.io/example/orders-app:0.1.0
+    image: plugbricks-example/orders:0.1.0
     environment:
       DATABASE_URL: "postgres://orders:${PB_POSTGRES__ORDERS__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders"
     healthcheck:
