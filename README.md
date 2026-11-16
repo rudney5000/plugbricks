@@ -29,6 +29,16 @@ npm run typecheck
 
 Run a script in one package only with `npm test -w plugbricks`.
 
+### Dev container
+
+Open the repo in a dev container ("Dev Containers: Reopen in Container" in VS Code); it runs `npm ci` on creation. Then:
+
+```bash
+npm test
+```
+
+The container has Node 22 and access to the host's Docker. The Score and Kubernetes tools arrive with roadmap step 2.
+
 Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `package-lock.json` is committed: always install with `npm ci`.
 
 ## Roadmap

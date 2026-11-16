@@ -1,0 +1,21 @@
+{
+  "name": "plugbricks",
+  // Official devcontainers TypeScript/Node image, Node 22, exact tag (no floating tags).
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:5.2.6-22-bookworm",
+
+  "features": {
+    // Lets scripts drive the host's Docker daemon.
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1.10.2": {}
+    // score-compose, score-k8s, k3d and kubectl are added with milestone step 2.
+  },
+
+  "postCreateCommand": "npm ci",
+
+  "customizations": {
+    "vscode": {
+      // No ESLint extension: the project has no ESLint config.
+      // JSON Schema validation of plugin.json ("$schema") is built into VS Code.
+      "extensions": []
+    }
+  }
+}
