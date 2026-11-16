@@ -27,5 +27,8 @@
       ],
       "unchanged": true
     }
+  ],
+  "needs": [
+    "symlinks"
   ]
 }

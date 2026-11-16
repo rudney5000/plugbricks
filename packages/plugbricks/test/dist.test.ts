@@ -1,8 +1,9 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
+import { extractTgz, linkDir, npmPack } from "./helpers/pack.js";
 
 // Packs the package exactly as npm would publish it (prepack runs the build),
 // unpacks it and runs the compiled code from there: this catches a schema path that
@@ -19,13 +20,11 @@ let files: string[];
 beforeAll(() => {
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work, { recursive: true });
-  const out = execFileSync("npm", ["pack", "--json", "--pack-destination", work], { cwd: pkgDir, encoding: "utf8" });
-  // npm prints the prepack build output before the JSON.
-  const [info] = JSON.parse(out.slice(out.indexOf("[")));
-  files = info.files.map((f: { path: string }) => f.path);
-  execFileSync("tar", ["-xzf", join(work, info.filename), "-C", work]);
+  const packed = npmPack(pkgDir, work);
+  files = packed.files;
+  extractTgz(packed.tarball, work);
   // Dependencies come from the workspace install; the unpacked package has none of its own.
-  symlinkSync(nodeModules, join(unpacked, "node_modules"), "dir");
+  linkDir(nodeModules, join(unpacked, "node_modules"));
 }, 120_000);
 
 describe("published package", () => {
@@ -67,7 +66,9 @@ describe("published package", () => {
   it("declares the plugbricks bin, with a node shebang", () => {
     const manifest = JSON.parse(readFileSync(join(unpacked, "package.json"), "utf8"));
     expect(manifest.bin).toEqual({ plugbricks: "dist/bin.js" });
-    expect(readFileSync(join(unpacked, "dist/bin.js"), "utf8").split("\n")[0]).toBe("#!/usr/bin/env node");
+    const bin = readFileSync(join(unpacked, "dist/bin.js"), "utf8");
+    expect(bin.split("\n")[0]).toBe("#!/usr/bin/env node");
+    expect(bin.includes("\r"), "compiled files use LF on every OS (tsconfig newLine)").toBe(false);
   });
 
   it("runs init, add, status and remove from the built CLI", () => {

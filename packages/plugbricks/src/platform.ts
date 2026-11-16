@@ -11,7 +11,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import path, { basename, dirname, join, resolve, sep } from "node:path";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
 import type { IssueCode, IssueParams } from "./messages.js";
@@ -123,7 +123,14 @@ function readJson(file: string, label: string): unknown {
   }
 }
 
-const toPosix = (p: string) => p.split(sep).join("/");
+/**
+ * Relative path from `from` to `to`, always written with "/" so platform.json and
+ * platform.lock are identical on Linux, macOS and Windows. `p` is the path flavour of the
+ * running OS; tests pass path.win32 to check the Windows behaviour on any machine.
+ */
+export function portableRelative(from: string, to: string, p: path.PlatformPath = path): string {
+  return p.relative(from, to).split(p.sep).join(path.posix.sep);
+}
 
 // ---------- brick contents ----------
 
@@ -133,6 +140,7 @@ function listBrickFiles(dir: string, brick: string): string[] {
   const walk = (rel: string) => {
     for (const entry of readdirSync(join(dir, rel)).sort()) {
       const r = rel ? `${rel}/${entry}` : entry;
+      if (entry.includes("\\")) fail("BRICK_PATH_NOT_PORTABLE", { path: r });
       const st = lstatSync(join(dir, r));
       if (st.isSymbolicLink()) fail("BRICK_SYMLINK", { brick, file: r });
       if (st.isDirectory()) walk(r);
@@ -143,11 +151,27 @@ function listBrickFiles(dir: string, brick: string): string[] {
   return out.sort();
 }
 
-/** sha256 over (path, size, content) of every file, in sorted path order. */
+/**
+ * Text files are hashed with CRLF turned into LF, so a brick checked out on Windows (git
+ * autocrlf) has the same integrity as on Linux. A file with a NUL byte in its first 8000 bytes
+ * is binary (the same heuristic as git) and is hashed as is.
+ */
+export function normalizeLineEndings(data: Buffer): Buffer {
+  if (data.subarray(0, 8000).includes(0)) return data;
+  const out = Buffer.allocUnsafe(data.length);
+  let n = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] === 0x0d && data[i + 1] === 0x0a) continue;
+    out[n++] = data[i];
+  }
+  return n === data.length ? data : out.subarray(0, n);
+}
+
+/** sha256 over (path, size, content) of every file, in sorted path order, after normalizeLineEndings. */
 export function brickIntegrity(dir: string, brick: string): string {
   const h = createHash("sha256");
   for (const f of listBrickFiles(dir, brick)) {
-    const data = readFileSync(join(dir, f));
+    const data = normalizeLineEndings(readFileSync(join(dir, f)));
     h.update(`${f}\0${data.length}\0`);
     h.update(data);
   }
@@ -296,7 +320,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   const target = resolve(project.root, brickPath);
   const manifestFile = target.endsWith(".json") ? target : join(target, "plugin.json");
   const brickDir = dirname(manifestFile);
-  const shown = toPosix(relative(project.root, manifestFile)) || manifestFile;
+  const shown = portableRelative(project.root, manifestFile) || manifestFile;
   if (!existsSync(manifestFile) || !statSync(manifestFile).isFile()) fail("BRICK_NOT_FOUND", { path: shown });
 
   const raw = readJson(manifestFile, shown);
@@ -322,6 +346,10 @@ export function addBrick(root: string, brickPath: string): AddResult {
     );
   if (conflicts.length) throw new PlugbricksError(conflicts);
 
+  const source = portableRelative(project.root, brickDir) || ".";
+  // On Linux and macOS "\\" is a legal file name character, but it is a separator on Windows.
+  if (source.includes("\\")) fail("BRICK_PATH_NOT_PORTABLE", { path: source });
+
   const missing = Object.keys(m.requires ?? {})
     .filter((cap) => !lock.capabilities[cap])
     .map((cap) => issue("REQUIRED_CAPABILITY_MISSING", `/requires/${cap}`, { brick: m.name, capability: cap }));
@@ -345,7 +373,6 @@ export function addBrick(root: string, brickPath: string): AddResult {
   rmSync(dest, { recursive: true, force: true });
   renameSync(tmp, dest);
 
-  const source = toPosix(relative(project.root, brickDir)) || ".";
   lock.bricks[m.name] = {
     version: m.version,
     source,

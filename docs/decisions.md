@@ -109,6 +109,51 @@ end yet.
 
 ---
 
+## D4. Linux, macOS and Windows behave the same
+
+- **Status:** accepted, implemented before milestone 3. CI runs `npm ci`, `npm run typecheck` and
+  `npm test` on `ubuntu-latest`, `macos-latest` and `windows-latest` with the exact Node version
+  in `.node-version` (`.github/workflows/ci.yml`, actions pinned by commit SHA).
+- **Line endings.** `.gitattributes` checks out every text file with LF on every OS (bricks,
+  fixtures, the create template, shell scripts). Independently of git, brick integrity is
+  computed after turning CRLF into LF in text files (no NUL byte in the first 8000 bytes, the
+  git heuristic); binary files are hashed as is. A brick copied with CRLF therefore has the same
+  `integrity` as with LF, and `status` stays clean. CI also fails if any tracked file is checked
+  out with CRLF. Generated projects get the same `.gitattributes`.
+- **Paths.** Every path stored in `platform.json` and `platform.lock` uses `/`, computed with the
+  running OS's path rules and joined with `path.posix.sep` (`portableRelative`). A brick whose
+  path, or one of whose file names, contains a backslash is refused with
+  `BRICK_PATH_NOT_PORTABLE` (legal on Linux and macOS, a separator on Windows). The scenario
+  tests fail if a backslash appears in either file.
+- **`.secrets/` permissions.**
+  - Linux, macOS: `chmod 700`, then `stat` to confirm the mode is exactly 700.
+  - Windows: POSIX modes do not exist (Node's `chmod` only toggles read-only), so
+    `npm create plugbricks` sets an ACL with
+    `icacls .secrets /inheritance:r /grant:r <DOMAIN\user>:(OI)(CI)F`, then reads the ACL back
+    with `icacls .secrets` and checks that no entry is inherited and no other account is listed.
+  - If any step fails, on any OS, the generator prints
+    `warning SECRETS_NOT_RESTRICTED: …` with the reason and still creates the project (exit 0):
+    the folder is empty at that point. Nothing fails silently.
+  - Milestone 3 (writing secrets) must run the same check and **refuse** to write a secret into a
+    `.secrets/` that is not restricted, with the same code.
+- **Symbolic links.** Creating one needs Developer Mode or administrator rights on Windows. The
+  scenario that checks that bricks with symlinks are refused declares `"needs": ["symlinks"]`;
+  the runner probes once whether a symlink can be created and, if not, skips that scenario with
+  the reason in its title. It never fails or passes silently. The test helpers link
+  `node_modules` with a junction on Windows, which needs no privilege.
+- **Running npm and tar in tests.** npm is run as `node <npm-cli.js>` (on Windows `npm` is a `.cmd`
+  file, which Node no longer spawns without a shell), and `npm pack` tarballs are extracted in
+  JavaScript (the `tar` found first on Windows runners may be GNU tar from Git, which reads
+  `C:\…` as a remote host).
+- **Tools.** `tools.json` pins score-k8s 0.23.0, score-compose 0.50.0, k3d v5.9.0 and kubectl
+  v1.37.2 for linux, darwin and windows on amd64 and arm64, each entry with its version and the
+  sha256 from the official release checksum file. score-k8s, score-compose and k3d publish no
+  windows/arm64 build: those entries say so explicitly (`available: false` and a reason). The
+  checksum files were fetched over HTTPS from the official release pages; their sigstore
+  signatures (published for score-k8s and score-compose) were not verified.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

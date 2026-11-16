@@ -47,6 +47,7 @@ export const MESSAGES = {
 
   // add
   BRICK_NOT_FOUND: "no plugin.json found at {path}",
+  BRICK_PATH_NOT_PORTABLE: 'brick path "{path}" contains a backslash, which is a path separator on Windows; rename it',
   MANIFEST_INVALID: "{path} is not a valid plugin manifest; see the issues below",
   BRICK_FILE_MISSING: 'brick "{brick}" references {file}, which does not exist in the brick',
   BRICK_SYMLINK: 'brick "{brick}" contains a symbolic link ({file}); a brick must contain regular files only',
@@ -67,6 +68,8 @@ export const MESSAGES = {
   // npm create plugbricks
   CREATE_MISSING_NAME: "missing project name; usage: npm create plugbricks <project-name>",
   CREATE_TARGET_NOT_EMPTY: "{dir} already exists and is not empty; choose another name or remove it first",
+  SECRETS_NOT_RESTRICTED:
+    "could not restrict {dir} to your user only ({detail}); other accounts on this machine may be able to read it. Restrict it before storing any secret",
 } as const;
 
 export type IssueCode = keyof typeof MESSAGES;

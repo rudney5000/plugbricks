@@ -1,10 +1,11 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { main as plugbricks, validateManifest } from "plugbricks";
-import { create } from "../lib/create.js";
+import { create, restrictToCurrentUser } from "../lib/create.js";
+import { extractTgz, linkDir, npmPack } from "../../plugbricks/test/helpers/pack.ts";
 
 // Everything runs in .test-work/ inside this package (gitignored).
 const pkgDir = fileURLToPath(new URL("../", import.meta.url));
@@ -29,6 +30,7 @@ const STRUCTURE = [
   "README.md",
   "package.json",
   ".gitignore",
+  ".gitattributes",
   "platform.json",
   "platform.lock",
   "config/README.md",
@@ -53,7 +55,27 @@ describe("npm create plugbricks <name>", () => {
   it("creates the decided structure", () => {
     for (const p of STRUCTURE) expect(existsSync(join(project, p)), p).toBe(true);
     expect(existsSync(join(project, "gitignore")), "template name must be renamed").toBe(false);
+    expect(existsSync(join(project, "gitattributes")), "template name must be renamed").toBe(false);
+  });
+
+  it.skipIf(process.platform === "win32")(".secrets/ is mode 700 (Linux, macOS)", () => {
     expect(statSync(join(project, ".secrets")).mode & 0o777).toBe(0o700);
+  });
+
+  it.runIf(process.platform === "win32")(".secrets/ has no inherited ACL entry and only the current user (Windows)", () => {
+    const acl = spawnSync("icacls", [join(project, ".secrets")], { encoding: "utf8" });
+    expect(acl.status, acl.stderr).toBe(0);
+    const entries = acl.stdout.split(/\r?\n/).filter((l) => l.includes(":("));
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.filter((l) => l.includes("(I)"))).toEqual([]);
+  });
+
+  it("created without a SECRETS_NOT_RESTRICTED warning", () => {
+    const again = join(cwd, "warning-check");
+    const r = run(["warning-check"], cwd);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe("");
+    rmSync(again, { recursive: true, force: true });
   });
 
   it("writes a valid, empty platform named after the project", () => {
@@ -79,7 +101,7 @@ describe("npm create plugbricks <name>", () => {
     const readme = readFileSync(join(project, "README.md"), "utf8");
     expect(readme.startsWith("# mon-saas\n")).toBe(true);
     expect(readme).not.toContain("{{name}}");
-    for (const p of ["platform.json", "platform.lock", ".platform/bricks/", "services/", "config/", ".generated/", ".secrets/", "package.json"]) {
+    for (const p of ["platform.json", "platform.lock", ".platform/bricks/", "services/", "config/", ".generated/", ".secrets/", ".gitattributes", "package.json"]) {
       expect(readme, `README must explain ${p}`).toMatch(new RegExp(`^\\| \`${p.replace(/[.]/g, "\\.")}\` \\| \\S`, "m"));
     }
   });
@@ -132,6 +154,53 @@ describe("refusals write nothing", () => {
   });
 });
 
+describe("restrictToCurrentUser: the Windows branch, with a fake icacls (runs on every OS)", () => {
+  const dir = "C:\\p\\.secrets";
+  const ok = (stdout = "") => ({ status: 0, stdout, stderr: "" });
+  const fake = (calls, results) => (cmd, args) => {
+    calls.push([cmd, ...args]);
+    return results.shift();
+  };
+
+  it("removes inheritance, grants only the user, then reads the ACL back", () => {
+    const calls = [];
+    const r = restrictToCurrentUser(dir, {
+      platform: "win32",
+      user: "BOX\\ana",
+      run: fake(calls, [ok(), ok(`${dir} BOX\\ana:(OI)(CI)(F)\r\n\r\nSuccessfully processed 1 files\r\n`)]),
+    });
+    expect(r).toEqual({ ok: true, method: "icacls (current user only)" });
+    expect(calls).toEqual([
+      ["icacls", dir, "/inheritance:r", "/grant:r", "BOX\\ana:(OI)(CI)F"],
+      ["icacls", dir],
+    ]);
+  });
+
+  it.each([
+    ["icacls fails", [{ status: 5, stdout: "", stderr: "Access is denied." }], /icacls exited with 5: Access is denied/],
+    ["inherited entries remain", [ok(), ok(`${dir} BOX\\ana:(OI)(CI)(F)\r\n         BUILTIN\\Users:(I)(RX)\r\n`)], /inherited/],
+    ["another account has access", [ok(), ok(`${dir} BOX\\ana:(OI)(CI)(F)\r\n         Everyone:(R)\r\n`)], /other accounts.*Everyone/],
+  ])("reports, never hides, a failure: %s", (_, results, detail) => {
+    const r = restrictToCurrentUser(dir, { platform: "win32", user: "BOX\\ana", run: fake([], results) });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(detail);
+  });
+
+  it("the generator turns a failure into an explicit SECRETS_NOT_RESTRICTED warning and still creates the project", () => {
+    const cwd = join(work, "secrets-warning");
+    rmSync(cwd, { recursive: true, force: true });
+    mkdirSync(cwd, { recursive: true });
+    const stderr = [];
+    const code = create(["warned"], { cwd, stdout: () => {}, stderr: (l) => stderr.push(l) }, {
+      restrict: () => ({ ok: false, detail: "simulated failure" }),
+    });
+    expect(code).toBe(0);
+    expect(stderr).toHaveLength(1);
+    expect(stderr[0]).toMatch(/^warning SECRETS_NOT_RESTRICTED: could not restrict .*\.secrets to your user only \(simulated failure\)/);
+    expect(existsSync(join(cwd, "warned/platform.json"))).toBe(true);
+  });
+});
+
 describe("published package", () => {
   // npm drops .gitignore files from packages: run the packed generator to prove the template survives packing.
   const packWork = join(work, "pack");
@@ -141,15 +210,15 @@ describe("published package", () => {
   beforeAll(() => {
     rmSync(packWork, { recursive: true, force: true });
     mkdirSync(packWork, { recursive: true });
-    const [info] = JSON.parse(execFileSync("npm", ["pack", "--json", "--pack-destination", packWork], { cwd: pkgDir, encoding: "utf8" }));
-    files = info.files.map((f) => f.path);
-    execFileSync("tar", ["-xzf", join(packWork, info.filename), "-C", packWork]);
-    symlinkSync(nodeModules, join(packWork, "package/node_modules"), "dir");
+    const packed = npmPack(pkgDir, packWork);
+    files = packed.files;
+    extractTgz(packed.tarball, packWork);
+    linkDir(nodeModules, join(packWork, "package/node_modules"));
   }, 120_000);
 
   it("ships bin, lib and the whole template", () => {
     expect(files).toEqual(
-      expect.arrayContaining(["bin/create-plugbricks.js", "lib/create.js", "template/gitignore", "template/README.md", "template/services/orders/plugin.json"]),
+      expect.arrayContaining(["bin/create-plugbricks.js", "lib/create.js", "template/gitignore", "template/gitattributes", "template/README.md", "template/services/orders/plugin.json"]),
     );
     expect(files.filter((f) => f.startsWith("test/"))).toEqual([]);
   });

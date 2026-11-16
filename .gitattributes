@@ -1,0 +1,23 @@
+# Check out every text file with LF, on every OS (including Windows with core.autocrlf=true).
+# - Bricks (examples/, test/fixtures/, create-plugbricks/template/) contain shell scripts that
+#   run in Linux containers: a CRLF would break them.
+# - Golden files in test/fixtures/ are compared byte for byte.
+# Brick integrity also normalizes CRLF to LF before hashing (src/platform.ts), so a brick
+# checked out with CRLF elsewhere still matches its lock; this file keeps the repo itself clean.
+* text=auto eol=lf
+
+packages/*/examples/**        text=auto eol=lf
+packages/*/test/fixtures/**   text=auto eol=lf
+packages/create-plugbricks/template/** text=auto eol=lf
+
+# Shell scripts are always text with LF (after the lines above, so it wins).
+*.sh text eol=lf
+
+# Binary files are never converted.
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.ico  binary
+*.tgz  binary
+*.gz   binary
+*.zip  binary

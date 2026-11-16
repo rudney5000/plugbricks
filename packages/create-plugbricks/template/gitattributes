@@ -1,0 +1,5 @@
+# Written by npm create plugbricks (stored as "gitattributes" in the template and renamed).
+# Keep LF line endings on every OS: brick scripts run in Linux containers, where a CRLF breaks
+# them. plugbricks hashes bricks with line endings normalized, so status stays clean either way.
+* text=auto eol=lf
+*.sh text eol=lf

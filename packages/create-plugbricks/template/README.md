@@ -14,7 +14,8 @@ them and of what they need from each other.
 | `services/` | **Your own services.** Each folder is a brick: a `plugin.json` that says what the service is, plus its files. `services/orders/` is an example to start from. | yes | yes, this is your code |
 | `config/` | **Your non-secret settings** that services read. | yes | yes |
 | `.generated/` | Files **produced by plugbricks** (Docker Compose files, Kubernetes manifests) when the drivers arrive. Always rebuilt from the files above. | no (ignored) | never |
-| `.secrets/` | **Passwords and keys** created on this machine. | **never** (ignored) | no |
+| `.secrets/` | **Passwords and keys** created on this machine. Restricted to your user (mode 700 on Linux and macOS, an ACL on Windows); if that fails you get a `SECRETS_NOT_RESTRICTED` warning. | **never** (ignored) | no |
+| `.gitattributes` | Keeps LF line endings on every OS, so brick scripts still run in Linux containers. | yes | rarely |
 | `package.json` | Installs the `plugbricks` command for this project. | yes | rarely |
 
 ## First steps

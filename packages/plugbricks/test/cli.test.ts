@@ -47,6 +47,8 @@ interface Scenario {
   absent?: string[];
   /** Volumes ("brick/service/name") a driver could delete with --prune-volumes, after the last step. */
   expectPrune?: string[];
+  /** OS features the scenario needs; it is skipped, with the reason in its title, where they are missing. */
+  needs?: "symlinks"[];
 }
 
 const pkg = fileURLToPath(new URL("../", import.meta.url));
@@ -86,10 +88,39 @@ function mutate(work: string, m: NonNullable<Step["mutate"]>): void {
   }
 }
 
+/**
+ * Creating a symlink needs Developer Mode or admin rights on Windows. Probe once instead of
+ * guessing from the OS, and say why a scenario is skipped instead of letting it fail.
+ */
+function symlinkSupport(): { ok: true } | { ok: false; reason: string } {
+  const probe = join(workRoot, ".symlink-probe");
+  mkdirSync(workRoot, { recursive: true });
+  rmSync(probe, { force: true });
+  try {
+    symlinkSync("target-that-does-not-exist", probe);
+    rmSync(probe, { force: true });
+    return { ok: true };
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    return {
+      ok: false,
+      reason: `this OS refuses to create symbolic links (${code}); on Windows enable Developer Mode or run as administrator`,
+    };
+  }
+}
+const symlinks = symlinkSupport();
+
 const scenarios = readdirSync(fixtures).sort();
+const needs = (name: string): Scenario["needs"] => JSON.parse(readFileSync(join(fixtures, name, "scenario.json"), "utf8")).needs;
+const runnable = scenarios.filter((n) => symlinks.ok || !needs(n)?.includes("symlinks"));
+const skipped = scenarios.filter((n) => !runnable.includes(n));
 
 describe("plugbricks CLI scenarios", () => {
-  it.each(scenarios)("%s", (name) => {
+  if (!symlinks.ok) {
+    for (const name of skipped) it.skip(`${name} (skipped: ${symlinks.reason})`, () => {});
+  }
+
+  it.each(runnable)("%s", (name) => {
     const dir = join(fixtures, name);
     const sc: Scenario = JSON.parse(readFileSync(join(dir, "scenario.json"), "utf8"));
     const work = join(workRoot, name);
@@ -115,6 +146,13 @@ describe("plugbricks CLI scenarios", () => {
 
     for (const p of sc.exists ?? []) expect(existsSync(join(work, p)), `${p} should exist`).toBe(true);
     for (const p of sc.absent ?? []) expect(existsSync(join(work, p)), `${p} should not exist`).toBe(false);
+
+    // Paths are stored with "/" on every OS: a backslash in either file is a portability bug.
+    for (const f of GOLDEN) {
+      if (!existsSync(join(work, f))) continue;
+      const text = readFileSync(join(work, f), "utf8");
+      expect(text.includes("\\"), `${name}: ${f} contains a backslash:\n${text}`).toBe(false);
+    }
     if (sc.expectPrune) {
       const lock: Lock = JSON.parse(readFileSync(join(work, "platform.lock"), "utf8"));
       expect(volumesToPrune(lock).map((v) => `${v.brick}/${v.service}/${v.name}`), `${name}: volumes a driver may prune`).toEqual(

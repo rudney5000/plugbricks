@@ -54,6 +54,11 @@ npm test
 npm run typecheck
 ```
 
+Supported on Linux, macOS and Windows with Node 22 (the exact version is in `.node-version`).
+CI (`.github/workflows/ci.yml`) runs the three commands above on all three systems; see
+`docs/decisions.md` (D4) for what differs between them and how it is handled. `tools.json` pins
+the external tools of milestone 3 per OS and architecture.
+
 Run a script in one package only with `npm test -w plugbricks`.
 
 ### Dev container
