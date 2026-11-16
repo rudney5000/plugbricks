@@ -1,0 +1,35 @@
+{
+  "description": "postgres cannot go while orders requires database",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ],
+      "exit": 1,
+      "codes": [
+        "CAPABILITY_IN_USE"
+      ],
+      "unchanged": true
+    }
+  ]
+}

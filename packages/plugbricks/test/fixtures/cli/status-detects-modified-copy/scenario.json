@@ -1,0 +1,35 @@
+{
+  "description": "status fails when a copy in .platform/bricks was edited",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "append": {
+          "file": ".platform/bricks/postgres/plugin.json",
+          "text": "\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_MODIFIED"
+      ]
+    }
+  ]
+}

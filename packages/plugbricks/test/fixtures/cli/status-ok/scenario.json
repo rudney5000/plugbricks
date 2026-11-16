@@ -1,0 +1,31 @@
+{
+  "description": "status lists bricks, resolved requirements and retained volumes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "orders 0.1.0  requires database from postgres (wait healthy, 120s)",
+      "unchanged": true
+    }
+  ]
+}

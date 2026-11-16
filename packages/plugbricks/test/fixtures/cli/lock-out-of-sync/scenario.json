@@ -1,0 +1,49 @@
+{
+  "description": "a hand-edited platform.json that no longer matches the lock is reported",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "writeJson": {
+          "file": "platform.json",
+          "json": {
+            "name": "demo",
+            "bricks": {}
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "LOCK_OUT_OF_SYNC"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ],
+      "exit": 1,
+      "codes": [
+        "LOCK_OUT_OF_SYNC"
+      ],
+      "unchanged": true
+    }
+  ]
+}

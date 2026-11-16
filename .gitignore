@@ -3,3 +3,4 @@ dist/
 .generated/
 .secrets/
 *.log
+.test-work/

@@ -27,6 +27,45 @@ export const MESSAGES = {
 
   // Runtime (drivers and `plugbricks status`, milestone 3).
   WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
+
+  // CLI usage (exit code 2).
+  USAGE_UNKNOWN_COMMAND: 'unknown command "{command}"; run "plugbricks --help"',
+  USAGE_MISSING_ARGUMENT: '"plugbricks {command}" needs {argument}',
+  USAGE_UNEXPECTED_ARGUMENT: 'unexpected argument "{argument}" for "plugbricks {command}"',
+  USAGE_INVALID_OPTION: "{detail}",
+
+  // Platform files (platform.json, platform.lock, .platform/bricks).
+  INVALID_JSON: "{file} is not valid JSON: {detail}",
+  PLATFORM_NOT_INITIALIZED: 'no platform.json in {dir}; run "plugbricks init" first',
+  PLATFORM_ALREADY_INITIALIZED: "platform.json already exists in {dir}; nothing was changed",
+  PLATFORM_INVALID_NAME:
+    '"{name}" is not a valid platform name (lowercase letters, digits and dashes, 2 to 40 characters); pass --name',
+  PLATFORM_FILE_INVALID: "{file} does not match its schema; see the issues below",
+  LOCK_MISSING: 'platform.lock is missing in {dir}; it is written by "plugbricks init"',
+  LOCK_OUT_OF_SYNC: "platform.json and platform.lock disagree on brick \"{brick}\"; {detail}",
+
+  // add
+  BRICK_NOT_FOUND: "no plugin.json found at {path}",
+  MANIFEST_INVALID: "{path} is not a valid plugin manifest; see the issues below",
+  BRICK_FILE_MISSING: 'brick "{brick}" references {file}, which does not exist in the brick',
+  BRICK_SYMLINK: 'brick "{brick}" contains a symbolic link ({file}); a brick must contain regular files only',
+  BRICK_NAME_CONFLICT:
+    'a different brick named "{name}" is already installed (from {source}); remove it before adding this one',
+  CAPABILITY_ALREADY_PROVIDED: 'brick "{brick}" provides "{capability}", which "{provider}" already provides',
+  REQUIRED_CAPABILITY_MISSING:
+    'brick "{brick}" requires capability "{capability}", which no installed brick provides; add a provider first',
+
+  // remove
+  BRICK_NOT_INSTALLED: 'no brick named "{name}" is installed',
+  CAPABILITY_IN_USE: 'cannot remove "{brick}": capability "{capability}" is still required by {consumers}',
+
+  // status
+  BRICK_MISSING: 'the installed copy of "{brick}" is missing from .platform/bricks/{brick}',
+  BRICK_MODIFIED: 'the installed copy of "{brick}" was modified after it was added (integrity mismatch)',
+
+  // npm create plugbricks
+  CREATE_MISSING_NAME: "missing project name; usage: npm create plugbricks <project-name>",
+  CREATE_TARGET_NOT_EMPTY: "{dir} already exists and is not empty; choose another name or remove it first",
 } as const;
 
 export type IssueCode = keyof typeof MESSAGES;

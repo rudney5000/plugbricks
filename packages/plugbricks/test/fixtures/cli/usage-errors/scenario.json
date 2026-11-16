@@ -1,0 +1,67 @@
+{
+  "description": "usage errors exit 2 with a stable code and change nothing",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "deploy"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_UNKNOWN_COMMAND"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "add"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_MISSING_ARGUMENT"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "remove",
+        "a",
+        "b"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_UNEXPECTED_ARGUMENT"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres",
+        "--json"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status",
+        "--force"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    }
+  ]
+}

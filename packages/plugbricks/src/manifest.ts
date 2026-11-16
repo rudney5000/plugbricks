@@ -1,67 +1,15 @@
-import { readFileSync } from "node:fs";
-import { Ajv2020, type ErrorObject } from "ajv/dist/2020.js";
 import { checkImagePin } from "./image.js";
-import { formatMessage, type IssueCode, type IssueParams } from "./messages.js";
+import { issue, type Issue } from "./issues.js";
+import { MANIFEST_SCHEMA_ID, manifestSchema, schemaIssues } from "./schemas.js";
 
-const schemaUrl = new URL("../schemas/plugin-manifest.schema.json", import.meta.url);
-const schema = JSON.parse(readFileSync(schemaUrl, "utf8"));
+export { MANIFEST_SCHEMA_ID };
 
-/** Identity of the manifest contract: where the schema file is published (main branch of the repo). */
-export const MANIFEST_SCHEMA_ID = "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json";
-if (schema.$id !== MANIFEST_SCHEMA_ID) {
-  throw new Error(`schema $id is "${schema.$id}", expected "${MANIFEST_SCHEMA_ID}"`);
-}
-
-const ajv = new Ajv2020({ allErrors: true, strict: true });
-ajv.addSchema(schema);
-const validateSchema = ajv.getSchema(MANIFEST_SCHEMA_ID)!;
-
-export interface ManifestIssue {
-  /** Stable identifier, see MESSAGES in messages.ts. */
-  code: IssueCode;
-  /** JSON Pointer to the faulty field. */
-  path: string;
-  message: string;
-  params: IssueParams;
-}
+/** Kept for compatibility: a manifest issue is a plain Issue whose path is a JSON Pointer. */
+export type ManifestIssue = Issue;
 
 export type ValidationResult =
   | { ok: true }
   | { ok: false; issues: ManifestIssue[] };
-
-function issue(code: IssueCode, path: string, params: IssueParams = {}): ManifestIssue {
-  return { code, path: path || "/", message: formatMessage(code, params), params };
-}
-
-function fromAjv(e: ErrorObject): ManifestIssue {
-  const p = e.params as Record<string, unknown>;
-  const at = e.instancePath;
-  switch (e.keyword) {
-    case "required":
-      return issue("MISSING_FIELD", `${at}/${p.missingProperty}`, { field: String(p.missingProperty) });
-    case "additionalProperties":
-      return issue("UNKNOWN_FIELD", `${at}/${p.additionalProperty}`, { field: String(p.additionalProperty) });
-    case "type":
-      return issue("INVALID_TYPE", at, { type: String(p.type) });
-    case "pattern":
-      return issue("INVALID_FORMAT", at, { pattern: String(p.pattern) });
-    case "enum":
-      return issue("INVALID_VALUE", at, { allowed: (p.allowedValues as unknown[]).join(", ") });
-    case "minimum":
-    case "maximum":
-    case "minItems":
-    case "minLength":
-    case "minProperties":
-      return issue("OUT_OF_RANGE", at, { detail: e.message ?? e.keyword });
-    case "dependentRequired":
-      return issue("DEPENDENT_FIELD", `${at}/${p.property}`, {
-        field: String(p.property),
-        required: String(p.missingProperty),
-      });
-    default:
-      return issue("SCHEMA_VIOLATION", at, { detail: e.message ?? e.keyword });
-  }
-}
 
 function checkImage(image: string, path: string, issues: ManifestIssue[]): void {
   const r = checkImagePin(image);
@@ -73,9 +21,8 @@ function checkImage(image: string, path: string, issues: ManifestIssue[]): void 
 
 /** Validates a parsed manifest against the JSON Schema, then the cross-field rules a schema cannot express. */
 export function validateManifest(manifest: unknown): ValidationResult {
-  if (!validateSchema(manifest)) {
-    return { ok: false, issues: (validateSchema.errors ?? []).map(fromAjv) };
-  }
+  const schemaProblems = schemaIssues(manifestSchema.validate, manifest);
+  if (schemaProblems.length) return { ok: false, issues: schemaProblems };
 
   const m = manifest as {
     services: { name: string; image: string }[];

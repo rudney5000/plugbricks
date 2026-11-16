@@ -1,0 +1,23 @@
+{
+  "description": "a manifest pointing at a file the brick does not ship is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/no-schema"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_FILE_MISSING"
+      ],
+      "unchanged": true
+    }
+  ]
+}

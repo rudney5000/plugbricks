@@ -1,0 +1,31 @@
+{
+  "description": "a brick containing a symbolic link is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "mutate": {
+        "symlink": {
+          "path": "bricks/linked/secret",
+          "target": "/etc/hostname"
+        }
+      }
+    },
+    {
+      "run": [
+        "add",
+        "bricks/linked"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_SYMLINK"
+      ],
+      "unchanged": true
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "description": "removing an unknown brick is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_NOT_INSTALLED"
+      ],
+      "unchanged": true
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform.schema.json",
+  "bricks": {
+    "postgres": {
+      "source": "examples/postgres"
+    }
+  },
+  "name": "demo"
+}

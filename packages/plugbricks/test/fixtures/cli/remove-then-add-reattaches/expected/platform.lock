@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "postgres": {
+      "integrity": "sha256-4535cc90326db8ef4f21da7b7cf76d4b9adb9d34f5a9cfb604bf8bf7bde02533",
+      "provides": [
+        "database"
+      ],
+      "requires": {},
+      "source": "examples/postgres",
+      "version": "1.0.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "retain",
+          "service": "db"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "database": "postgres"
+  },
+  "lockfileVersion": 1,
+  "retainedVolumes": []
+}

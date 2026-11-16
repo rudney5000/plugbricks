@@ -1,0 +1,15 @@
+{
+  "description": "init creates platform.json, platform.lock and .platform/bricks/",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    }
+  ],
+  "exists": [
+    ".platform/bricks"
+  ]
+}

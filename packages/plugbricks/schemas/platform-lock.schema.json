@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "title": "plugbricks platform lock",
+  "description": "Resolved state of the platform, written by plugbricks only. Every default is made explicit here so drivers never guess. Commit it; never edit it by hand.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lockfileVersion", "bricks", "capabilities", "retainedVolumes"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "lockfileVersion": { "const": 1 },
+    "bricks": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/brickName" },
+      "additionalProperties": { "$ref": "#/$defs/brick" }
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Which installed brick provides each capability. One provider per capability.",
+      "propertyNames": { "$ref": "#/$defs/capabilityName" },
+      "additionalProperties": { "$ref": "#/$defs/brickName" }
+    },
+    "retainedVolumes": {
+      "type": "array",
+      "description": "Volumes of removed bricks whose retention is retain. Drivers keep them; adding the brick again re-attaches them.",
+      "items": { "$ref": "#/$defs/volumeRef" }
+    }
+  },
+  "$defs": {
+    "brickName": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$" },
+    "capabilityName": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "brick": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "source", "integrity", "provides", "requires", "volumes"],
+      "properties": {
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$" },
+        "source": { "type": "string", "minLength": 1 },
+        "integrity": {
+          "type": "string",
+          "pattern": "^sha256-[a-f0-9]{64}$",
+          "description": "Hash of every file of the brick (sorted paths and contents). Detects a modified copy in .platform/bricks."
+        },
+        "provides": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capabilityName" }
+        },
+        "requires": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/capabilityName" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider", "wait", "timeoutSeconds"],
+            "properties": {
+              "provider": { "$ref": "#/$defs/brickName" },
+              "wait": { "enum": ["healthy", "started"] },
+              "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 900 }
+            }
+          }
+        },
+        "volumes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["service", "name", "retention"],
+            "properties": {
+              "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+              "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+              "retention": { "enum": ["retain", "delete"] }
+            }
+          }
+        }
+      }
+    },
+    "volumeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brick", "service", "name"],
+      "properties": {
+        "brick": { "$ref": "#/$defs/brickName" },
+        "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+      }
+    }
+  }
+}

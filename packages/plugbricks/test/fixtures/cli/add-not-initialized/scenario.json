@@ -1,0 +1,16 @@
+{
+  "description": "add needs a platform",
+  "steps": [
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_NOT_INITIALIZED"
+      ],
+      "unchanged": true
+    }
+  ]
+}

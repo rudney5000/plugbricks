@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform.schema.json",
+  "title": "plugbricks platform",
+  "description": "What the user wants installed. Written by `plugbricks init`, `add` and `remove`; commit it. The resolved state lives in platform.lock.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "bricks"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$",
+      "description": "Platform name: lowercase letters, digits and dashes, 2 to 40 characters."
+    },
+    "bricks": {
+      "type": "object",
+      "description": "Installed bricks, keyed by the name in their plugin.json.",
+      "propertyNames": { "$ref": "#/$defs/brickName" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Directory the brick was added from, relative to this file, with / separators."
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "brickName": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$" }
+  }
+}

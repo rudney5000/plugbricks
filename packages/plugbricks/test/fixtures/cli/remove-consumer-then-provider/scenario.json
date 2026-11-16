@@ -1,0 +1,40 @@
+{
+  "description": "remove in dependency order: orders, then postgres",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ]
+    }
+  ],
+  "absent": [
+    ".platform/bricks/orders",
+    ".platform/bricks/postgres"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {},
+  "capabilities": {},
+  "lockfileVersion": 1,
+  "retainedVolumes": [
+    {
+      "brick": "postgres",
+      "name": "data",
+      "service": "db"
+    }
+  ]
+}

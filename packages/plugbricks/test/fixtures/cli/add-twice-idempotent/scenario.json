@@ -1,0 +1,48 @@
+{
+  "description": "adding the same bricks again leaves every file identical",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ],
+      "unchanged": true,
+      "stdout": "already installed"
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ],
+      "unchanged": true,
+      "stdout": "already installed"
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres/plugin.json"
+      ],
+      "unchanged": true,
+      "stdout": "already installed"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "description": "a path without plugin.json is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/nothing-here"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_NOT_FOUND"
+      ],
+      "unchanged": true
+    }
+  ]
+}

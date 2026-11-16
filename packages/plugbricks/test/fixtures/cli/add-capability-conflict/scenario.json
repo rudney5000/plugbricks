@@ -1,0 +1,29 @@
+{
+  "description": "a second provider for an installed capability is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/mariadb"
+      ],
+      "exit": 1,
+      "codes": [
+        "CAPABILITY_ALREADY_PROVIDED"
+      ],
+      "unchanged": true
+    }
+  ]
+}

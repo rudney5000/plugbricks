@@ -1,0 +1,34 @@
+{
+  "description": "platform.json is validated by its strict schema",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "mutate": {
+        "writeJson": {
+          "file": "platform.json",
+          "json": {
+            "name": "demo",
+            "bricks": {},
+            "services": []
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "UNKNOWN_FIELD"
+      ]
+    }
+  ]
+}

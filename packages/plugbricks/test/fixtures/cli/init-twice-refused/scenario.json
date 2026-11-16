@@ -1,0 +1,24 @@
+{
+  "description": "a second init refuses and changes nothing",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "init",
+        "--name",
+        "other"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_ALREADY_INITIALIZED"
+      ],
+      "unchanged": true
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "description": "a different brick with an installed name is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/postgres-fork"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_NAME_CONFLICT"
+      ],
+      "unchanged": true
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "description": "postgres then orders: orders resolves database to postgres with explicit defaults",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ],
+      "stdout": "Added postgres 1.0.0"
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ],
+      "stdout": "Added orders 0.1.0"
+    }
+  ],
+  "exists": [
+    ".platform/bricks/postgres/plugin.json",
+    ".platform/bricks/postgres/provision/create-database.sh",
+    ".platform/bricks/orders/schema.graphql"
+  ]
+}

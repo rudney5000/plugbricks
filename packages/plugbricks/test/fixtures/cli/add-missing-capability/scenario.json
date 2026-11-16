@@ -1,0 +1,23 @@
+{
+  "description": "orders requires database and no installed brick provides it",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ],
+      "exit": 1,
+      "codes": [
+        "REQUIRED_CAPABILITY_MISSING"
+      ],
+      "unchanged": true
+    }
+  ]
+}

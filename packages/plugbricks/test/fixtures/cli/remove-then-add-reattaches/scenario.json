@@ -1,0 +1,31 @@
+{
+  "description": "adding postgres again re-attaches its retained volume",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ],
+      "stdout": "re-attached retained volume postgres/db/data"
+    }
+  ]
+}

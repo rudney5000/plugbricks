@@ -1,0 +1,24 @@
+{
+  "description": "a manifest with a floating image tag is refused with the manifest issue",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/bad-image"
+      ],
+      "exit": 1,
+      "codes": [
+        "MANIFEST_INVALID",
+        "IMAGE_FLOATING_TAG"
+      ],
+      "unchanged": true
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "description": "a volume with retention delete is not retained",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ],
+      "stdout": "volume cache/redis/data will be deleted at the next \"up\" (retention: delete)"
+    }
+  ],
+  "absent": [
+    ".platform/bricks/cache"
+  ]
+}

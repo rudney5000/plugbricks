@@ -1,0 +1,28 @@
+{
+  "description": "removing postgres keeps its data volume in the lock (retention: retain)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "postgres"
+      ],
+      "stdout": "volume postgres/db/data kept (retention: retain)"
+    }
+  ],
+  "absent": [
+    ".platform/bricks/postgres"
+  ]
+}

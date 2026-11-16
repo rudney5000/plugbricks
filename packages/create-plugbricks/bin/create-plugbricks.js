@@ -1,2 +1,8 @@
 #!/usr/bin/env node
-console.log("create-plugbricks: not implemented yet. Scaffolding will arrive in a later milestone.");
+import { create } from "../lib/create.js";
+
+process.exitCode = create(process.argv.slice(2), {
+  cwd: process.cwd(),
+  stdout: (line) => process.stdout.write(line + "\n"),
+  stderr: (line) => process.stderr.write(line + "\n"),
+});

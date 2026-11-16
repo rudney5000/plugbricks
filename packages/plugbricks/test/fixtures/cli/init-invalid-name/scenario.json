@@ -1,0 +1,21 @@
+{
+  "description": "an invalid platform name is refused before anything is written",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "Bad_Name"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_INVALID_NAME"
+      ],
+      "unchanged": true
+    }
+  ],
+  "absent": [
+    "platform.json",
+    ".platform"
+  ]
+}

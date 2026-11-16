@@ -1,0 +1,11 @@
+# Written by npm create plugbricks. Stored as "gitignore" in the template because npm
+# drops .gitignore files from published packages; the generator renames it.
+
+# Produced by plugbricks from your files: rebuilt on demand, never edited, never committed.
+.generated/
+
+# Passwords and keys generated on this machine: never committed, never shared.
+.secrets/
+
+node_modules/
+*.log

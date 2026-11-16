@@ -1,11 +1,21 @@
 {
   "name": "create-plugbricks",
   "version": "0.0.1",
-  "description": "Scaffold a new plugbricks project (stub).",
+  "description": "Create a new plugbricks project: npm create plugbricks <project-name>.",
   "type": "module",
   "license": "UNLICENSED",
   "private": true,
   "engines": { "node": ">=20" },
   "bin": { "create-plugbricks": "bin/create-plugbricks.js" },
-  "files": ["bin"]
+  "files": ["bin", "lib", "template"],
+  "scripts": {
+    "pretest": "npm run build -w plugbricks",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "plugbricks": "0.0.1"
+  },
+  "devDependencies": {
+    "vitest": "2.1.9"
+  }
 }

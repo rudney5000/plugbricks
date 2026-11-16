@@ -8,8 +8,10 @@
   "engines": { "node": ">=20" },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./schema.json": "./schemas/plugin-manifest.schema.json"
+    "./schema.json": "./schemas/plugin-manifest.schema.json",
+    "./package.json": "./package.json"
   },
+  "bin": { "plugbricks": "dist/bin.js" },
   "files": ["dist", "schemas"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

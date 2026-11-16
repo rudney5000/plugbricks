@@ -1,0 +1,43 @@
+{
+  "name": "mariadb",
+  "version": "1.0.0",
+  "description": "Another database provider.",
+  "services": [
+    {
+      "name": "db",
+      "image": "mariadb:11.4.2",
+      "port": 3306,
+      "healthcheck": {
+        "exec": [
+          "healthcheck.sh",
+          "--connect"
+        ]
+      }
+    }
+  ],
+  "provides": {
+    "database": {
+      "service": "db",
+      "ready": {
+        "exec": [
+          "mariadb-admin",
+          "ping",
+          "-h",
+          "${provider.host}"
+        ]
+      },
+      "provision": {
+        "image": "mariadb:11.4.2",
+        "command": [
+          "mariadb",
+          "-e",
+          "select 1"
+        ]
+      },
+      "inject": {
+        "DATABASE_URL": "mysql://${consumer.name}@${provider.host}:${provider.port}/${consumer.name}"
+      }
+    }
+  },
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json"
+}
