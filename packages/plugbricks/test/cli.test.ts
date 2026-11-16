@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chmodSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
 import { volumesToPrune, type Lock } from "../src/platform.js";
@@ -34,10 +35,15 @@ interface Step {
     /** Shallow merge of top-level keys into an existing JSON file (a hand edit). */
     patchJson?: { file: string; set: Record<string, unknown> };
     symlink?: { path: string; target: string };
+    /** Copies a folder of the work dir (e.g. examples/postgres) to a path that cannot live in git on every OS. */
+    copyDir?: { from: string; to: string };
+    writeText?: { file: string; text: string };
   };
   exit?: number;
   codes?: string[];
   stdout?: string;
+  /** Substring expected in the error output. */
+  stderr?: string;
   unchanged?: boolean;
 }
 interface Scenario {
@@ -48,7 +54,9 @@ interface Scenario {
   /** Volumes ("brick/service/name") a driver could delete with --prune-volumes, after the last step. */
   expectPrune?: string[];
   /** OS features the scenario needs; it is skipped, with the reason in its title, where they are missing. */
-  needs?: "symlinks"[];
+  needs?: ("symlinks" | "posix-file-names")[];
+  /** Substrings expected in the raw text of a file after the last step (e.g. a JSON escape). */
+  expectRaw?: Record<string, string>;
 }
 
 const pkg = fileURLToPath(new URL("../", import.meta.url));
@@ -82,6 +90,11 @@ function mutate(work: string, m: NonNullable<Step["mutate"]>): void {
     const file = join(work, m.patchJson.file);
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), ...m.patchJson.set }, null, 2) + "\n");
   }
+  if (m.copyDir) cpSync(join(work, m.copyDir.from), join(work, m.copyDir.to), { recursive: true });
+  if (m.writeText) {
+    mkdirSync(dirname(join(work, m.writeText.file)), { recursive: true });
+    writeFileSync(join(work, m.writeText.file), m.writeText.text);
+  }
   if (m.symlink) {
     mkdirSync(dirname(join(work, m.symlink.path)), { recursive: true });
     symlinkSync(m.symlink.target, join(work, m.symlink.path));
@@ -108,17 +121,38 @@ function symlinkSupport(): { ok: true } | { ok: false; reason: string } {
     };
   }
 }
-const symlinks = symlinkSupport();
+const support: Record<NonNullable<Scenario["needs"]>[number], { ok: true } | { ok: false; reason: string }> = {
+  symlinks: symlinkSupport(),
+  "posix-file-names":
+    process.platform === "win32"
+      ? { ok: false, reason: 'Windows forbids \\ and " in file names' }
+      : { ok: true },
+};
 
 const scenarios = readdirSync(fixtures).sort();
-const needs = (name: string): Scenario["needs"] => JSON.parse(readFileSync(join(fixtures, name, "scenario.json"), "utf8")).needs;
-const runnable = scenarios.filter((n) => symlinks.ok || !needs(n)?.includes("symlinks"));
-const skipped = scenarios.filter((n) => !runnable.includes(n));
+const missing = (name: string): string[] => {
+  const needs: NonNullable<Scenario["needs"]> = JSON.parse(readFileSync(join(fixtures, name, "scenario.json"), "utf8")).needs ?? [];
+  return needs.flatMap((n) => {
+    const s = support[n];
+    return s.ok ? [] : [s.reason];
+  });
+};
+const runnable = scenarios.filter((n) => missing(n).length === 0);
+const skipped = scenarios.filter((n) => missing(n).length > 0);
+
+/** Every value of a "source" key, at any depth: the paths platform.json and platform.lock store. */
+function pathFields(value: unknown, at = ""): [string, string][] {
+  if (Array.isArray(value)) return value.flatMap((v, i) => pathFields(v, `${at}/${i}`));
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([k, v]) =>
+      k === "source" && typeof v === "string" ? [[`${at}/${k}`, v] as [string, string]] : pathFields(v, `${at}/${k}`),
+    );
+  }
+  return [];
+}
 
 describe("plugbricks CLI scenarios", () => {
-  if (!symlinks.ok) {
-    for (const name of skipped) it.skip(`${name} (skipped: ${symlinks.reason})`, () => {});
-  }
+  for (const name of skipped) it.skip(`${name} (skipped: ${missing(name).join("; ")})`, () => {});
 
   it.each(runnable)("%s", (name) => {
     const dir = join(fixtures, name);
@@ -141,17 +175,23 @@ describe("plugbricks CLI scenarios", () => {
       const codes = stderr.map((l) => /^error (\w+)/.exec(l)?.[1]).filter(Boolean);
       expect(codes, detail).toEqual(step.codes ?? []);
       if (step.stdout) expect(stdout.join("\n"), detail).toContain(step.stdout);
+      if (step.stderr) expect(stderr.join("\n"), detail).toContain(step.stderr);
       if (before) expect(snapshot(work), `${label} must not change any file`).toEqual(before);
     });
 
     for (const p of sc.exists ?? []) expect(existsSync(join(work, p)), `${p} should exist`).toBe(true);
     for (const p of sc.absent ?? []) expect(existsSync(join(work, p)), `${p} should not exist`).toBe(false);
 
-    // Paths are stored with "/" on every OS: a backslash in either file is a portability bug.
+    // Paths are stored with "/" on every OS. Only path fields are checked: JSON itself writes
+    // backslashes to escape quotes or newlines in other values.
     for (const f of GOLDEN) {
       if (!existsSync(join(work, f))) continue;
-      const text = readFileSync(join(work, f), "utf8");
-      expect(text.includes("\\"), `${name}: ${f} contains a backslash:\n${text}`).toBe(false);
+      for (const [at, p] of pathFields(JSON.parse(readFileSync(join(work, f), "utf8")))) {
+        expect(p.includes("\\"), `${name}: ${f}#${at} contains a backslash: ${p}`).toBe(false);
+      }
+    }
+    for (const [f, text] of Object.entries(sc.expectRaw ?? {})) {
+      expect(readFileSync(join(work, f), "utf8"), `${name}: raw ${f}`).toContain(text);
     }
     if (sc.expectPrune) {
       const lock: Lock = JSON.parse(readFileSync(join(work, "platform.lock"), "utf8"));
@@ -178,4 +218,37 @@ describe("plugbricks CLI scenarios", () => {
       }
     }
   });
+});
+
+// A file-system error in one installed brick (here EACCES) must not stop `status`: it is reported
+// for that brick, and the next brick is still checked. Not a fixture scenario: the unreadable
+// folder must be made readable again afterwards, or the next run could not clean the work dir.
+const canDenyRead = process.platform !== "win32" && process.getuid?.() !== 0;
+describe("status survives an unreadable brick", () => {
+  it.skipIf(!canDenyRead)(
+    `reports BRICK_UNREADABLE for that brick and still checks the others${canDenyRead ? "" : " (skipped: needs POSIX permissions and a non-root user)"}`,
+    () => {
+      const work = join(workRoot, "_status-unreadable");
+      rmSync(work, { recursive: true, force: true });
+      mkdirSync(work, { recursive: true });
+      cpSync(join(pkg, "examples"), join(work, "examples"), { recursive: true });
+      cpSync(join(fixtures, "remove-deletes-volume/bricks"), join(work, "bricks"), { recursive: true });
+      const out: string[] = [];
+      const io = { cwd: work, stdout: () => {}, stderr: (l: string) => out.push(l) };
+      expect(main(["init", "--name", "demo"], io)).toBe(0);
+      expect(main(["add", "examples/postgres"], io)).toBe(0);
+      expect(main(["add", "bricks/cache"], io)).toBe(0);
+      appendFileSync(join(work, ".platform/bricks/postgres/plugin.json"), "\n");
+      const locked = join(work, ".platform/bricks/cache");
+      mkdirSync(join(locked, "private"));
+      chmodSync(join(locked, "private"), 0o000);
+      try {
+        expect(main(["status"], io)).toBe(1);
+      } finally {
+        chmodSync(join(locked, "private"), 0o755);
+      }
+      expect(out.map((l) => /^error (\w+)/.exec(l)?.[1])).toEqual(["BRICK_UNREADABLE", "BRICK_MODIFIED"]);
+      expect(out[0]).toMatch(/^error BRICK_UNREADABLE: the installed copy of "cache" cannot be read: EACCES/);
+    },
+  );
 });

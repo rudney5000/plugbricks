@@ -47,7 +47,7 @@ export const MESSAGES = {
 
   // add
   BRICK_NOT_FOUND: "no plugin.json found at {path}",
-  BRICK_PATH_NOT_PORTABLE: 'brick path "{path}" contains a backslash, which is a path separator on Windows; rename it',
+  BRICK_PATH_NOT_PORTABLE: 'brick "{brick}" cannot be used on every OS: {detail}',
   MANIFEST_INVALID: "{path} is not a valid plugin manifest; see the issues below",
   BRICK_FILE_MISSING: 'brick "{brick}" references {file}, which does not exist in the brick',
   BRICK_SYMLINK: 'brick "{brick}" contains a symbolic link ({file}); a brick must contain regular files only',
@@ -64,6 +64,7 @@ export const MESSAGES = {
   // status
   BRICK_MISSING: 'the installed copy of "{brick}" is missing from .platform/bricks/{brick}',
   BRICK_MODIFIED: 'the installed copy of "{brick}" was modified after it was added (integrity mismatch)',
+  BRICK_UNREADABLE: 'the installed copy of "{brick}" cannot be read: {detail}',
 
   // npm create plugbricks
   CREATE_MISSING_NAME: "missing project name; usage: npm create plugbricks <project-name>",

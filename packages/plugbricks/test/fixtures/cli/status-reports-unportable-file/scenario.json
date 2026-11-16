@@ -1,0 +1,54 @@
+{
+  "description": "status reports an installed brick containing a file name with a backslash for that brick only, and keeps checking the others",
+  "needs": [
+    "posix-file-names"
+  ],
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": ".platform/bricks/cache/notes\\draft.txt",
+          "text": "x\n"
+        }
+      }
+    },
+    {
+      "mutate": {
+        "append": {
+          "file": ".platform/bricks/postgres/plugin.json",
+          "text": "\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_PATH_NOT_PORTABLE",
+        "BRICK_MODIFIED"
+      ],
+      "stderr": "brick \"cache\" cannot be used on every OS: the file \"notes\\draft.txt\" inside the brick has a backslash in its name"
+    }
+  ]
+}

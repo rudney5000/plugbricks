@@ -1,0 +1,33 @@
+{
+  "description": "a brick folder whose name contains a quote: the lock escapes it as \\\" in its raw text, and the path check still passes because it reads the parsed source field",
+  "needs": [
+    "posix-file-names"
+  ],
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "mutate": {
+        "copyDir": {
+          "from": "examples/postgres",
+          "to": "bricks/say \"hi\""
+        }
+      }
+    },
+    {
+      "run": [
+        "add",
+        "bricks/say \"hi\""
+      ],
+      "stdout": "Added postgres 1.0.0"
+    }
+  ],
+  "expectRaw": {
+    "platform.lock": "\"source\": \"bricks/say \\\"hi\\\"\""
+  }
+}

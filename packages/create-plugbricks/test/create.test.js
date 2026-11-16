@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { main as plugbricks, validateManifest } from "plugbricks";
-import { create, restrictToCurrentUser } from "../lib/create.js";
+import { checkWindowsAcl, create, restrictToCurrentUser, WINDOWS_ACL_SCRIPT } from "../lib/create.js";
 import { extractTgz, linkDir, npmPack } from "../../plugbricks/test/helpers/pack.ts";
 
 // Everything runs in .test-work/ inside this package (gitignored).
@@ -62,12 +62,13 @@ describe("npm create plugbricks <name>", () => {
     expect(statSync(join(project, ".secrets")).mode & 0o777).toBe(0o700);
   });
 
-  it.runIf(process.platform === "win32")(".secrets/ has no inherited ACL entry and only the current user (Windows)", () => {
+  // Checked with a different tool than the generator uses (icacls instead of PowerShell).
+  it.runIf(process.platform === "win32")(".secrets/ has exactly one ACL entry, not inherited (Windows)", () => {
     const acl = spawnSync("icacls", [join(project, ".secrets")], { encoding: "utf8" });
     expect(acl.status, acl.stderr).toBe(0);
     const entries = acl.stdout.split(/\r?\n/).filter((l) => l.includes(":("));
-    expect(entries.length).toBeGreaterThan(0);
-    expect(entries.filter((l) => l.includes("(I)"))).toEqual([]);
+    expect(entries, acl.stdout).toHaveLength(1);
+    expect(entries.filter((l) => l.includes("(I)")), acl.stdout).toEqual([]);
   });
 
   it("created without a SECRETS_NOT_RESTRICTED warning", () => {
@@ -154,36 +155,69 @@ describe("refusals write nothing", () => {
   });
 });
 
-describe("restrictToCurrentUser: the Windows branch, with a fake icacls (runs on every OS)", () => {
-  const dir = "C:\\p\\.secrets";
-  const ok = (stdout = "") => ({ status: 0, stdout, stderr: "" });
-  const fake = (calls, results) => (cmd, args) => {
-    calls.push([cmd, ...args]);
-    return results.shift();
+describe("restrictToCurrentUser: the Windows branch, with a fake PowerShell (runs on every OS)", () => {
+  const dir = "D:\\a\\proj\\.secrets";
+  const ANA = "S-1-5-21-1111111111-2222222222-3333333333-1001";
+  const BOB = "S-1-5-21-1111111111-2222222222-3333333333-1002";
+  const BANANA = "S-1-5-21-1111111111-2222222222-3333333333-1003";
+  const ADMINS = "S-1-5-32-544"; // BUILTIN\Administrators, "BA" in SDDL
+  const full = (sid, extra = {}) => ({ sid, type: "Allow", inherited: false, rights: "FullControl", ...extra });
+  const report = (rules, extra = {}) => ({ status: 0, stdout: JSON.stringify({ user: ANA, protected: true, rules, ...extra }) + "\r\n", stderr: "" });
+  const fake = (calls, result) => (cmd, args, env) => {
+    calls.push({ cmd, args, dir: env.PLUGBRICKS_SECRETS_DIR });
+    return result;
   };
 
-  it("removes inheritance, grants only the user, then reads the ACL back", () => {
+  it("runs one PowerShell script, passes the folder through the environment, accepts a DACL with only the user's SID", () => {
     const calls = [];
-    const r = restrictToCurrentUser(dir, {
-      platform: "win32",
-      user: "BOX\\ana",
-      run: fake(calls, [ok(), ok(`${dir} BOX\\ana:(OI)(CI)(F)\r\n\r\nSuccessfully processed 1 files\r\n`)]),
-    });
-    expect(r).toEqual({ ok: true, method: "icacls (current user only)" });
+    const r = restrictToCurrentUser(dir, { platform: "win32", run: fake(calls, report([full(ANA)])) });
+    expect(r).toEqual({ ok: true, method: "DACL for the current user's SID only" });
     expect(calls).toEqual([
-      ["icacls", dir, "/inheritance:r", "/grant:r", "BOX\\ana:(OI)(CI)F"],
-      ["icacls", dir],
+      { cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", WINDOWS_ACL_SCRIPT], dir },
     ]);
   });
 
+  it("the script replaces the whole DACL (protected, one rule) and reads SIDs back, never names or SDDL aliases", () => {
+    expect(WINDOWS_ACL_SCRIPT).toContain("SetAccessRuleProtection($true, $false)");
+    expect(WINDOWS_ACL_SCRIPT).toContain("[System.IO.Directory]::SetAccessControl($path, $acl)");
+    expect(WINDOWS_ACL_SCRIPT).not.toMatch(/\b(Get|Set)-Acl\b/); // module cmdlets: not used any more
+    expect(WINDOWS_ACL_SCRIPT).toContain("GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])");
+    expect(WINDOWS_ACL_SCRIPT).toContain("$env:PLUGBRICKS_SECRETS_DIR");
+    expect(WINDOWS_ACL_SCRIPT).not.toContain(dir);
+  });
+
+  // Seen on the GitHub Windows runner: BUILTIN\Administrators kept an explicit entry.
   it.each([
-    ["icacls fails", [{ status: 5, stdout: "", stderr: "Access is denied." }], /icacls exited with 5: Access is denied/],
-    ["inherited entries remain", [ok(), ok(`${dir} BOX\\ana:(OI)(CI)(F)\r\n         BUILTIN\\Users:(I)(RX)\r\n`)], /inherited/],
-    ["another account has access", [ok(), ok(`${dir} BOX\\ana:(OI)(CI)(F)\r\n         Everyone:(R)\r\n`)], /other accounts.*Everyone/],
-  ])("reports, never hides, a failure: %s", (_, results, detail) => {
-    const r = restrictToCurrentUser(dir, { platform: "win32", user: "BOX\\ana", run: fake([], results) });
-    expect(r.ok).toBe(false);
-    expect(r.detail).toMatch(detail);
+    ["another account (BOX\\bob)", [full(ANA), full(BOB)], BOB],
+    ["an account whose name contains the user name (BOX\\banana)", [full(ANA), full(BANANA, { rights: "ReadAndExecute, Synchronize" })], BANANA],
+    ["BUILTIN\\Administrators, as left by icacls on the CI runner", [full(ANA), full(ADMINS)], ADMINS],
+    ["Everyone", [full(ANA), full("S-1-1-0", { rights: "Read" })], "S-1-1-0"],
+  ])("reports %s as another account", (_, rules, other) => {
+    expect(restrictToCurrentUser(dir, { platform: "win32", run: fake([], report(rules)) })).toEqual({
+      ok: false,
+      detail: `other accounts still have access: ${other}`,
+    });
+  });
+
+  it.each([
+    ["a DACL that still inherits", report([full(ANA)], { protected: false }), "inherited permissions are still present"],
+    ["an inherited entry", report([full(ANA), full("S-1-5-18", { inherited: true })]), "inherited permissions are still present"],
+    ["no full control for the user", report([full(ANA, { rights: "Read" })]), "the ACL gives the current user no full control"],
+    ["output that is not JSON", { status: 0, stdout: "Accès refusé\r\n", stderr: "" }, "unexpected ACL report; cannot check the ACL"],
+    ["JSON of the wrong shape", { status: 0, stdout: "{}", stderr: "" }, "unexpected ACL report; cannot check the ACL"],
+    ["PowerShell failing", { status: 1, stdout: "", stderr: "Set-Acl : Attempted to perform an unauthorized operation.\r\nAt line:1" }, "PowerShell exited with 1: Set-Acl : Attempted to perform an unauthorized operation."],
+  ])("refuses %s", (_, result, detail) => {
+    expect(restrictToCurrentUser(dir, { platform: "win32", run: fake([], result) })).toEqual({ ok: false, detail });
+  });
+
+  it("a deny entry for another account is not access", () => {
+    const r = restrictToCurrentUser(dir, { platform: "win32", run: fake([], report([full(BOB, { type: "Deny" }), full(ANA)])) });
+    expect(r.ok).toBe(true);
+  });
+
+  it("checkWindowsAcl compares SIDs case-insensitively and exactly", () => {
+    expect(checkWindowsAcl({ user: ANA.toLowerCase(), protected: true, rules: [full(ANA)] })).toEqual({ ok: true });
+    expect(checkWindowsAcl({ user: ANA, protected: true, rules: [full(`${ANA}0`)] }).ok).toBe(false);
   });
 
   it("the generator turns a failure into an explicit SECRETS_NOT_RESTRICTED warning and still creates the project", () => {

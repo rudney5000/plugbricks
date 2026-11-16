@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { userInfo } from "node:os";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { formatMessage, initPlatform, isValidPlatformName, PlugbricksError } from "plugbricks";
@@ -22,37 +21,85 @@ function warning(io, code, params = {}) {
 }
 
 /**
+ * PowerShell run on Windows. It replaces the whole DACL of the folder with a new, protected one
+ * holding a single entry (full control for the current user's SID), so explicit entries such as
+ * BUILTIN\Administrators are dropped too. It then reads the ACL back with GetAccessRules(...,
+ * SecurityIdentifier), which always gives real SIDs (icacls /save writes aliases such as LA for
+ * the built-in Administrator account), and prints it as JSON. The path comes from an environment
+ * variable, so no quoting is involved.
+ * The .NET methods are called directly: the Get-Acl and Set-Acl cmdlets live in a module that
+ * failed to load on windows-latest ("the module could not be loaded"), and the folder was left
+ * with its inherited ACL.
+ */
+export const WINDOWS_ACL_SCRIPT = [
+  "$ErrorActionPreference = 'Stop'",
+  "$path = $env:PLUGBRICKS_SECRETS_DIR",
+  "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User",
+  "$acl = New-Object System.Security.AccessControl.DirectorySecurity",
+  "$acl.SetAccessRuleProtection($true, $false)",
+  "$inherit = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'",
+  "$rule = New-Object System.Security.AccessControl.FileSystemAccessRule($user, [System.Security.AccessControl.FileSystemRights]::FullControl, $inherit, [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)",
+  "$acl.AddAccessRule($rule)",
+  "[System.IO.Directory]::SetAccessControl($path, $acl)",
+  "$check = [System.IO.Directory]::GetAccessControl($path)",
+  "$rules = $check.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])",
+  "[pscustomobject]@{ user = $user.Value; protected = $check.AreAccessRulesProtected; rules = @($rules | ForEach-Object { [pscustomobject]@{ sid = $_.IdentityReference.Value; type = [string]$_.AccessControlType; inherited = [bool]$_.IsInherited; rights = [string]$_.FileSystemRights } }) } | ConvertTo-Json -Compress -Depth 4",
+].join("; ");
+
+/**
+ * Checks the ACL reported by WINDOWS_ACL_SCRIPT: protected, nothing inherited, every allow
+ * entry is the current user's SID, and the user has full control. SIDs only, never names.
+ * @param {{ user: string, protected: boolean, rules: { sid: string, type: string, inherited: boolean, rights: string }[] }} acl
+ * @returns {{ ok: true } | { ok: false, detail: string }}
+ */
+export function checkWindowsAcl(acl) {
+  if (!acl || typeof acl.user !== "string" || !Array.isArray(acl.rules)) return { ok: false, detail: "unexpected ACL report; cannot check the ACL" };
+  if (!acl.protected || acl.rules.some((r) => r.inherited)) return { ok: false, detail: "inherited permissions are still present" };
+  const allows = acl.rules.filter((r) => r.type === "Allow");
+  const others = allows.filter((r) => r.sid.toUpperCase() !== acl.user.toUpperCase());
+  if (others.length) return { ok: false, detail: `other accounts still have access: ${others.map((r) => r.sid).join(", ")}` };
+  if (!allows.some((r) => r.rights.includes("FullControl"))) return { ok: false, detail: "the ACL gives the current user no full control" };
+  return { ok: true };
+}
+
+/**
  * Restricts a directory to the current user and checks that it worked.
  * - Linux, macOS: chmod 700, then stat to confirm the mode.
- * - Windows: there are no POSIX modes (chmod only toggles read-only), so an ACL is set with
- *   icacls: inherited entries removed, full control granted to the current user only. The ACL
- *   is then read back with icacls to confirm.
+ * - Windows: there are no POSIX modes (chmod only toggles read-only); WINDOWS_ACL_SCRIPT sets a
+ *   new DACL for the current user's SID only and reports it back; checkWindowsAcl verifies it.
+ *   Members of Administrators can still take ownership, as root can on Linux and macOS.
  * Never throws; returns { ok: false, detail } so the caller reports it instead of failing silently.
  * `platform` and `run` are injectable so tests can exercise the Windows branch on any OS.
  * @param {string} dir
- * @param {{ platform?: string, run?: (cmd: string, args: string[]) => { status: number | null, stdout: string, stderr: string }, user?: string }} [opts]
+ * @param {{ platform?: string, run?: (cmd: string, args: string[], env: NodeJS.ProcessEnv) => { status: number | null, stdout: string, stderr: string } }} [opts]
  * @returns {{ ok: true, method: string } | { ok: false, detail: string }}
  */
 export function restrictToCurrentUser(dir, opts = {}) {
   const platform = opts.platform ?? process.platform;
-  const run = opts.run ?? ((cmd, args) => spawnSync(cmd, args, { encoding: "utf8" }));
+  const run = opts.run ?? ((cmd, args, env) => spawnSync(cmd, args, { encoding: "utf8", env }));
   try {
     if (platform !== "win32") {
       chmodSync(dir, 0o700);
       const mode = statSync(dir).mode & 0o777;
       return mode === 0o700 ? { ok: true, method: "chmod 700" } : { ok: false, detail: `mode is ${mode.toString(8)} after chmod 700` };
     }
-    const user = opts.user ?? (process.env.USERDOMAIN ? `${process.env.USERDOMAIN}\\${userInfo().username}` : userInfo().username);
-    const set = run("icacls", [dir, "/inheritance:r", "/grant:r", `${user}:(OI)(CI)F`]);
-    if (set.status !== 0) return { ok: false, detail: `icacls exited with ${set.status}: ${(set.stderr || set.stdout || "").trim()}` };
-    const check = run("icacls", [dir]);
-    if (check.status !== 0) return { ok: false, detail: `icacls could not read the ACL back (exit ${check.status})` };
-    const entries = check.stdout.split(/\r?\n/).filter((l) => l.includes(":("));
-    if (entries.some((l) => l.includes("(I)"))) return { ok: false, detail: "inherited permissions are still present" };
-    const name = user.split("\\").pop().toLowerCase();
-    const others = entries.filter((l) => !l.toLowerCase().includes(name));
-    if (others.length) return { ok: false, detail: `other accounts still have access: ${others.map((l) => l.trim()).join("; ")}` };
-    return { ok: true, method: "icacls (current user only)" };
+    const r = run(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", WINDOWS_ACL_SCRIPT],
+      { ...process.env, PLUGBRICKS_SECRETS_DIR: dir },
+    );
+    if (r.status !== 0) {
+      const why = (r.stderr || r.stdout || "").trim().split(/\r?\n/)[0];
+      return { ok: false, detail: `PowerShell exited with ${r.status}${why ? `: ${why}` : ""}` };
+    }
+    let acl;
+    try {
+      acl = JSON.parse(r.stdout.trim().split(/\r?\n/).pop());
+    } catch {
+      return { ok: false, detail: "unexpected ACL report; cannot check the ACL" };
+    }
+    const checked = checkWindowsAcl(acl);
+    return checked.ok ? { ok: true, method: "DACL for the current user's SID only" } : checked;
   } catch (e) {
     return { ok: false, detail: e.message };
   }
