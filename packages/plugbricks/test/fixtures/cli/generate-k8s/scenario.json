@@ -1,0 +1,45 @@
+{
+  "description": "generate --runtime k8s writes the namespace and resources, and the Secret into .secrets/ only",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ],
+      "unchanged": true
+    }
+  ],
+  "exists": [
+    ".secrets/k8s-secret.yaml"
+  ],
+  "expectRaw": {
+    ".secrets/k8s-secret.yaml": "PB_POSTGRES__SUPERUSER_PASSWORD: secret0002"
+  }
+}

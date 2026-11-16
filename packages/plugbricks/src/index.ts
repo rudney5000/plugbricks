@@ -20,6 +20,7 @@ export {
   portableRelative,
   brickSource,
   volumesToPrune,
+  confirmPruned,
   type AddResult,
   type Lock,
   type Platform,
@@ -28,3 +29,17 @@ export {
   type VolumeRef,
 } from "./platform.js";
 export { main, type Io } from "./cli.js";
+export { buildPlan, loadInstalledBricks, planProject, type BrickManifest, type Plan } from "./plan.js";
+export { renderCompose, COMPOSE_FILE } from "./drivers/compose.js";
+export { renderK8s, renderK8sSecret } from "./drivers/k8s.js";
+export { down, generate, up, RUNTIMES, type Exec, type ExecResult, type Runtime, type RuntimeDeps } from "./runtime.js";
+export {
+  checkWindowsAcl,
+  ensureSecrets,
+  isRestrictedToCurrentUser,
+  restrictToCurrentUser,
+  WINDOWS_ACL_CHECK_SCRIPT,
+  WINDOWS_ACL_SCRIPT,
+  type RestrictOptions,
+} from "./secrets.js";
+export { parseTemplate, TEMPLATE_CONTEXTS } from "./templates.js";

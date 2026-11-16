@@ -1,0 +1,34 @@
+{
+  "description": "up generates, then starts the platform with docker compose; secrets come from the env file",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans"
+      ],
+      "stdout": "Platform demo is up (compose): 2 service(s)"
+    }
+  ]
+}

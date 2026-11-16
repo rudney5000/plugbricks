@@ -1,0 +1,16 @@
+{
+  "name": "patient",
+  "version": "0.1.0",
+  "description": "End-to-end test consumer that waits at most 3 seconds for a capability that never becomes ready.",
+  "services": [
+    {
+      "name": "app",
+      "image": "postgres:16.4-alpine",
+      "port": 5432,
+      "env": { "POSTGRES_HOST_AUTH_METHOD": "trust" }
+    }
+  ],
+  "requires": {
+    "slow": { "wait": "healthy", "timeoutSeconds": 3 }
+  }
+}

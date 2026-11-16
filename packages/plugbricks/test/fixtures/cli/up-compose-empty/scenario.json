@@ -1,0 +1,21 @@
+{
+  "description": "with no brick left, up stops the containers of removed bricks with down, since Compose refuses up without services",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo down --remove-orphans"
+      ]
+    }
+  ]
+}

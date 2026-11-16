@@ -1,0 +1,45 @@
+{
+  "description": "generate writes a deterministic compose.yaml, creates the secrets once, and a second run changes nothing",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "stdout": "Created 2 secret(s) in .secrets/: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD, PB_POSTGRES__SUPERUSER_PASSWORD"
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "unchanged": true
+    }
+  ],
+  "exists": [
+    ".secrets/secrets.env",
+    ".secrets/.gitignore",
+    ".generated/.gitignore"
+  ],
+  "expectRaw": {
+    ".secrets/secrets.env": "PB_POSTGRES__ORDERS__CONSUMER_PASSWORD=secret0001\nPB_POSTGRES__SUPERUSER_PASSWORD=secret0002\n",
+    ".secrets/.gitignore": "*\n"
+  }
+}

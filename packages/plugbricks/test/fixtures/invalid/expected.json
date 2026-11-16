@@ -108,5 +108,25 @@
     "code": "OUT_OF_RANGE",
     "path": "/services/0/healthcheck/timeoutSeconds",
     "why": "an attempt needs at least one second"
+  },
+  "template-typo.json": {
+    "code": "TEMPLATE_UNKNOWN",
+    "path": "/provides/database/inject/DATABASE_URL",
+    "why": "a typo in a template would reach the container as literal text"
+  },
+  "secret-in-command.json": {
+    "code": "TEMPLATE_UNKNOWN",
+    "path": "/provides/database/provision/command/2",
+    "why": "a secret on a command line is visible to every process (ps)"
+  },
+  "consumer-in-service-env.json": {
+    "code": "TEMPLATE_UNKNOWN",
+    "path": "/services/0/env/OWNER",
+    "why": "a service has no consumer; only secrets are allowed in its env"
+  },
+  "secret-name-invalid.json": {
+    "code": "TEMPLATE_UNKNOWN",
+    "path": "/services/0/env/POSTGRES_PASSWORD",
+    "why": "secret names are lowercase words joined by single underscores"
   }
 }

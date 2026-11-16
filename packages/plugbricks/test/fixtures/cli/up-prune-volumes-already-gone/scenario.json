@@ -1,0 +1,38 @@
+{
+  "description": "a pending volume that no longer exists counts as deleted",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--prune-volumes"
+      ],
+      "fake": [
+        {
+          "match": "volume rm",
+          "status": 1,
+          "stderr": "Error response from daemon: get demo_cache-redis-data: no such volume"
+        }
+      ]
+    }
+  ],
+  "expectPrune": []
+}

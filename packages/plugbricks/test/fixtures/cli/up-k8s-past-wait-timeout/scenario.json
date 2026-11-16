@@ -1,0 +1,46 @@
+{
+  "description": "a wait init container that timed out once and then succeeded is history: the rollout failure is reported",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_COMMAND_FAILED"
+      ],
+      "fake": [
+        {
+          "match": "rollout status deployment/orders-app",
+          "status": 1,
+          "stderr": "error: timed out waiting for the condition"
+        },
+        {
+          "match": "get pods",
+          "stdout": "{\"items\": [{\"status\": {\"initContainerStatuses\": [{\"name\": \"wait-database\", \"state\": {\"terminated\": {\"exitCode\": 0}}, \"lastState\": {\"terminated\": {\"exitCode\": 124}}}]}}]}"
+        }
+      ]
+    }
+  ]
+}

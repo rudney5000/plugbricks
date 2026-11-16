@@ -1,0 +1,51 @@
+{
+  "description": "generate refuses to write a secret into a .secrets/ that other accounts can read",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": ".secrets/note.txt",
+          "text": "x\n"
+        }
+      }
+    },
+    {
+      "mutate": {
+        "chmod": {
+          "path": ".secrets",
+          "mode": "755"
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "SECRETS_NOT_RESTRICTED"
+      ],
+      "stderr": "group and others must have no access"
+    }
+  ],
+  "needs": [
+    "posix-permissions"
+  ],
+  "absent": [
+    ".secrets/secrets.env",
+    ".generated/compose/compose.yaml"
+  ]
+}

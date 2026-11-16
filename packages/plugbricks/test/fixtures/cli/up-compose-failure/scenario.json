@@ -1,0 +1,39 @@
+{
+  "description": "any other failure of docker compose is reported with its last lines",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_COMMAND_FAILED"
+      ],
+      "fake": [
+        {
+          "match": "up --detach",
+          "status": 1,
+          "stderr": "Error response from daemon: pull access denied"
+        },
+        {
+          "match": "ps --all",
+          "stdout": "[]"
+        }
+      ],
+      "stderr": "pull access denied"
+    }
+  ]
+}

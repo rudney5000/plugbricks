@@ -12,8 +12,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import path, { basename, dirname, join, resolve, sep } from "node:path";
+import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
+import { buildPlan, type BrickManifest } from "./plan.js";
 import type { IssueCode, IssueParams } from "./messages.js";
 import {
   LOCK_SCHEMA_ID,
@@ -101,13 +103,6 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(sort(value), null, 2) + "\n";
 }
 
-/** Writes through a temp file and a rename, so a crash never leaves a half-written file. Skips identical content. */
-function writeFileAtomic(file: string, content: string): void {
-  if (existsSync(file) && readFileSync(file, "utf8") === content) return;
-  const tmp = `${file}.tmp-${process.pid}`;
-  writeFileSync(tmp, content);
-  renameSync(tmp, file);
-}
 
 function readJson(file: string, label: string): unknown {
   let text: string;
@@ -162,7 +157,7 @@ export function brickSource(root: string, brickDir: string, brick: string, p: pa
 // ---------- brick contents ----------
 
 /** Every regular file of a brick, as sorted posix paths. Refuses symbolic links. */
-function listBrickFiles(dir: string, brick: string): string[] {
+export function listBrickFiles(dir: string, brick: string): string[] {
   const out: string[] = [];
   const walk = (rel: string) => {
     for (const entry of readdirSync(join(dir, rel)).sort()) {
@@ -344,6 +339,18 @@ export function volumesToPrune(lock: Lock): VolumeRef[] {
   return [...lock.pendingDeletion].sort(byKey);
 }
 
+/**
+ * Called by a driver after it deleted volumes with --prune-volumes: removes exactly those
+ * entries from pendingDeletion. An entry that is not pending (any more) is ignored.
+ */
+export function confirmPruned(root: string, deleted: VolumeRef[]): void {
+  if (!deleted.length) return;
+  const project = readProject(root);
+  const gone = new Set(deleted.map(volumeKey));
+  project.lock.pendingDeletion = project.lock.pendingDeletion.filter((v) => !gone.has(volumeKey(v)));
+  save(project);
+}
+
 function save(project: Project): void {
   project.lock.retainedVolumes.sort(byKey);
   project.lock.pendingDeletion.sort(byKey);
@@ -353,6 +360,44 @@ function save(project: Project): void {
 }
 
 // ---------- add ----------
+
+/**
+ * Builds the plan the platform would have with `name` added and keeps only its naming problems.
+ * Installed copies that cannot be read are left out: "status" and "generate" report them.
+ */
+function checkRuntimeNames(project: Project, name: string, manifest: BrickManifest, entry: LockedBrick): void {
+  const manifests = new Map<string, BrickManifest>();
+  for (const b of Object.keys(project.lock.bricks)) {
+    try {
+      const raw = JSON.parse(readFileSync(join(project.root, BRICKS_DIR, b, "plugin.json"), "utf8"));
+      if (validateManifest(raw).ok) manifests.set(b, raw as BrickManifest);
+    } catch {
+      // reported by status and generate
+    }
+  }
+  manifests.set(name, manifest);
+  // Leave out consumers whose provider could not be read: their requirements cannot be planned.
+  // Repeated until stable: leaving out a provider can leave out one of its own consumers.
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [b, m] of [...manifests]) {
+      const requires = (b === name ? entry : project.lock.bricks[b]).requires;
+      if (Object.keys(m.requires ?? {}).some((cap) => !manifests.has(requires[cap]?.provider))) {
+        manifests.delete(b);
+        changed = true;
+      }
+    }
+  }
+  if (!manifests.has(name)) return;
+  const lock: Lock = { ...project.lock, bricks: { ...project.lock.bricks, [name]: entry } };
+  try {
+    buildPlan(project.platform.name, lock, manifests, () => []);
+  } catch (e) {
+    if (!(e instanceof PlugbricksError)) throw e;
+    const naming = e.issues.filter((i) => i.code === "RUNTIME_NAME_CONFLICT" || i.code === "RUNTIME_NAME_INVALID");
+    if (naming.length) throw new PlugbricksError(naming);
+  }
+}
 
 export interface AddResult {
   name: string;
@@ -406,6 +451,29 @@ export function addBrick(root: string, brickPath: string): AddResult {
     .map((cap) => issue("REQUIRED_CAPABILITY_MISSING", `/requires/${cap}`, { brick: m.name, capability: cap }));
   if (missing.length) throw new PlugbricksError(missing);
 
+  const entry: LockedBrick = {
+    version: m.version,
+    source,
+    integrity,
+    provides: Object.keys(m.provides ?? {}).sort(),
+    requires: Object.fromEntries(
+      Object.entries(m.requires ?? {}).map(([cap, r]) => [
+        cap,
+        {
+          provider: lock.capabilities[cap],
+          wait: r.wait ?? MANIFEST_DEFAULTS.wait,
+          timeoutSeconds: r.timeoutSeconds ?? MANIFEST_DEFAULTS.timeoutSeconds,
+        },
+      ]),
+    ),
+    volumes: m.services.flatMap((s) =>
+      (s.volumes ?? []).map((vol) => ({ service: s.name, name: vol.name, retention: vol.retention ?? MANIFEST_DEFAULTS.retention })),
+    ),
+  };
+  // Runtime names (services, tasks, volumes, secrets) must stay unique with the installed bricks,
+  // or "generate" could never succeed. Checked on the plan the platform would have after this add.
+  checkRuntimeNames(project, m.name, raw as BrickManifest, entry);
+
   // Copy through a temp dir + rename so .platform/bricks/<name> is never half-written.
   const dest = join(project.root, BRICKS_DIR, m.name);
   const tmp = join(project.root, BRICKS_DIR, `.${m.name}.tmp-${process.pid}`);
@@ -428,25 +496,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   rmSync(dest, { recursive: true, force: true });
   renameSync(tmp, dest);
 
-  lock.bricks[m.name] = {
-    version: m.version,
-    source,
-    integrity,
-    provides: Object.keys(m.provides ?? {}).sort(),
-    requires: Object.fromEntries(
-      Object.entries(m.requires ?? {}).map(([cap, r]) => [
-        cap,
-        {
-          provider: lock.capabilities[cap],
-          wait: r.wait ?? MANIFEST_DEFAULTS.wait,
-          timeoutSeconds: r.timeoutSeconds ?? MANIFEST_DEFAULTS.timeoutSeconds,
-        },
-      ]),
-    ),
-    volumes: m.services.flatMap((s) =>
-      (s.volumes ?? []).map((vol) => ({ service: s.name, name: vol.name, retention: vol.retention ?? MANIFEST_DEFAULTS.retention })),
-    ),
-  };
+  lock.bricks[m.name] = entry;
   for (const cap of Object.keys(m.provides ?? {})) lock.capabilities[cap] = m.name;
   const reattachedVolumes = lock.retainedVolumes.filter((r) => r.brick === m.name);
   lock.retainedVolumes = lock.retainedVolumes.filter((r) => r.brick !== m.name);

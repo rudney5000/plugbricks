@@ -24,9 +24,19 @@ export const MESSAGES = {
   IMAGE_FLOATING_TAG: 'image "{image}" uses floating tag "{tag}"; pin an exact version such as 1.2.3 or a sha256 digest',
   READY_NOT_TARGETING_PROVIDER:
     'ready command of capability "{capability}" must target ${provider.host}, otherwise it probes the waiting container itself',
+  TEMPLATE_UNKNOWN: '"{template}" is not a template this field accepts; allowed here: {allowed}',
 
-  // Runtime (drivers and `plugbricks status`, milestone 3).
+  // Runtime (generate, up, down).
   WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
+  RUNTIME_NAME_CONFLICT:
+    'the {first} and the {second} would both be named "{name}" in the runtime; rename one of the bricks, services, volumes or capabilities',
+  RUNTIME_NAME_INVALID: '"{name}" ({what}) cannot be used as a runtime name: {detail}',
+  PROVISION_SCRIPTS_TOO_LARGE:
+    'the provision scripts of "{brick}" for "{capability}" take {size} bytes; a Kubernetes ConfigMap holds at most {max}',
+  SECRETS_FILE_INVALID: "{file} line {line} is not KEY=value with a letters-and-digits value; fix that line (never delete a secret still in use)",
+  RUNTIME_TOOL_MISSING: '"{tool}" was not found; {hint}',
+  RUNTIME_COMMAND_FAILED: '"{command}" exited with {status}{detail}',
+  VOLUME_PRUNE_FAILED: "could not delete volume {volume} ({detail}); it stays in pendingDeletion",
 
   // CLI usage (exit code 2).
   USAGE_UNKNOWN_COMMAND: 'unknown command "{command}"; run "plugbricks --help"',

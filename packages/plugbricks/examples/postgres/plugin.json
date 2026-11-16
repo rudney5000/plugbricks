@@ -8,20 +8,47 @@
       "name": "db",
       "image": "postgres:16.4-alpine",
       "port": 5432,
-      "volumes": [{ "name": "data", "mountPath": "/var/lib/postgresql/data", "retention": "retain" }],
-      "healthcheck": { "exec": ["pg_isready", "-U", "postgres"] },
-      "env": { "POSTGRES_PASSWORD": "${secrets.superuser_password}" }
+      "volumes": [
+        {
+          "name": "data",
+          "mountPath": "/var/lib/postgresql/data",
+          "retention": "retain"
+        }
+      ],
+      "healthcheck": {
+        "exec": [
+          "pg_isready",
+          "-U",
+          "postgres"
+        ]
+      },
+      "env": {
+        "PGDATA": "/var/lib/postgresql/data/pgdata",
+        "POSTGRES_PASSWORD": "${secrets.superuser_password}"
+      }
     }
   ],
   "provides": {
     "database": {
       "service": "db",
       "ready": {
-        "exec": ["pg_isready", "-q", "-h", "${provider.host}", "-p", "${provider.port}", "-t", "2"]
+        "exec": [
+          "pg_isready",
+          "-q",
+          "-h",
+          "${provider.host}",
+          "-p",
+          "${provider.port}",
+          "-t",
+          "2"
+        ]
       },
       "provision": {
         "image": "postgres:16.4-alpine",
-        "command": ["/bin/sh", "/provision/create-database.sh"],
+        "command": [
+          "/bin/sh",
+          "/provision/create-database.sh"
+        ],
         "scripts": "provision",
         "env": {
           "PGHOST": "${provider.host}",

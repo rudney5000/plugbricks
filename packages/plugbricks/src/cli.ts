@@ -3,11 +3,14 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
 import { addBrick, initPlatform, PlugbricksError, platformStatus, removeBrick, type VolumeRef } from "./platform.js";
+import { down, generate, RUNTIMES, up, type Runtime, type RuntimeDeps } from "./runtime.js";
 
 export interface Io {
   cwd: string;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
+  /** How generate/up/down run tools and create secrets; tests inject fakes. */
+  runtime?: Omit<RuntimeDeps, "log">;
 }
 
 const HELP = `Usage: plugbricks <command> [options]
@@ -17,8 +20,13 @@ Commands:
   add <path>             Install the brick at <path> (a directory with a plugin.json)
   remove <name>          Uninstall a brick
   status [--json]        Show installed bricks, capabilities and retained volumes
+  generate               Write the runtime files to .generated/<runtime>/ and create missing secrets
+  up [--prune-volumes]   Generate, then start or update the platform
+  down                   Stop the platform; volumes and secrets are kept
 
 Options:
+  --runtime <name>       compose (Docker Compose, default) or k8s (current kubectl context)
+  --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
   -v, --version          Show the version
@@ -55,6 +63,8 @@ export function main(argv: string[], io: Io): number {
           dir: { type: "string" },
           name: { type: "string" },
           json: { type: "boolean" },
+          runtime: { type: "string" },
+          "prune-volumes": { type: "boolean" },
           help: { type: "boolean", short: "h" },
           version: { type: "boolean", short: "v" },
         },
@@ -77,11 +87,21 @@ export function main(argv: string[], io: Io): number {
       if (args.length < n) throw usage("USAGE_MISSING_ARGUMENT", "", { command, argument });
       if (args.length > n) throw usage("USAGE_UNEXPECTED_ARGUMENT", "", { command, argument: args[n] });
     };
-    const optionFor = (opt: string, allowed: string) => {
-      if (command !== allowed) throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies to "plugbricks ${allowed}"` });
+    const optionFor = (opt: string, ...allowed: string[]) => {
+      if (!allowed.includes(command)) {
+        const list = allowed.map((a) => `"plugbricks ${a}"`).join(", ");
+        throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies to ${list}` });
+      }
     };
     if (values.name !== undefined) optionFor("name", "init");
     if (values.json !== undefined) optionFor("json", "status");
+    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down");
+    if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
+    const runtime = (values.runtime ?? "compose") as Runtime;
+    if (!RUNTIMES.includes(runtime)) {
+      throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
+    }
+    const deps: RuntimeDeps = { ...io.runtime, log: (l) => io.stdout(l) };
 
     switch (command) {
       case "init": {
@@ -129,6 +149,32 @@ export function main(argv: string[], io: Io): number {
         }
         printIssues(io, s.problems);
         return s.problems.length ? 1 : 0;
+      }
+      case "generate": {
+        only(0, "");
+        const g = generate(root, runtime, deps);
+        io.stdout(`Generated ${runtime} files for ${g.plan.platform}:`);
+        for (const f of g.files) io.stdout(`  ${f}`);
+        if (g.secretsCreated.length) io.stdout(`Created ${g.secretsCreated.length} secret(s) in .secrets/: ${g.secretsCreated.join(", ")}`);
+        return 0;
+      }
+      case "up": {
+        only(0, "");
+        const r = up(root, runtime, { pruneVolumes: values["prune-volumes"] }, deps);
+        if (r.generated.secretsCreated.length) io.stdout(`Created ${r.generated.secretsCreated.length} secret(s) in .secrets/`);
+        io.stdout(`Platform ${r.generated.plan.platform} is up (${runtime}): ${r.generated.plan.services.length} service(s)`);
+        for (const v of r.pruned) io.stdout(`  deleted volume ${vol(v)}`);
+        if (r.pending.length && !values["prune-volumes"]) {
+          io.stdout(`Pending deletion, kept until "plugbricks up --prune-volumes": ${r.pending.map(vol).join(", ")}`);
+        }
+        printIssues(io, r.problems);
+        return r.problems.length ? 1 : 0;
+      }
+      case "down": {
+        only(0, "");
+        down(root, runtime, deps);
+        io.stdout(`Platform stopped (${runtime}); volumes and secrets are kept`);
+        return 0;
       }
       default:
         throw usage("USAGE_UNKNOWN_COMMAND", "", { command });

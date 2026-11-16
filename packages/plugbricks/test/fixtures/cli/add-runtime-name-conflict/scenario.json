@@ -1,0 +1,31 @@
+{
+  "description": "a service named like the provision task of its own brick is refused at add, before anything is written",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/shop"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_NAME_CONFLICT",
+        "RUNTIME_NAME_CONFLICT"
+      ],
+      "unchanged": true,
+      "stderr": "\"shop-provision-database\""
+    }
+  ]
+}
