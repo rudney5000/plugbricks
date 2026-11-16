@@ -27,7 +27,7 @@
       "stdout": "Pending deletion, kept until \"plugbricks up --prune-volumes\": cache/redis/data",
       "commands": [
         "docker compose version",
-        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans"
+        "docker compose --project-name demo down --remove-orphans"
       ]
     },
     {
@@ -38,7 +38,7 @@
       "stdout": "deleted volume cache/redis/data",
       "commands": [
         "docker compose version",
-        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans",
+        "docker compose --project-name demo down --remove-orphans",
         "docker volume rm demo_cache-redis-data"
       ]
     }

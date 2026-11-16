@@ -1,0 +1,34 @@
+{
+  "name": "broker",
+  "version": "1.0.0",
+  "services": [
+    {
+      "name": "svc",
+      "image": "ghcr.io/example/broker:1.0.0",
+      "port": 80
+    }
+  ],
+  "requires": {
+    "database": {}
+  },
+  "provides": {
+    "queue": {
+      "service": "svc",
+      "ready": {
+        "exec": [
+          "probe",
+          "${provider.host}"
+        ]
+      },
+      "provision": {
+        "image": "ghcr.io/example/tool:1.0.0",
+        "command": [
+          "true"
+        ]
+      },
+      "inject": {
+        "URL": "${provider.host}"
+      }
+    }
+  }
+}

@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
 
 /** Where secrets live in a project. Never committed: the folder ignores itself (see ensureSecretsDir). */
@@ -165,7 +166,7 @@ export function ensureSecretsDir(root: string, opts: RestrictOptions = {}): { ok
     r = isRestrictedToCurrentUser(dir, opts);
   }
   if (!r.ok) return { ok: false, issue: issue("SECRETS_NOT_RESTRICTED", "", { dir, detail: r.detail }) };
-  writeIfChanged(join(dir, ".gitignore"), "# Written by plugbricks: nothing in this folder is ever committed.\n*\n");
+  writeFileAtomic(join(dir, ".gitignore"), "# Written by plugbricks: nothing in this folder is ever committed.\n*\n");
   return { ok: true, dir };
 }
 
@@ -203,17 +204,9 @@ export function randomSecret(bytes: (n: number) => Buffer = randomBytes): string
   return out;
 }
 
-function writeIfChanged(file: string, content: string, mode?: number): void {
-  if (existsSync(file) && readFileSync(file, "utf8") === content) return;
-  const tmp = `${file}.tmp-${process.pid}`;
-  writeFileSync(tmp, content, mode === undefined ? undefined : { mode });
-  if (mode !== undefined) chmodSync(tmp, mode);
-  renameSync(tmp, file);
-}
-
 /** Writes a file readable by its owner only (0600 on Linux and macOS; on Windows the folder ACL applies). */
 export function writePrivateFile(file: string, content: string): void {
-  writeIfChanged(file, content, 0o600);
+  writeFileAtomic(file, content, 0o600);
 }
 
 export interface SecretsResult {

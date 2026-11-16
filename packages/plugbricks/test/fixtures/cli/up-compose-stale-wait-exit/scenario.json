@@ -1,0 +1,49 @@
+{
+  "description": "a wait task left at exit 124 by an earlier run does not hide the real cause of a failure",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_COMMAND_FAILED"
+      ],
+      "stderr": "pull access denied",
+      "fake": [
+        {
+          "match": "up --detach",
+          "status": 1,
+          "stderr": "Error response from daemon: pull access denied for ghcr.io/example/orders-app"
+        },
+        {
+          "match": "ps --all",
+          "stdout": "{\"Service\":\"orders-wait-database\",\"ExitCode\":124}\n"
+        }
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans"
+      ]
+    }
+  ]
+}

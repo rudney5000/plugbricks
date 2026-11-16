@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path, { basename, dirname, join, resolve, sep } from "node:path";
+import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
 import { buildPlan, type BrickManifest } from "./plan.js";
@@ -102,13 +103,6 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(sort(value), null, 2) + "\n";
 }
 
-/** Writes through a temp file and a rename, so a crash never leaves a half-written file. Skips identical content. */
-function writeFileAtomic(file: string, content: string): void {
-  if (existsSync(file) && readFileSync(file, "utf8") === content) return;
-  const tmp = `${file}.tmp-${process.pid}`;
-  writeFileSync(tmp, content);
-  renameSync(tmp, file);
-}
 
 function readJson(file: string, label: string): unknown {
   let text: string;
@@ -383,9 +377,15 @@ function checkRuntimeNames(project: Project, name: string, manifest: BrickManife
   }
   manifests.set(name, manifest);
   // Leave out consumers whose provider could not be read: their requirements cannot be planned.
-  for (const [b, m] of [...manifests]) {
-    if (Object.keys(m.requires ?? {}).some((cap) => !manifests.has((b === name ? entry : project.lock.bricks[b]).requires[cap]?.provider))) {
-      manifests.delete(b);
+  // Repeated until stable: leaving out a provider can leave out one of its own consumers.
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [b, m] of [...manifests]) {
+      const requires = (b === name ? entry : project.lock.bricks[b]).requires;
+      if (Object.keys(m.requires ?? {}).some((cap) => !manifests.has(requires[cap]?.provider))) {
+        manifests.delete(b);
+        changed = true;
+      }
     }
   }
   if (!manifests.has(name)) return;

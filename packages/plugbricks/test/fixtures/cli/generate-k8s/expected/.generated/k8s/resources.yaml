@@ -165,7 +165,7 @@ spec:
         - name: scripts-database
           configMap:
             name: postgres-database-scripts
-            defaultMode: 292
+            defaultMode: 365
             items:
               - key: create-database.sh
                 path: create-database.sh

@@ -4,7 +4,7 @@ import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
 import { BRICKS_DIR, brickIntegrity, listBrickFiles, PlugbricksError, type Lock, type Project, type VolumeRef } from "./platform.js";
 import { MANIFEST_DEFAULTS } from "./schemas.js";
-import { parseTemplate, type Segment, type TemplateContext } from "./templates.js";
+import { parseTemplate, secretsIn, type Segment, type TemplateContext } from "./templates.js";
 
 /**
  * The plan: everything a driver needs, independent of the runtime. Built from platform.lock and
@@ -244,15 +244,7 @@ export function buildPlan(
     return env;
   };
   /** Secret names a brick's own services use: those stay the brick's, even inside provision and inject. */
-  const brickSecrets = (m: BrickManifest) =>
-    new Set(
-      m.services.flatMap((s) =>
-        Object.values(s.env ?? {}).flatMap((v) => {
-          const r = parseTemplate(v, "serviceEnv");
-          return "unknown" in r ? [] : r.segments.flatMap((x) => ("secret" in x ? [x.secret] : []));
-        }),
-      ),
-    );
+  const brickSecrets = (m: BrickManifest) => new Set(m.services.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => secretsIn(v, "serviceEnv"))));
 
   const services: PlanService[] = [];
   const requirements: PlanRequirement[] = [];
@@ -262,6 +254,8 @@ export function buildPlan(
   for (const [brick, m] of [...manifests].sort(([a], [b]) => a.localeCompare(b))) {
     const own = (name: string) => useSecret(brickSecretEnv(brick, name), `${brick}/${name}`);
     const requires = Object.keys(m.requires ?? {}).sort();
+    // Variables injected by every required capability; the brick's own env wins on a clash.
+    const injected: Record<string, Value> = {};
     for (const cap of requires) {
       const locked = lock.bricks[brick].requires[cap];
       const provider = locked.provider;
@@ -320,20 +314,6 @@ export function buildPlan(
       names.add("service", provision.name, `${brick}/requires/${cap}`, `provision task of ${brick} for ${cap}`);
       names.add(`container/${brick}`, initContainerName("provision", cap), `provision/${cap}`, `init container of ${brick}`);
       requirements.push({ consumer: brick, capability: cap, provider, providerService: vars["provider.host"], wait, provision });
-    }
-
-    // Variables injected by every required capability, then the brick's own (which win on a clash).
-    const injected: Record<string, Value> = {};
-    for (const req of requirements.filter((r) => r.consumer === brick)) {
-      const pm = manifests.get(req.provider)!;
-      const p = pm.provides![req.capability];
-      const port = String(pm.services.find((s) => s.name === p.service)!.port);
-      const providerOwn = brickSecrets(pm);
-      const vars = { "provider.host": req.providerService, "provider.port": port, "consumer.name": brick };
-      const secret = (name: string) =>
-        providerOwn.has(name)
-          ? useSecret(brickSecretEnv(req.provider, name), `${req.provider}/${name}`)
-          : useSecret(consumerSecretEnv(req.provider, brick, name), `${req.provider}/${brick}/${name}`);
       for (const [k, v] of Object.entries(p.inject)) injected[k] = resolveValue(v, "inject", vars, secret);
     }
 

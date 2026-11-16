@@ -81,7 +81,8 @@ function initContainers(s: PlanService, plan: Plan): { containers: Yaml[]; volum
       const sc = plan.scripts.find((x) => x.name === r.provision.scripts)!;
       volumes.push({
         name: scriptsVolume(cap),
-        configMap: { name: sc.name, defaultMode: 0o444, items: configMapKeys(sc).map(({ key, path }) => ({ key, path })) },
+        // 0555, like the read-only bind mount of Compose keeps an executable script runnable.
+        configMap: { name: sc.name, defaultMode: 0o555, items: configMapKeys(sc).map(({ key, path }) => ({ key, path })) },
       });
     }
   }

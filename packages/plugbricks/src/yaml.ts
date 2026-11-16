@@ -7,7 +7,8 @@
 
 type Yaml = string | number | boolean | null | undefined | Yaml[] | { [k: string]: Yaml };
 
-const PLAIN = /^[A-Za-z_/.][A-Za-z0-9_./:@-]*$/;
+// No leading "." either: ".5", ".inf" and ".nan" are numbers in YAML.
+const PLAIN = /^[A-Za-z_/][A-Za-z0-9_./:@-]*$/;
 const RESERVED = /^(true|false|yes|no|on|off|y|n|null|~)$/i;
 
 function scalar(v: string | number | boolean | null): string {

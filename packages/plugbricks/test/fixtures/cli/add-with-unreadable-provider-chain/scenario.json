@@ -1,0 +1,53 @@
+{
+  "description": "add still works when an installed provider copy is broken, even for a consumer of a consumer listed before it; generate reports the broken copy",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/broker"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/api"
+      ]
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": ".platform/bricks/postgres/plugin.json",
+          "text": "{ broken\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "add",
+        "bricks/extra"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_MODIFIED"
+      ]
+    }
+  ]
+}

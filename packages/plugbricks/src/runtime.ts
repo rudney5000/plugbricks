@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readdirSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { WAIT_TIMEOUT_EXIT } from "./drivers/common.js";
 import { COMPOSE_FILE, composeVolumeName, renderCompose } from "./drivers/compose.js";
 import {
@@ -14,6 +14,7 @@ import {
   renderK8sSecret,
   SERVICE_LABEL,
 } from "./drivers/k8s.js";
+import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
 import { initContainerName, planProject, volumeName, type Plan } from "./plan.js";
 import { confirmPruned, PlugbricksError, readProject, volumesToPrune, type VolumeRef } from "./platform.js";
@@ -67,14 +68,6 @@ export interface GenerateResult {
   secretsCreated: string[];
 }
 
-function writeIfChanged(file: string, content: string): void {
-  if (existsSync(file) && readFileSync(file, "utf8") === content) return;
-  mkdirSync(dirname(file), { recursive: true });
-  const tmp = `${file}.tmp-${process.pid}`;
-  writeFileSync(tmp, content);
-  renameSync(tmp, file);
-}
-
 /** Files under dir, as posix paths relative to it. */
 function listFiles(dir: string, rel = ""): string[] {
   if (!existsSync(join(dir, rel))) return [];
@@ -102,9 +95,9 @@ export function generate(root: string, runtime: Runtime, deps: RuntimeDeps = {})
     out.push(K8S_SECRET_FILE);
   }
 
-  writeIfChanged(join(project.root, GENERATED_DIR, ".gitignore"), "# Written by plugbricks: rebuilt on demand, never committed.\n*\n");
+  writeFileAtomic(join(project.root, GENERATED_DIR, ".gitignore"), "# Written by plugbricks: rebuilt on demand, never committed.\n*\n");
   const dir = `${GENERATED_DIR}/${runtime}`;
-  for (const [path, content] of Object.entries(files)) writeIfChanged(join(project.root, path), content);
+  for (const [path, content] of Object.entries(files)) writeFileAtomic(join(project.root, path), content);
   for (const stale of listFiles(join(project.root, dir))) {
     if (!files[`${dir}/${stale}`]) rmSync(join(project.root, dir, stale), { force: true });
   }
@@ -139,8 +132,14 @@ function requireTool(deps: RuntimeDeps, root: string, cmd: string, args: string[
 
 const composeBase = (plan: Plan) => ["compose", "--project-name", plan.platform, "--file", COMPOSE_FILE, "--env-file", COMPOSE_ENV_FILE];
 
-/** Wait tasks that exited with the timeout code, from `docker compose ps --all --format json`. */
-function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan): Issue[] {
+/**
+ * Wait tasks that made this `up` fail by giving up: named in Compose's error output AND exited
+ * with the timeout code in `docker compose ps --all`. Both are required, so a wait task left
+ * at 124 by an earlier run never hides the real cause of this failure.
+ */
+function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, failure: string): Issue[] {
+  const named = plan.requirements.filter((req) => req.wait && failure.includes(`"${req.wait.name}"`));
+  if (!named.length) return [];
   const r = run(deps, root, "docker", [...composeBase(plan), "ps", "--all", "--format", "json"]);
   if (r.status !== 0) return [];
   const text = r.stdout.trim();
@@ -151,14 +150,14 @@ function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan): Issue
   } catch {
     return [];
   }
-  return plan.requirements.flatMap((req) =>
-    req.wait && rows.some((row) => row.Service === req.wait!.name && row.ExitCode === WAIT_TIMEOUT_EXIT)
+  return named.flatMap((req) =>
+    rows.some((row) => row.Service === req.wait!.name && row.ExitCode === WAIT_TIMEOUT_EXIT)
       ? [
           issue("WAIT_TIMEOUT", "", {
             consumer: req.consumer,
             capability: req.capability,
             provider: req.provider,
-            timeoutSeconds: String(req.wait.timeoutSeconds),
+            timeoutSeconds: String(req.wait!.timeoutSeconds),
           }),
         ]
       : [],
@@ -184,9 +183,12 @@ function k8sWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, service: s
     if (req.consumer !== s.brick || !req.wait) return [];
     const timedOut = pods.some((p) =>
       (p.status?.initContainerStatuses ?? []).some(
+        // The current state, or the last one while the container waits to be restarted
+        // (CrashLoopBackOff). A 124 followed by a success is history, not the cause.
         (c) =>
           c.name === initContainerName("wait", req.capability) &&
-          (c.state?.terminated?.exitCode === WAIT_TIMEOUT_EXIT || c.lastState?.terminated?.exitCode === WAIT_TIMEOUT_EXIT),
+          (c.state?.terminated?.exitCode === WAIT_TIMEOUT_EXIT ||
+            (c.state?.waiting !== undefined && c.lastState?.terminated?.exitCode === WAIT_TIMEOUT_EXIT)),
       ),
     );
     return timedOut
@@ -239,11 +241,14 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
 
   if (runtime === "compose") {
     requireTool(deps, dir, "docker", ["compose", "version"], "docker compose", "install Docker with the Compose v2 plugin");
-    // --remove-orphans removes the containers of removed bricks; their volumes stay.
-    const args = [...composeBase(plan), "up", "--detach", "--remove-orphans"];
+    // --remove-orphans removes the containers of removed bricks; their volumes stay. Compose
+    // refuses "up" on a project without services: with no brick left, "down" does the same job.
+    const args = plan.services.length
+      ? [...composeBase(plan), "up", "--detach", "--remove-orphans"]
+      : ["compose", "--project-name", plan.platform, "down", "--remove-orphans"];
     const r = run(deps, dir, "docker", args);
     if (r.status !== 0) {
-      const timeouts = composeWaitTimeouts(deps, dir, plan);
+      const timeouts = composeWaitTimeouts(deps, dir, plan, r.stderr + r.stdout);
       throw new PlugbricksError(timeouts.length ? timeouts : [failed("docker", args, r)]);
     }
   } else {

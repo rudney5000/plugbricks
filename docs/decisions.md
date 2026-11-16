@@ -227,6 +227,12 @@ end yet.
     `provision-<cap>` in each consumer pod; provision scripts come from a ConfigMap.
   - The wait script needs `/bin/sh`, `date` and `sleep` in the `ready` image (default: the
     provider's image).
+  - Kubernetes runs the provision step in every pod of the consumer (one per service), so a
+    consumer with two services provisions twice, possibly at the same moment. The task must be
+    idempotent anyway; if two runs race on a create, one fails, its init container is restarted
+    and the second attempt finds everything in place. Compose runs one shared task per consumer.
+  - Provision scripts are mounted read-only and executable (`0555` on Kubernetes, the file's own
+    mode through the Compose bind mount).
   - Nothing is published on the host until the router exists (milestone 4).
   - Runtime names must be unique and valid DNS labels (≤ 63 characters): services, tasks,
     volumes (including volumes kept after a removal, so a new brick never attaches another

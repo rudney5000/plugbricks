@@ -101,6 +101,9 @@ describe("yaml", () => {
       "list:\n  - name: x\n    args:\n      - a\n      - b\n  - s\nempty: []\nnone: {}\n",
     );
   });
+  it("quotes a leading dot: .5, .inf and .nan are numbers in YAML", () => {
+    expect(toYaml({ a: ".5", b: ".inf", c: "../x" })).toBe('a: ".5"\nb: ".inf"\nc: "../x"\n');
+  });
   it("separates documents", () => {
     expect(toYamlDocuments([{ a: 1 }, { b: 2 }])).toBe("a: 1\n---\nb: 2\n");
   });
