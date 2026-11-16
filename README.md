@@ -2,7 +2,7 @@
 
 Add plugins and infrastructure bricks (PostgreSQL, a message queue, …) to a federated GraphQL project, on Docker Compose or Kubernetes, from a single `platform.json`.
 
-Status: **milestone 1 done** — the plugin manifest contract (JSON Schema `https://plugbricks.dev/schemas/plugin-manifest/v1.json`), its validator with stable error codes, and two example manifests (`postgres`, `orders`).
+Status: **milestone 1 done** — the plugin manifest contract (JSON Schema `https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json`), its validator with stable error codes, and two example manifests (`postgres`, `orders`).
 
 ## Layout
 

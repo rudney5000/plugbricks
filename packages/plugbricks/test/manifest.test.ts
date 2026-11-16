@@ -80,9 +80,11 @@ describe("invalid manifests are refused with a stable code and the faulty field"
 });
 
 describe("schema identity", () => {
-  it("$id is the versioned contract URL", () => {
+  it("$id is the raw GitHub URL of the schema file in this repo", () => {
     const schema = load("schemas/plugin-manifest.schema.json");
     expect(schema.$id).toBe(MANIFEST_SCHEMA_ID);
-    expect(MANIFEST_SCHEMA_ID).toMatch(/^https:\/\/.+\/v\d+\.json$/);
+    expect(MANIFEST_SCHEMA_ID).toBe(
+      "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
+    );
   });
 });

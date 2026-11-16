@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://plugbricks.dev/schemas/plugin-manifest/v1.json",
+  "$id": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
   "title": "plugbricks plugin manifest",
   "description": "Describes what a plugin is (image, port, dependencies), never how to run it. No Docker Compose or Kubernetes YAML belongs here.",
   "type": "object",

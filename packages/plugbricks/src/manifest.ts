@@ -6,8 +6,8 @@ import { formatMessage, type IssueCode, type IssueParams } from "./messages.js";
 const schemaUrl = new URL("../schemas/plugin-manifest.schema.json", import.meta.url);
 const schema = JSON.parse(readFileSync(schemaUrl, "utf8"));
 
-/** Identity of the manifest contract. The trailing /v1 changes only on a breaking change. */
-export const MANIFEST_SCHEMA_ID = "https://plugbricks.dev/schemas/plugin-manifest/v1.json";
+/** Identity of the manifest contract: where the schema file is published (main branch of the repo). */
+export const MANIFEST_SCHEMA_ID = "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json";
 if (schema.$id !== MANIFEST_SCHEMA_ID) {
   throw new Error(`schema $id is "${schema.$id}", expected "${MANIFEST_SCHEMA_ID}"`);
 }
