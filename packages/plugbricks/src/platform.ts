@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import {
-  cpSync,
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -128,8 +128,35 @@ function readJson(file: string, label: string): unknown {
  * platform.lock are identical on Linux, macOS and Windows. `p` is the path flavour of the
  * running OS; tests pass path.win32 to check the Windows behaviour on any machine.
  */
-export function portableRelative(from: string, to: string, p: path.PlatformPath = path): string {
-  return p.relative(from, to).split(p.sep).join(path.posix.sep);
+export function portableRelative(from: string, to: string, p: path.PlatformPath = path): string | undefined {
+  const rel = p.relative(from, to);
+  // On Windows, two paths on different drives have no relative path: path.relative returns the
+  // absolute target ("D:\\bricks\\pg"), which would be meaningless on another machine or OS.
+  if (p.isAbsolute(rel)) return undefined;
+  return rel.split(p.sep).join(path.posix.sep);
+}
+
+/**
+ * The `source` recorded for a brick: its folder relative to the platform root, with "/".
+ * Refuses (BRICK_PATH_NOT_PORTABLE) a folder on another Windows drive, and a folder name that
+ * contains a backslash (legal on Linux and macOS, a separator on Windows).
+ */
+export function brickSource(root: string, brickDir: string, brick: string, p: path.PlatformPath = path): string {
+  const rel = portableRelative(root, brickDir, p);
+  if (rel === undefined) {
+    const drive = p.parse(p.resolve(brickDir)).root.replace(/[\\/]+$/, "");
+    fail("BRICK_PATH_NOT_PORTABLE", {
+      brick,
+      detail: `its folder is on another drive (${drive}) than the platform; copy the brick under the platform folder`,
+    });
+  }
+  if (rel.includes("\\")) {
+    fail("BRICK_PATH_NOT_PORTABLE", {
+      brick,
+      detail: `its folder "${rel}" has a backslash in its name, which is a path separator on Windows; rename it`,
+    });
+  }
+  return rel || ".";
 }
 
 // ---------- brick contents ----------
@@ -140,7 +167,12 @@ function listBrickFiles(dir: string, brick: string): string[] {
   const walk = (rel: string) => {
     for (const entry of readdirSync(join(dir, rel)).sort()) {
       const r = rel ? `${rel}/${entry}` : entry;
-      if (entry.includes("\\")) fail("BRICK_PATH_NOT_PORTABLE", { path: r });
+      if (entry.includes("\\")) {
+        fail("BRICK_PATH_NOT_PORTABLE", {
+          brick,
+          detail: `the file "${r}" inside the brick has a backslash in its name, which is a path separator on Windows; rename it`,
+        });
+      }
       const st = lstatSync(join(dir, r));
       if (st.isSymbolicLink()) fail("BRICK_SYMLINK", { brick, file: r });
       if (st.isDirectory()) walk(r);
@@ -151,13 +183,34 @@ function listBrickFiles(dir: string, brick: string): string[] {
   return out.sort();
 }
 
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+
 /**
- * Text files are hashed with CRLF turned into LF, so a brick checked out on Windows (git
- * autocrlf) has the same integrity as on Linux. A file with a NUL byte in its first 8000 bytes
- * is binary (the same heuristic as git) and is hashed as is.
+ * A file is text when, over its whole length, it is valid UTF-8 and contains no control byte
+ * other than tab, LF, form feed and CR. Anything else (certificates, compressed data, images,
+ * even without a NUL byte) is binary and is never modified.
+ */
+export function isText(data: Buffer): boolean {
+  for (const b of data) {
+    if (b < 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0c && b !== 0x0d) return false;
+    if (b === 0x7f) return false;
+  }
+  try {
+    utf8.decode(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Text files get CRLF turned into LF, so a brick checked out on Windows (git autocrlf) has the
+ * same integrity as on Linux, and its installed copy has LF. Binary files (see isText) are
+ * returned unchanged, byte for byte. A buffer without CR is returned as is, without any copy.
  */
 export function normalizeLineEndings(data: Buffer): Buffer {
-  if (data.subarray(0, 8000).includes(0)) return data;
+  if (data.indexOf(0x0d) === -1) return data;
+  if (!isText(data)) return data;
   const out = Buffer.allocUnsafe(data.length);
   let n = 0;
   for (let i = 0; i < data.length; i++) {
@@ -320,7 +373,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   const target = resolve(project.root, brickPath);
   const manifestFile = target.endsWith(".json") ? target : join(target, "plugin.json");
   const brickDir = dirname(manifestFile);
-  const shown = portableRelative(project.root, manifestFile) || manifestFile;
+  const shown = portableRelative(project.root, manifestFile) || manifestFile.split(path.sep).join("/");
   if (!existsSync(manifestFile) || !statSync(manifestFile).isFile()) fail("BRICK_NOT_FOUND", { path: shown });
 
   const raw = readJson(manifestFile, shown);
@@ -346,9 +399,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
     );
   if (conflicts.length) throw new PlugbricksError(conflicts);
 
-  const source = portableRelative(project.root, brickDir) || ".";
-  // On Linux and macOS "\\" is a legal file name character, but it is a separator on Windows.
-  if (source.includes("\\")) fail("BRICK_PATH_NOT_PORTABLE", { path: source });
+  const source = brickSource(project.root, brickDir, m.name);
 
   const missing = Object.keys(m.requires ?? {})
     .filter((cap) => !lock.capabilities[cap])
@@ -361,9 +412,13 @@ export function addBrick(root: string, brickPath: string): AddResult {
   mkdirSync(join(project.root, BRICKS_DIR), { recursive: true });
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp);
+  // The copy is exactly what was hashed: text files are written with LF (a CRLF shell script
+  // would fail in a Linux container), binary files byte for byte. File modes are kept.
   for (const f of listBrickFiles(brickDir, m.name)) {
     mkdirSync(dirname(join(tmp, f)), { recursive: true });
-    cpSync(join(brickDir, f), join(tmp, f), { preserveTimestamps: false });
+    const mode = statSync(join(brickDir, f)).mode & 0o777;
+    writeFileSync(join(tmp, f), normalizeLineEndings(readFileSync(join(brickDir, f))), { mode });
+    chmodSync(join(tmp, f), mode);
   }
   if (brickIntegrity(tmp, m.name) !== integrity) {
     rmSync(tmp, { recursive: true, force: true });
@@ -466,8 +521,16 @@ export function platformStatus(root: string): StatusResult {
     .sort()
     .map((name) => {
       const copy = join(dir, BRICKS_DIR, name);
-      if (!existsSync(join(copy, "plugin.json"))) problems.push(issue("BRICK_MISSING", "", { brick: name }));
-      else if (brickIntegrity(copy, name) !== lock.bricks[name].integrity) problems.push(issue("BRICK_MODIFIED", "", { brick: name }));
+      // One broken brick is reported for that brick; the others are still checked.
+      try {
+        if (!existsSync(join(copy, "plugin.json"))) problems.push(issue("BRICK_MISSING", "", { brick: name }));
+        else if (brickIntegrity(copy, name) !== lock.bricks[name].integrity) problems.push(issue("BRICK_MODIFIED", "", { brick: name }));
+      } catch (e) {
+        // Our own refusals keep their code; anything else (EACCES, ENOTDIR, …) is reported as
+        // BRICK_UNREADABLE for this brick. Either way the next brick is still checked.
+        if (e instanceof PlugbricksError) problems.push(...e.issues);
+        else problems.push(issue("BRICK_UNREADABLE", "", { brick: name, detail: (e as Error).message }));
+      }
       return { name, ...lock.bricks[name] };
     });
   return {

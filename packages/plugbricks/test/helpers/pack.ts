@@ -1,19 +1,65 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import path, { dirname, join, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
 
 // Cross-platform helpers for the "test the published package" tests.
 // - npm is run as `node <npm-cli.js>`: on Windows `npm` is a .cmd file, which Node refuses to
-//   spawn without a shell since the 2024 security fix.
+//   spawn without a shell since the 2024 security fix, and a shell would split paths with spaces.
 // - The tarball is extracted in JS: on Windows runners the `tar` found first may be GNU tar from
 //   Git, which reads "C:\..." as a remote host.
 
-/** Runs npm with the same npm that runs the tests (npm_execpath), falling back to `npm` on PATH. */
+/**
+ * Finds npm's own entry script, to run it as `node npm-cli.js` on every OS (no shell, so paths
+ * with spaces are passed as they are):
+ * 1. npm_execpath, but only when it really is npm-cli.js (under yarn it points to yarn.js);
+ * 2. the npm bundled with the running node: <node dir>/node_modules/npm/bin/npm-cli.js on
+ *    Windows, <node dir>/../lib/node_modules/npm/bin/npm-cli.js elsewhere;
+ * 3. the npm on PATH, still run through node: on Linux and macOS the `npm` link is resolved to
+ *    its npm-cli.js (distribution packages put it elsewhere, e.g. /usr/share/nodejs/npm); on
+ *    Windows `npm.cmd` sits next to node_modules/npm/bin/npm-cli.js.
+ * Inputs are injectable so the choice can be tested on any OS.
+ */
+export function resolveNpmCli(
+  env: NodeJS.ProcessEnv = process.env,
+  execPath: string = process.execPath,
+  platform: NodeJS.Platform = process.platform,
+  exists: (p: string) => boolean = existsSync,
+  realpath: (p: string) => string = realpathSync,
+): string | undefined {
+  const p = platform === "win32" ? path.win32 : path.posix;
+  const fromEnv = env.npm_execpath;
+  if (fromEnv && p.basename(fromEnv) === "npm-cli.js" && exists(fromEnv)) return fromEnv;
+  const nodeDir = p.dirname(execPath);
+  const bundled =
+    platform === "win32"
+      ? p.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js")
+      : p.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js");
+  if (exists(bundled)) return bundled;
+  const dirs = (env.PATH ?? env.Path ?? "").split(platform === "win32" ? ";" : ":").filter(Boolean);
+  for (const dir of dirs) {
+    if (platform === "win32") {
+      const cli = p.join(dir, "node_modules", "npm", "bin", "npm-cli.js");
+      if (exists(p.join(dir, "npm.cmd")) && exists(cli)) return cli;
+    } else if (exists(p.join(dir, "npm"))) {
+      try {
+        const target = realpath(p.join(dir, "npm"));
+        if (p.basename(target) === "npm-cli.js") return target;
+      } catch {
+        // a broken link: try the next PATH entry
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Runs npm as `node npm-cli.js ...args`, never through a shell. */
 export function npm(args: string[], cwd: string): string {
-  const cli = process.env.npm_execpath;
-  if (cli && cli.endsWith(".js")) return execFileSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
-  return execFileSync("npm", args, { cwd, encoding: "utf8", shell: process.platform === "win32" });
+  const cli = resolveNpmCli();
+  if (!cli) {
+    throw new Error("cannot find npm-cli.js: npm_execpath is not npm, no npm is bundled next to node, and no npm on PATH");
+  }
+  return execFileSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
 }
 
 /** `npm pack` into `dest`; returns the tarball path and the list of packed files. */
