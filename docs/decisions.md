@@ -1,0 +1,91 @@
+# Design decisions
+
+Decisions taken before they are implemented, with the evidence behind them.
+Each entry says which milestone implements it. Status: **accepted** = agreed, not built yet.
+
+---
+
+## D1. plugbricks ships its own pinned Score provisioners
+
+- **Status:** accepted, implemented in milestone 3 (drivers).
+- **Context:** experiment D showed that the built-in score-k8s `postgres` provisioner runs
+  `mirror.gcr.io/postgres:17-alpine`, a floating tag. Our manifests forbid floating tags
+  (`IMAGE_FLOATING_TAG`), so a brick delivered by Score would bypass that rule.
+- **Decision:** the drivers **generate** the Score provisioners from the manifests of the
+  installed bricks (`provides`, `ready`, `provision`, `inject`), into
+  `.generated/k8s/provisioners.yaml` and `.generated/compose/provisioners.yaml`. Nothing is
+  written by hand. The Score projects are initialised with
+  `init --no-default-provisioners --provisioners <generated file>`, so a built-in
+  provisioner can never be picked by accident.
+- **Consequences:** a test checks that every image in the generated provisioner files
+  passes `checkImagePin`. A Score resource type that no installed brick provides fails at
+  `generate` time instead of silently using a built-in.
+
+### Evidence: `--no-default-provisioners` in the pinned versions
+
+Checked on 2026-11-16. Every archive was verified against the release `checksums.txt`
+before extraction (linux/amd64).
+
+| Tool | Version | sha256 of the archive | Flag in `init --help` | Behaviour |
+|---|---|---|---|---|
+| score-k8s | 0.23.0 | `36a99aea22b5f87a5e6545854086b6dcb2f8d3cafc7f52e02d4b52ae6d62d944` | yes | no provisioner loaded, `generate` fails |
+| score-k8s | 0.22.0 | `d32f190d6278943d85cfecfacdee31146ff56b5fa148d6fe2850da1fa237d2f0` | yes | same |
+| score-compose | 0.50.0 | `7257a7eed0079f92382668ff3ea4abc3158d93bce4b5b2f40b1476d84d313564` | yes | same |
+| score-compose | 0.49.0 | `4d69d33049c5042e47e432d28f1021aee068c75ab766341e2689cb9b85646c6d` | yes | same |
+
+The help text says only "Disable generation of the default provisioners file", so the
+behaviour was checked as well, offline, for each version:
+
+1. `init --no-default-provisioners --no-sample`: exit 0, `.score-k8s/` (or `.score-compose/`)
+   holds only `state.yaml` (plus `mounts/` for score-compose), no `zz-default.provisioners.yaml`.
+2. `provisioners list`: 0 rows. No provisioner is compiled into the binary.
+3. `generate` of a workload with a `postgres` resource fails, exit 1:
+   - score-k8s: `resource 'postgres.default#client.db' is not supported by any provisioner`
+   - score-compose: `failed to provision: resource 'postgres.default#client.db' is not supported by any provisioner`
+
+Proposed pins for milestone 3: **score-k8s 0.23.0** (validated end to end in experiment D)
+and **score-compose 0.50.0** (released the same day). score-k8s 0.22.0 and 0.23.0 generated
+identical manifests for the experiment D scenario; score-compose has not been run end to
+end yet.
+
+---
+
+## D2. The wait patch depends on one score-k8s annotation only, guarded by a contract test
+
+- **Status:** accepted, implemented in milestone 3 (Kubernetes driver).
+- **Context:** the experiment D patch template finds the consumer Deployment through
+  `k8s.score.dev/workload-name` (set by score-k8s itself on the Deployment) and the
+  provider Service through `k8s.score.dev/source-workload` (set by the built-in
+  provisioner template). If score-k8s renames either, the patch silently stops matching:
+  no initContainer, and the consumer fails at start exactly as without the patch.
+- **Decision:**
+  - Because of D1 the provider manifests come from **our** provisioners, so the
+    provider-side link uses our own key: `plugbricks/consumer: <workload name>`. It has no
+    domain prefix because we do not own a domain. `plugbricks` is a valid annotation
+    prefix (a single DNS label); this was not checked against a cluster yet.
+  - The only remaining score-k8s dependency is `k8s.score.dev/workload-name` on the
+    Deployment.
+  - A contract test, `test/contract/score-k8s.test.ts`, runs the pinned score-k8s binary
+    (version and sha256 in a single `tools.json`) with `generate` on a fixture workload
+    that consumes `database`. No cluster is needed. It asserts:
+    1. the Deployment carries `k8s.score.dev/workload-name` with the workload name;
+    2. the wait patch adds exactly one initContainer, targeting the provider Service.
+  - Locally the test is skipped when the binary is absent. When `CI` is set and the binary
+    is missing, the test **fails**, so it can never pass silently.
+- **Consequences:** bumping score-k8s in `tools.json` reruns the contract test before
+  anything else uses the new version.
+
+---
+
+## Already applied (milestone 2)
+
+Points 1 to 3 of experiment D are in the manifest schema:
+
+- `requires.<capability>.timeoutSeconds` (default 120, maximum 900). On expiry: Compose
+  driver fails with `WAIT_TIMEOUT`; on Kubernetes the initContainer exits non-zero, the
+  pod ends in `Init:Error` / `CrashLoopBackOff`, and `plugbricks status` maps that to
+  `WAIT_TIMEOUT`.
+- `provides.<capability>.ready` (required): an exec array that must target
+  `${provider.host}` (`READY_NOT_TARGETING_PROVIDER` otherwise).
+- `healthcheck.timeoutSeconds` (default 3) and `healthcheck.startPeriodSeconds` (default 0),
+  so one manifest behaves the same on both engines.
