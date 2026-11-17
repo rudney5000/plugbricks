@@ -33,7 +33,9 @@ async function gql(query: string, variables?: Record<string, unknown>) {
 
 beforeAll(async () => {
   if (!ready) return;
-  const run = spawnSync("docker", ["run", "-d", "--rm", "-e", "POSTGRES_PASSWORD=test", "-p", "127.0.0.1::5432", IMAGE], { encoding: "utf8" });
+  const run = spawnSync("docker", ["run", "-d", "--rm", "-e", "POSTGRES_PASSWORD=test", "-p", "127.0.0.1::5432", IMAGE], {
+    encoding: "utf8",
+  });
   if (run.status !== 0) throw new Error(run.stderr);
   container = run.stdout.trim();
   const port = spawnSync("docker", ["port", container, "5432/tcp"], { encoding: "utf8" }).stdout.trim().split(":").pop();
@@ -75,12 +77,19 @@ describe("orders API", () => {
     expect(created.errors).toBeUndefined();
     const order = created.data.createOrder;
     expect(order).toMatchObject({ total: 12.35, status: "pending" });
-    expect((await gql("query($id: ID!) { order(id: $id) { id total } }", { id: order.id })).data.order).toEqual({ id: order.id, total: 12.35 });
+    expect((await gql("query($id: ID!) { order(id: $id) { id total } }", { id: order.id })).data.order).toEqual({
+      id: order.id,
+      total: 12.35,
+    });
     expect((await gql("{ orders { id } }")).data.orders).toContainEqual({ id: order.id });
   });
 
   it.skipIf(!ready)(`rounds totals half away from zero, as the numeric column does${why}`, async () => {
-    for (const [t, stored] of [[1.005, 1.01], [2.675, 2.68], [0.004, 0]]) {
+    for (const [t, stored] of [
+      [1.005, 1.01],
+      [2.675, 2.68],
+      [0.004, 0],
+    ]) {
       const r = await gql("mutation($t: Float!) { createOrder(total: $t) { total } }", { t });
       expect(r.data.createOrder.total, String(t)).toBe(stored);
     }
@@ -91,7 +100,8 @@ describe("orders API", () => {
     const two = (await gql("{ orders(limit: 2) { id } }")).data.orders.map((o: { id: string }) => BigInt(o.id));
     expect(two).toHaveLength(2);
     expect(two[0] > two[1]).toBe(true);
-    for (const limit of [0, 501]) expect((await gql(`{ orders(limit: ${limit}) { id } }`)).errors?.[0].extensions?.code).toBe("BAD_USER_INPUT");
+    for (const limit of [0, 501])
+      expect((await gql(`{ orders(limit: ${limit}) { id } }`)).errors?.[0].extensions?.code).toBe("BAD_USER_INPUT");
   });
 
   it.skipIf(!ready)(`serves /health with a query string, and nothing but /health and /graphql${why}`, async () => {
@@ -126,10 +136,12 @@ describe("orders API", () => {
 
   it.skipIf(!ready)(`resolves Order references for other subgraphs (_entities)${why}`, async () => {
     const id = (await gql("mutation { createOrder(total: 5) { id } }")).data.createOrder.id;
-    const r = await gql(
-      'query($r: [_Any!]!) { _entities(representations: $r) { ... on Order { id total status } } }',
-      { r: [{ __typename: "Order", id }, { __typename: "Order", id: "999999" }] },
-    );
+    const r = await gql("query($r: [_Any!]!) { _entities(representations: $r) { ... on Order { id total status } } }", {
+      r: [
+        { __typename: "Order", id },
+        { __typename: "Order", id: "999999" },
+      ],
+    });
     expect(r).toEqual({ data: { _entities: [{ id, total: 5, status: "pending" }, null] } });
   });
 

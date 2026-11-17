@@ -8,7 +8,10 @@ import { extractTgz, npmPack, resolveNpmCli } from "./helpers/pack.js";
 const pkg = fileURLToPath(new URL("../", import.meta.url));
 
 describe("resolveNpmCli", () => {
-  const has = (...paths: string[]) => (p: string) => paths.includes(p);
+  const has =
+    (...paths: string[]) =>
+    (p: string) =>
+      paths.includes(p);
 
   it("uses npm_execpath when it is npm-cli.js", () => {
     const cli = "/usr/lib/node_modules/npm/bin/npm-cli.js";
@@ -29,7 +32,13 @@ describe("resolveNpmCli", () => {
     const cli = "/usr/share/nodejs/npm/bin/npm-cli.js";
     const realpath = (p: string) => (p === "/usr/bin/npm" ? cli : p);
     expect(
-      resolveNpmCli({ npm_execpath: "/home/u/.local/pnpm/pnpm.cjs", PATH: "/usr/local/bin:/usr/bin" }, "/usr/bin/node", "linux", has("/usr/bin/npm", cli), realpath),
+      resolveNpmCli(
+        { npm_execpath: "/home/u/.local/pnpm/pnpm.cjs", PATH: "/usr/local/bin:/usr/bin" },
+        "/usr/bin/node",
+        "linux",
+        has("/usr/bin/npm", cli),
+        realpath,
+      ),
     ).toBe(cli);
   });
 
@@ -39,7 +48,9 @@ describe("resolveNpmCli", () => {
 
   it("Windows: npm.cmd on PATH leads to the npm-cli.js next to it", () => {
     const cli = "C:\\tools\\node\\node_modules\\npm\\bin\\npm-cli.js";
-    expect(resolveNpmCli({ Path: "C:\\Windows;C:\\tools\\node" }, "C:\\other\\node.exe", "win32", has("C:\\tools\\node\\npm.cmd", cli))).toBe(cli);
+    expect(
+      resolveNpmCli({ Path: "C:\\Windows;C:\\tools\\node" }, "C:\\other\\node.exe", "win32", has("C:\\tools\\node\\npm.cmd", cli)),
+    ).toBe(cli);
   });
 
   it("returns undefined rather than guessing", () => {

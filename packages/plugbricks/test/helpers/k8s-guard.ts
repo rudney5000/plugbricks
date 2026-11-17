@@ -4,9 +4,7 @@
 /** The only context names the test accepts: the ones k3d gives to a throwaway cluster named pbtest-*. */
 export const TEST_CONTEXT_PREFIX = "k3d-pbtest-";
 
-export type K8sTestTarget =
-  | { ok: true; context: string; kubeconfig: string; cluster: string }
-  | { ok: false; reason: string };
+export type K8sTestTarget = { ok: true; context: string; kubeconfig: string; cluster: string } | { ok: false; reason: string };
 
 /**
  * PLUGBRICKS_K8S_CONTEXT must start with "k3d-pbtest-" and PLUGBRICKS_K8S_KUBECONFIG must be set:

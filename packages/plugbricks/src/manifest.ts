@@ -8,9 +8,7 @@ export { MANIFEST_SCHEMA_ID };
 /** Kept for compatibility: a manifest issue is a plain Issue whose path is a JSON Pointer. */
 export type ManifestIssue = Issue;
 
-export type ValidationResult =
-  | { ok: true }
-  | { ok: false; issues: ManifestIssue[] };
+export type ValidationResult = { ok: true } | { ok: false; issues: ManifestIssue[] };
 
 function checkImage(image: string, path: string, issues: ManifestIssue[]): void {
   const r = checkImagePin(image);
@@ -25,7 +23,12 @@ function checkTemplate(value: string, path: string, context: TemplateContext, is
   if ("unknown" in r) issues.push(issue("TEMPLATE_UNKNOWN", path, { template: r.unknown, allowed: allowedList(context) }));
 }
 
-function checkTemplates(values: Record<string, string> | string[] | undefined, path: string, context: TemplateContext, issues: ManifestIssue[]): void {
+function checkTemplates(
+  values: Record<string, string> | string[] | undefined,
+  path: string,
+  context: TemplateContext,
+  issues: ManifestIssue[],
+): void {
   for (const [k, v] of Object.entries(values ?? {})) checkTemplate(v, `${path}/${k}`, context, issues);
 }
 

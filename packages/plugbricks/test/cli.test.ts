@@ -100,7 +100,10 @@ function snapshot(dir: string): Record<string, string> {
       else if (st.isDirectory()) {
         out[`${r}/`] = "dir";
         walk(r);
-      } else out[r] = createHash("sha256").update(readFileSync(join(dir, r))).digest("hex");
+      } else
+        out[r] = createHash("sha256")
+          .update(readFileSync(join(dir, r)))
+          .digest("hex");
     }
   };
   walk("");
@@ -148,12 +151,11 @@ function symlinkSupport(): { ok: true } | { ok: false; reason: string } {
 }
 const support: Record<NonNullable<Scenario["needs"]>[number], { ok: true } | { ok: false; reason: string }> = {
   symlinks: symlinkSupport(),
-  "posix-file-names":
-    process.platform === "win32"
-      ? { ok: false, reason: 'Windows forbids \\ and " in file names' }
-      : { ok: true },
+  "posix-file-names": process.platform === "win32" ? { ok: false, reason: 'Windows forbids \\ and " in file names' } : { ok: true },
   "posix-permissions":
-    process.platform === "win32" ? { ok: false, reason: "Windows has no POSIX modes; its ACL check is tested with a fake PowerShell" } : { ok: true },
+    process.platform === "win32"
+      ? { ok: false, reason: "Windows has no POSIX modes; its ACL check is tested with a fake PowerShell" }
+      : { ok: true },
 };
 
 const scenarios = readdirSync(fixtures).sort();
@@ -228,7 +230,9 @@ describe("plugbricks CLI scenarios", () => {
         for (const line of ran.filter((l) => l.startsWith("kubectl "))) {
           if (context === undefined) expect.fail(`${detail}\nkubectl ran without --context: ${line}`);
           const flags = [...(kubeconfig ? [`--kubeconfig ${kubeconfig}`] : []), `--context ${context}`].join(" ");
-          expect(line.startsWith(`kubectl ${flags} `), `${detail}\nthis kubectl command does not start with "${flags}": ${line}`).toBe(true);
+          expect(line.startsWith(`kubectl ${flags} `), `${detail}\nthis kubectl command does not start with "${flags}": ${line}`).toBe(
+            true,
+          );
         }
         if (context === undefined) expect(ran, `${detail}\nnothing may run without --context`).toEqual([]);
       }
@@ -251,9 +255,10 @@ describe("plugbricks CLI scenarios", () => {
     }
     if (sc.expectPrune) {
       const lock: Lock = JSON.parse(readFileSync(join(work, "platform.lock"), "utf8"));
-      expect(volumesToPrune(lock).map((v) => `${v.brick}/${v.service}/${v.name}`), `${name}: volumes a driver may prune`).toEqual(
-        sc.expectPrune,
-      );
+      expect(
+        volumesToPrune(lock).map((v) => `${v.brick}/${v.service}/${v.name}`),
+        `${name}: volumes a driver may prune`,
+      ).toEqual(sc.expectPrune);
     }
 
     // Whatever the scenario did, the files it left must match their schemas.

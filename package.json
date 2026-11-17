@@ -2,8 +2,13 @@
   "name": "plugbricks-monorepo",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
-  "workspaces": ["packages/plugbricks", "packages/create-plugbricks"],
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/plugbricks",
+    "packages/create-plugbricks"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "format": "prettier --write .",

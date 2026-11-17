@@ -5,9 +5,17 @@
   "type": "module",
   "license": "UNLICENSED",
   "private": true,
-  "engines": { "node": ">=20" },
-  "bin": { "create-plugbricks": "bin/create-plugbricks.js" },
-  "files": ["bin", "lib", "template"],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "create-plugbricks": "bin/create-plugbricks.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "template"
+  ],
   "scripts": {
     "pretest": "npm run build -w plugbricks",
     "test": "vitest run",

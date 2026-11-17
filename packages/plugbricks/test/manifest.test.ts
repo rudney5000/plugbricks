@@ -24,9 +24,7 @@ function isExecutable(file: URL): boolean {
   return r.stdout.startsWith("100755 ");
 }
 const INVALID_DIR = "test/fixtures/invalid/";
-const expected: Record<string, { code: keyof typeof MESSAGES; path: string; why: string }> = load(
-  `${INVALID_DIR}expected.json`,
-);
+const expected: Record<string, { code: keyof typeof MESSAGES; path: string; why: string }> = load(`${INVALID_DIR}expected.json`);
 
 describe("example manifests (milestone 1 criterion)", () => {
   it.each(EXAMPLES)("%s validates", (name) => {

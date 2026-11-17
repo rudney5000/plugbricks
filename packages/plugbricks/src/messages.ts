@@ -33,12 +33,13 @@ export const MESSAGES = {
   RUNTIME_NAME_INVALID: '"{name}" ({what}) cannot be used as a runtime name: {detail}',
   PROVISION_SCRIPTS_TOO_LARGE:
     'the provision scripts of "{brick}" for "{capability}" take {size} bytes; a Kubernetes ConfigMap holds at most {max}',
-  SECRETS_FILE_INVALID: "{file} line {line} is not KEY=value with a letters-and-digits value; fix that line (never delete a secret still in use)",
+  SECRETS_FILE_INVALID:
+    "{file} line {line} is not KEY=value with a letters-and-digits value; fix that line (never delete a secret still in use)",
   RUNTIME_TOOL_MISSING: '"{tool}" was not found; {hint}',
   RUNTIME_COMMAND_FAILED: '"{command}" exited with {status}{detail}',
   VOLUME_PRUNE_FAILED: "could not delete volume {volume} ({detail}); it stays in pendingDeletion",
   K8S_CONTEXT_REQUIRED:
-    'the Kubernetes runtime needs a cluster you name: pass --context <name> (and --kubeconfig <file> when it is not in the default kubeconfig); plugbricks never uses the current kubectl context, so it cannot act on a cluster you did not choose',
+    "the Kubernetes runtime needs a cluster you name: pass --context <name> (and --kubeconfig <file> when it is not in the default kubeconfig); plugbricks never uses the current kubectl context, so it cannot act on a cluster you did not choose",
   K8S_CONTEXT_REFUSED:
     'context "{context}" is refused: it is the name of the protected cluster "platform" (k3d calls its context "k3d-platform"), which plugbricks must not modify by accident; if you really mean it, add --allow-context {context}',
   K8S_KUBECONFIG_NOT_FOUND: "kubeconfig file {path} does not exist or is not a file",
@@ -53,11 +54,10 @@ export const MESSAGES = {
   INVALID_JSON: "{file} is not valid JSON: {detail}",
   PLATFORM_NOT_INITIALIZED: 'no platform.json in {dir}; run "plugbricks init" first',
   PLATFORM_ALREADY_INITIALIZED: "platform.json already exists in {dir}; nothing was changed",
-  PLATFORM_INVALID_NAME:
-    '"{name}" is not a valid platform name (lowercase letters, digits and dashes, 2 to 40 characters); pass --name',
+  PLATFORM_INVALID_NAME: '"{name}" is not a valid platform name (lowercase letters, digits and dashes, 2 to 40 characters); pass --name',
   PLATFORM_FILE_INVALID: "{file} does not match its schema; see the issues below",
   LOCK_MISSING: 'platform.lock is missing in {dir}; it is written by "plugbricks init"',
-  LOCK_OUT_OF_SYNC: "platform.json and platform.lock disagree on brick \"{brick}\"; {detail}",
+  LOCK_OUT_OF_SYNC: 'platform.json and platform.lock disagree on brick "{brick}"; {detail}',
   LOCK_INCONSISTENT: "platform.lock lists volume {volume} {detail}; fix the lock before going further",
 
   // add
@@ -66,8 +66,7 @@ export const MESSAGES = {
   MANIFEST_INVALID: "{path} is not a valid plugin manifest; see the issues below",
   BRICK_FILE_MISSING: 'brick "{brick}" references {file}, which does not exist in the brick',
   BRICK_SYMLINK: 'brick "{brick}" contains a symbolic link ({file}); a brick must contain regular files only',
-  BRICK_NAME_CONFLICT:
-    'a different brick named "{name}" is already installed (from {source}); remove it before adding this one',
+  BRICK_NAME_CONFLICT: 'a different brick named "{name}" is already installed (from {source}); remove it before adding this one',
   CAPABILITY_ALREADY_PROVIDED: 'brick "{brick}" provides "{capability}", which "{provider}" already provides',
   REQUIRED_CAPABILITY_MISSING:
     'brick "{brick}" requires capability "{capability}", which no installed brick provides; add a provider first',

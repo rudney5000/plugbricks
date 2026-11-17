@@ -17,9 +17,7 @@ export const composeVolumeName = (platform: string, volume: string) => `${platfo
  * instead of starting with an empty password.
  */
 function env(value: Value): string {
-  return value
-    .map((p) => (typeof p === "string" ? escapeDollars(p) : `\${${p.secret}:?missing secret; run plugbricks generate}`))
-    .join("");
+  return value.map((p) => (typeof p === "string" ? escapeDollars(p) : `\${${p.secret}:?missing secret; run plugbricks generate}`)).join("");
 }
 
 function envMap(values: Record<string, Value>): Record<string, string> | undefined {

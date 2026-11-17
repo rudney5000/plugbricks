@@ -11,8 +11,5 @@
     "noEmit": true,
     "newLine": "lf"
   },
-  "include": [
-    "src",
-    "test"
-  ]
+  "include": ["src", "test"]
 }

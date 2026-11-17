@@ -223,7 +223,11 @@ function textOf(v: Value): string {
 }
 
 function sortedRecord<T>(r: Record<string, T>): Record<string, T> {
-  return Object.fromEntries(Object.keys(r).sort().map((k) => [k, r[k]]));
+  return Object.fromEntries(
+    Object.keys(r)
+      .sort()
+      .map((k) => [k, r[k]]),
+  );
 }
 
 /**
@@ -244,7 +248,8 @@ export function buildPlan(
     return env;
   };
   /** Secret names a brick's own services use: those stay the brick's, even inside provision and inject. */
-  const brickSecrets = (m: BrickManifest) => new Set(m.services.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => secretsIn(v, "serviceEnv"))));
+  const brickSecrets = (m: BrickManifest) =>
+    new Set(m.services.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => secretsIn(v, "serviceEnv"))));
 
   const services: PlanService[] = [];
   const requirements: PlanRequirement[] = [];

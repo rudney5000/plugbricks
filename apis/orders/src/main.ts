@@ -11,7 +11,13 @@ if (!url) {
 const port = Number(process.env.PORT ?? 4000);
 
 // Bounded waits: an unreachable database makes /health answer 503 within seconds instead of hanging.
-const pool = new pg.Pool({ connectionString: url, max: 10, connectionTimeoutMillis: 5_000, statement_timeout: 15_000, query_timeout: 20_000 });
+const pool = new pg.Pool({
+  connectionString: url,
+  max: 10,
+  connectionTimeoutMillis: 5_000,
+  statement_timeout: 15_000,
+  query_timeout: 20_000,
+});
 // An idle client that loses its connection must not crash the process; the next query reconnects.
 pool.on("error", (e) => console.error(`orders: idle database connection lost: ${e.message}`));
 

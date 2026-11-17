@@ -68,7 +68,10 @@ describe("npm create plugbricks <name>", () => {
     expect(acl.status, acl.stderr).toBe(0);
     const entries = acl.stdout.split(/\r?\n/).filter((l) => l.includes(":("));
     expect(entries, acl.stdout).toHaveLength(1);
-    expect(entries.filter((l) => l.includes("(I)")), acl.stdout).toEqual([]);
+    expect(
+      entries.filter((l) => l.includes("(I)")),
+      acl.stdout,
+    ).toEqual([]);
   });
 
   it("created without a SECRETS_NOT_RESTRICTED warning", () => {
@@ -102,7 +105,17 @@ describe("npm create plugbricks <name>", () => {
     const readme = readFileSync(join(project, "README.md"), "utf8");
     expect(readme.startsWith("# mon-saas\n")).toBe(true);
     expect(readme).not.toContain("{{name}}");
-    for (const p of ["platform.json", "platform.lock", ".platform/bricks/", "services/", "config/", ".generated/", ".secrets/", ".gitattributes", "package.json"]) {
+    for (const p of [
+      "platform.json",
+      "platform.lock",
+      ".platform/bricks/",
+      "services/",
+      "config/",
+      ".generated/",
+      ".secrets/",
+      ".gitattributes",
+      "package.json",
+    ]) {
       expect(readme, `README must explain ${p}`).toMatch(new RegExp(`^\\| \`${p.replace(/[.]/g, "\\.")}\` \\| \\S`, "m"));
     }
   });
@@ -162,7 +175,11 @@ describe("restrictToCurrentUser: the Windows branch, with a fake PowerShell (run
   const BANANA = "S-1-5-21-1111111111-2222222222-3333333333-1003";
   const ADMINS = "S-1-5-32-544"; // BUILTIN\Administrators, "BA" in SDDL
   const full = (sid, extra = {}) => ({ sid, type: "Allow", inherited: false, rights: "FullControl", ...extra });
-  const report = (rules, extra = {}) => ({ status: 0, stdout: JSON.stringify({ user: ANA, protected: true, rules, ...extra }) + "\r\n", stderr: "" });
+  const report = (rules, extra = {}) => ({
+    status: 0,
+    stdout: JSON.stringify({ user: ANA, protected: true, rules, ...extra }) + "\r\n",
+    stderr: "",
+  });
   const fake = (calls, result) => (cmd, args, env) => {
     calls.push({ cmd, args, dir: env.PLUGBRICKS_SECRETS_DIR });
     return result;
@@ -189,7 +206,11 @@ describe("restrictToCurrentUser: the Windows branch, with a fake PowerShell (run
   // Seen on the GitHub Windows runner: BUILTIN\Administrators kept an explicit entry.
   it.each([
     ["another account (BOX\\bob)", [full(ANA), full(BOB)], BOB],
-    ["an account whose name contains the user name (BOX\\banana)", [full(ANA), full(BANANA, { rights: "ReadAndExecute, Synchronize" })], BANANA],
+    [
+      "an account whose name contains the user name (BOX\\banana)",
+      [full(ANA), full(BANANA, { rights: "ReadAndExecute, Synchronize" })],
+      BANANA,
+    ],
     ["BUILTIN\\Administrators, as left by icacls on the CI runner", [full(ANA), full(ADMINS)], ADMINS],
     ["Everyone", [full(ANA), full("S-1-1-0", { rights: "Read" })], "S-1-1-0"],
   ])("reports %s as another account", (_, rules, other) => {
@@ -205,7 +226,11 @@ describe("restrictToCurrentUser: the Windows branch, with a fake PowerShell (run
     ["no full control for the user", report([full(ANA, { rights: "Read" })]), "the ACL gives the current user no full control"],
     ["output that is not JSON", { status: 0, stdout: "Accès refusé\r\n", stderr: "" }, "unexpected ACL report; cannot check the ACL"],
     ["JSON of the wrong shape", { status: 0, stdout: "{}", stderr: "" }, "unexpected ACL report; cannot check the ACL"],
-    ["PowerShell failing", { status: 1, stdout: "", stderr: "Set-Acl : Attempted to perform an unauthorized operation.\r\nAt line:1" }, "PowerShell exited with 1: Set-Acl : Attempted to perform an unauthorized operation."],
+    [
+      "PowerShell failing",
+      { status: 1, stdout: "", stderr: "Set-Acl : Attempted to perform an unauthorized operation.\r\nAt line:1" },
+      "PowerShell exited with 1: Set-Acl : Attempted to perform an unauthorized operation.",
+    ],
   ])("refuses %s", (_, result, detail) => {
     expect(restrictToCurrentUser(dir, { platform: "win32", run: fake([], result) })).toEqual({ ok: false, detail });
   });
@@ -225,9 +250,13 @@ describe("restrictToCurrentUser: the Windows branch, with a fake PowerShell (run
     rmSync(cwd, { recursive: true, force: true });
     mkdirSync(cwd, { recursive: true });
     const stderr = [];
-    const code = create(["warned"], { cwd, stdout: () => {}, stderr: (l) => stderr.push(l) }, {
-      restrict: () => ({ ok: false, detail: "simulated failure" }),
-    });
+    const code = create(
+      ["warned"],
+      { cwd, stdout: () => {}, stderr: (l) => stderr.push(l) },
+      {
+        restrict: () => ({ ok: false, detail: "simulated failure" }),
+      },
+    );
     expect(code).toBe(0);
     expect(stderr).toHaveLength(1);
     expect(stderr[0]).toMatch(/^warning SECRETS_NOT_RESTRICTED: could not restrict .*\.secrets to your user only \(simulated failure\)/);
@@ -252,13 +281,23 @@ describe("published package", () => {
 
   it("ships bin, lib and the whole template", () => {
     expect(files).toEqual(
-      expect.arrayContaining(["bin/create-plugbricks.js", "lib/create.js", "template/gitignore", "template/gitattributes", "template/README.md", "template/services/orders/plugin.json"]),
+      expect.arrayContaining([
+        "bin/create-plugbricks.js",
+        "lib/create.js",
+        "template/gitignore",
+        "template/gitattributes",
+        "template/README.md",
+        "template/services/orders/plugin.json",
+      ]),
     );
     expect(files.filter((f) => f.startsWith("test/"))).toEqual([]);
   });
 
   it("creates a project from the packed bin", () => {
-    const r = spawnSync(process.execPath, [join(packWork, "package/bin/create-plugbricks.js"), "from-pack"], { cwd: packWork, encoding: "utf8" });
+    const r = spawnSync(process.execPath, [join(packWork, "package/bin/create-plugbricks.js"), "from-pack"], {
+      cwd: packWork,
+      encoding: "utf8",
+    });
     expect(r.status, r.stderr).toBe(0);
     for (const p of STRUCTURE) expect(existsSync(join(packWork, "from-pack", p)), p).toBe(true);
   });

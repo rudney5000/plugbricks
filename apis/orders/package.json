@@ -5,7 +5,9 @@
   "type": "module",
   "private": true,
   "license": "UNLICENSED",
-  "engines": { "node": ">=22.15.0" },
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",

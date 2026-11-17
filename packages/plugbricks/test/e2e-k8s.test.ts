@@ -86,29 +86,58 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(nodes.status, `the cluster ${context} does not answer: ${nodes.stderr}`).toBe(0);
 
       // The orders image is built here, so the cluster has no registry to pull it from.
-      const build = spawnSync("docker", ["build", "--quiet", "--tag", "plugbricks-example/orders:0.1.0", join(repo, "apis/orders")], { encoding: "utf8" });
+      const build = spawnSync("docker", ["build", "--quiet", "--tag", "plugbricks-example/orders:0.1.0", join(repo, "apis/orders")], {
+        encoding: "utf8",
+      });
       expect(build.status, build.stderr).toBe(0);
-      const imported = spawnSync(k3d, ["image", "import", "plugbricks-example/orders:0.1.0", "--cluster", target.ok ? target.cluster : ""], { encoding: "utf8" });
+      const imported = spawnSync(
+        k3d,
+        ["image", "import", "plugbricks-example/orders:0.1.0", "--cluster", target.ok ? target.cluster : ""],
+        { encoding: "utf8" },
+      );
       expect(imported.status, imported.stderr).toBe(0);
 
       const ns = "pbtest-k8s";
       const work = project(ns, ["scratch"]);
       cpSync(join(pkg, "examples/orders"), join(work, "orders"), { recursive: true });
-      for (const args of [["init", "--name", ns], ["add", "postgres"], ["add", "orders"], ["add", "scratch"]]) expect(cli(work, args).code).toBe(0);
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "postgres"],
+        ["add", "orders"],
+        ["add", "scratch"],
+      ])
+        expect(cli(work, args).code).toBe(0);
 
       const up = cli(work, ["up"]);
       expect(up.code, `${up.out}\n${up.err}`).toBe(0);
       const pods = kc(["--namespace", ns, "get", "pods", "--output", "wide"]);
       console.log(`kubectl get pods (namespace ${ns}):\n${pods.stdout}`);
-      const podList = JSON.parse(kc(["--namespace", ns, "get", "pods", "--output", "json"]).stdout).items as { metadata: { name: string }; status: { phase: string } }[];
-      expect(podList.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual(["orders-app", "postgres-db", "scratch-redis"]);
+      const podList = JSON.parse(kc(["--namespace", ns, "get", "pods", "--output", "json"]).stdout).items as {
+        metadata: { name: string };
+        status: { phase: string };
+      }[];
+      expect(podList.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual([
+        "orders-app",
+        "postgres-db",
+        "scratch-redis",
+      ]);
       expect(podList.map((p) => p.status.phase)).toEqual(["Running", "Running", "Running"]);
 
       // Nothing is published outside the cluster: call the API by its Service name from inside a pod.
       const gql = (query: string) => {
         const r = kc([
-          "--namespace", ns, "exec", "deployment/orders-app", "--", "wget", "-qO-", "--header", "content-type: application/json",
-          "--post-data", JSON.stringify({ query }), "http://orders-app:4000/graphql",
+          "--namespace",
+          ns,
+          "exec",
+          "deployment/orders-app",
+          "--",
+          "wget",
+          "-qO-",
+          "--header",
+          "content-type: application/json",
+          "--post-data",
+          JSON.stringify({ query }),
+          "http://orders-app:4000/graphql",
         ]);
         expect(r.status, r.stderr).toBe(0);
         return JSON.parse(r.stdout);
@@ -121,7 +150,10 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       const down = cli(work, ["down"]);
       expect(down.code, down.err).toBe(0);
       expect(names(ns, "deployment")).toEqual([]);
-      expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/postgres-db-data", "persistentvolumeclaim/scratch-redis-data"]);
+      expect(names(ns, "persistentvolumeclaim")).toEqual([
+        "persistentvolumeclaim/postgres-db-data",
+        "persistentvolumeclaim/scratch-redis-data",
+      ]);
 
       // remove marks the retention-delete volume; only up --prune-volumes deletes it, and only it.
       expect(cli(work, ["remove", "scratch"]).code).toBe(0);
@@ -142,7 +174,12 @@ describe("Kubernetes driver against a real k3d cluster", () => {
     () => {
       const ns = "pbtest-k8s-timeout";
       const work = project(ns, ["never", "patient"]);
-      for (const args of [["init", "--name", ns], ["add", "never"], ["add", "patient"]]) expect(cli(work, args).code).toBe(0);
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "never"],
+        ["add", "patient"],
+      ])
+        expect(cli(work, args).code).toBe(0);
       // Kubernetes has no fast failure for a crash-looping init container: up gives up when the
       // rollout deadline (the waits plus 300 s) passes, then reads the exit code 124 from the pod.
       const up = cli(work, ["up"]);

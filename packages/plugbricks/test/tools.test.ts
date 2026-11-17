@@ -45,7 +45,11 @@ describe("tools.json", () => {
   });
 
   it("no two entries share a sha256", () => {
-    const all = names.flatMap((n) => Object.values<PlatformEntry>(tools[n].platforms).map((p) => p.sha256).filter(Boolean));
+    const all = names.flatMap((n) =>
+      Object.values<PlatformEntry>(tools[n].platforms)
+        .map((p) => p.sha256)
+        .filter(Boolean),
+    );
     expect(new Set(all).size).toBe(all.length);
   });
 
