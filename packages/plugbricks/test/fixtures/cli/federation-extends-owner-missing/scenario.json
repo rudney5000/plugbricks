@@ -1,0 +1,24 @@
+{
+  "description": "a brick that extends an entity of a brick that is not installed is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/shipping"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_OWNER_MISSING"
+      ],
+      "unchanged": true,
+      "stderr": "extends entity \"Order\" of brick \"sales\", which is not installed; add \"sales\" first"
+    }
+  ]
+}

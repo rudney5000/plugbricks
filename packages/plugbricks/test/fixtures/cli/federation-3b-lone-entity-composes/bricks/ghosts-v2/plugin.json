@@ -1,0 +1,17 @@
+{
+  "name": "ghosts-v2",
+  "version": "0.1.0",
+  "description": "Defines a lone entity; composition accepts it, and no composer can tell it was meant to extend something.",
+  "services": [
+    {
+      "name": "api",
+      "image": "node:22.23.5-alpine",
+      "port": 4000
+    }
+  ],
+  "subgraph": {
+    "service": "api",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}

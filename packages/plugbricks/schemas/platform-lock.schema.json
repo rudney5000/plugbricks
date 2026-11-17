@@ -25,6 +25,32 @@
       "description": "Volumes of removed bricks whose retention is retain. Drivers keep them; adding the brick again re-attaches them.",
       "items": { "$ref": "#/$defs/volumeRef" }
     },
+    "federation": {
+      "type": "object",
+      "description": "Present only when at least one installed brick serves a subgraph. Written by add and remove after the subgraphs were composed. status compares schemaSha256 with a fresh composition; the composer version is informational and never makes status fail.",
+      "additionalProperties": false,
+      "required": ["composer", "routerCompatibilityVersion", "subgraphs", "schemaSha256"],
+      "properties": {
+        "composer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 }
+          }
+        },
+        "routerCompatibilityVersion": { "type": "string", "minLength": 1 },
+        "subgraphs": {
+          "type": "array",
+          "description": "Names of the bricks that serve a subgraph, sorted.",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/brickName" }
+        },
+        "schemaSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "sha256 of the printed federated schema." }
+      }
+    },
     "pendingDeletion": {
       "type": "array",
       "description": "Volumes of removed bricks whose retention is delete. The ONLY volumes a driver may delete, and only when run with --prune-volumes. A volume in neither list is never deleted. Adding the brick again removes its entries.",

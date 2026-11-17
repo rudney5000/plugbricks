@@ -1,0 +1,9 @@
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+type Ghost @key(fields: "id") {
+  id: ID!
+  note: String!
+}
+
+type Query {
+  ghost(id: ID!): Ghost
+}

@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { buildRouterConfigFile, type SubgraphInput } from "./federation.js";
+import { ROUTER_IMAGE, ROUTER_NAME } from "./drivers/common.js";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
 import { BRICKS_DIR, brickIntegrity, listBrickFiles, PlugbricksError, type Lock, type Project, type VolumeRef } from "./platform.js";
-import { MANIFEST_DEFAULTS } from "./schemas.js";
+import { MANIFEST_DEFAULTS, PLATFORM_DEFAULTS } from "./schemas.js";
 import { parseTemplate, secretsIn, type Segment, type TemplateContext } from "./templates.js";
 
 /**
@@ -34,6 +37,8 @@ export interface BrickManifest {
     healthcheck?: Partial<Healthcheck> & { exec: string[] };
     env?: Record<string, string>;
   }[];
+  subgraph?: { service: string; schema: string; path?: string };
+  extends?: { plugin: string; entities: string[] }[];
   provides?: Record<
     string,
     {
@@ -103,9 +108,26 @@ export interface PlanSecret {
   key: string;
 }
 
+/** The Cosmo router, present only when at least one installed brick serves a subgraph. */
+export interface PlanRouter {
+  /** Runtime name: "router". */
+  name: string;
+  /** The pinned image, tag and digest. */
+  image: string;
+  /** Port published on 127.0.0.1 by Compose, and the port of the Kubernetes Service (platform.json router.port). */
+  port: number;
+  /** Text of router-config.json. */
+  config: string;
+  /** sha256 of `config`: put on the container (Compose label) and on the pod (Kubernetes annotation) so that a changed configuration recreates it; the router reads its configuration once, at start. */
+  configSha256: string;
+  /** The subgraph services the router calls; it starts after them. */
+  subgraphs: { service: string; brick: string; healthy: boolean }[];
+}
+
 export interface Plan {
   platform: string;
   services: PlanService[];
+  router?: PlanRouter;
   requirements: PlanRequirement[];
   scripts: PlanScripts[];
   volumes: PlanVolume[];
@@ -239,6 +261,8 @@ export function buildPlan(
   lock: Lock,
   manifests: Map<string, BrickManifest>,
   readScripts: (brick: string, dir: string) => { path: string; data: Buffer }[],
+  /** With it, a platform that has a subgraph also gets its router: the port to publish, and a reader for each brick's SDL. */
+  router?: { port: number; readSchema: (brick: string, file: string) => string },
 ): Plan {
   const names = new Names();
   const secrets = new Map<string, string>();
@@ -352,11 +376,13 @@ export function buildPlan(
   for (const v of [...lock.retainedVolumes, ...lock.pendingDeletion]) {
     names.add("volume", volumeName(v), `${v.brick}/${v.service}/${v.name}`, `kept volume ${v.name} of ${v.brick}/${v.service}`, false);
   }
+  const planRouter = router ? buildRouter(manifests, services, router, names) : undefined;
   if (names.issues.length) throw new PlugbricksError(names.issues);
 
   return {
     platform,
     services: services.sort((a, b) => a.name.localeCompare(b.name)),
+    ...(planRouter ? { router: planRouter } : {}),
     requirements: requirements.sort((a, b) => a.consumer.localeCompare(b.consumer) || a.capability.localeCompare(b.capability)),
     scripts: [...scripts.values()].sort((a, b) => a.name.localeCompare(b.name)),
     volumes: volumes.sort((a, b) => a.name.localeCompare(b.name)),
@@ -364,11 +390,56 @@ export function buildPlan(
   };
 }
 
+/** The router of a platform: its configuration from the subgraphs of the installed bricks, and the services it waits for. */
+function buildRouter(
+  manifests: Map<string, BrickManifest>,
+  services: PlanService[],
+  router: { port: number; readSchema: (brick: string, file: string) => string },
+  names: Names,
+): PlanRouter | undefined {
+  const inputs: SubgraphInput[] = [];
+  const subgraphs: PlanRouter["subgraphs"] = [];
+  for (const [brick, m] of manifests) {
+    if (!m.subgraph) continue;
+    const service = services.find((s) => s.brick === brick && s.service === m.subgraph!.service)!;
+    inputs.push({
+      brick,
+      file: `${BRICKS_DIR}/${brick}/${m.subgraph.schema}`,
+      sdl: router.readSchema(brick, m.subgraph.schema),
+      url: `http://${service.name}:${service.port}${m.subgraph.path ?? "/graphql"}`,
+      extends: m.extends ?? [],
+    });
+    subgraphs.push({ service: service.name, brick, healthy: service.healthcheck !== undefined });
+  }
+  if (inputs.length === 0) return undefined;
+  names.add("service", ROUTER_NAME, "router", "the router");
+  names.add("configmap", `${ROUTER_NAME}-config`, "router", "the router configuration");
+  const built = buildRouterConfigFile(inputs);
+  if (!built.ok) throw new PlugbricksError(built.issues);
+  return {
+    name: ROUTER_NAME,
+    image: ROUTER_IMAGE,
+    port: router.port,
+    config: built.json,
+    configSha256: createHash("sha256").update(built.json).digest("hex"),
+    subgraphs: subgraphs.sort((a, b) => a.service.localeCompare(b.service)),
+  };
+}
+
 /** The plan of an initialised project, from its lock and installed copies. */
 export function planProject(project: Project): Plan {
   const manifests = loadInstalledBricks(project);
-  return buildPlan(project.platform.name, project.lock, manifests, (brick, dir) => {
-    const base = join(project.root, BRICKS_DIR, brick, dir);
-    return listBrickFiles(base, brick).map((path) => ({ path, data: readFileSync(join(base, path)) }));
-  });
+  return buildPlan(
+    project.platform.name,
+    project.lock,
+    manifests,
+    (brick, dir) => {
+      const base = join(project.root, BRICKS_DIR, brick, dir);
+      return listBrickFiles(base, brick).map((path) => ({ path, data: readFileSync(join(base, path)) }));
+    },
+    {
+      port: project.platform.router?.port ?? PLATFORM_DEFAULTS.routerPort,
+      readSchema: (brick, file) => readFileSync(join(project.root, BRICKS_DIR, brick, file), "utf8"),
+    },
+  );
 }

@@ -1,0 +1,30 @@
+{
+  "description": "a @key on a field that does not exist is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/bad-key"
+      ],
+      "exit": 1,
+      "codes": [
+        "COMPOSITION_FAILED"
+      ],
+      "unchanged": true,
+      "stderr": "The 1st instance of the directive \"@key\" declared on coordinates \"Parcel\" is invalid"
+    }
+  ]
+}

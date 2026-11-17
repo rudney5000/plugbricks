@@ -1,0 +1,31 @@
+{
+  "description": "two bricks defining the same value type with incompatible fields are refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/billing"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/reporting"
+      ],
+      "exit": 1,
+      "codes": [
+        "COMPOSITION_FAILED",
+        "COMPOSITION_FAILED"
+      ],
+      "unchanged": true,
+      "stderr": "The field \"Money.amount\" could not be federated due to incompatible types across subgraphs"
+    }
+  ]
+}

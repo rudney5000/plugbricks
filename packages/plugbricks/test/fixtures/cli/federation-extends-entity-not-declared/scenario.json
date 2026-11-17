@@ -1,0 +1,30 @@
+{
+  "description": "an entity listed in extends must be declared in the brick's own subgraph",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/undeclared"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_ENTITY_NOT_DECLARED"
+      ],
+      "unchanged": true,
+      "stderr": "lists entity \"Order\" in extends"
+    }
+  ]
+}

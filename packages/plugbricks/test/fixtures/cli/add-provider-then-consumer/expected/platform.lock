@@ -35,6 +35,17 @@
   "capabilities": {
     "database": "postgres"
   },
+  "federation": {
+    "composer": {
+      "name": "@wundergraph/composition",
+      "version": "0.68.1"
+    },
+    "routerCompatibilityVersion": "1",
+    "schemaSha256": "ba3ab469b9a667add9ff8f8f646787ca2049e17c01a0749993a999cf31f9726b",
+    "subgraphs": [
+      "orders"
+    ]
+  },
   "lockfileVersion": 1,
   "pendingDeletion": [],
   "retainedVolumes": []

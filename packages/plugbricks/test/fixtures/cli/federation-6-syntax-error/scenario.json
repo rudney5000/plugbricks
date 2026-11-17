@@ -1,0 +1,24 @@
+{
+  "description": "a subgraph schema that is not GraphQL is refused with its file, line and column",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/syntax-error"
+      ],
+      "exit": 1,
+      "codes": [
+        "SUBGRAPH_SCHEMA_INVALID"
+      ],
+      "unchanged": true,
+      "stderr": "schema.graphql"
+    }
+  ]
+}

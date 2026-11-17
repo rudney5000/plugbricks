@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "workspaces": [
     "packages/plugbricks",
@@ -20,6 +20,9 @@
     "coverage": "npm run coverage --workspaces --if-present",
     "quality": "npm run format:check && npm run lint && npm run typecheck && npm test",
     "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "overrides": {
+    "@graphql-tools/utils": "12.1.0"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

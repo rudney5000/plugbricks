@@ -1,0 +1,30 @@
+{
+  "description": "an extension of a type that no subgraph defines is refused by the composer",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/ghosts-v1"
+      ],
+      "exit": 1,
+      "codes": [
+        "COMPOSITION_FAILED"
+      ],
+      "unchanged": true,
+      "stderr": "The Object \"Ghost\" is an extension, but no base Object definition of \"Ghost\" is defined in any subgraph"
+    }
+  ]
+}

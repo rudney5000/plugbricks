@@ -1,0 +1,24 @@
+{
+  "description": "bricks without extends compose in any order; the subgraph list in the lock is sorted",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/tracking"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    }
+  ]
+}

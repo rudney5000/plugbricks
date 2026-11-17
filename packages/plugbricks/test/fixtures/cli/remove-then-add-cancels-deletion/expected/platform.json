@@ -5,5 +5,8 @@
       "source": "bricks/cache"
     }
   },
-  "name": "demo"
+  "name": "demo",
+  "router": {
+    "port": 4000
+  }
 }

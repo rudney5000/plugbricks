@@ -1,0 +1,2 @@
+type Parcel {
+  id: ID!

@@ -1,0 +1,30 @@
+{
+  "description": "extending an entity that the owner does not define is refused, although the lone entity itself composes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/ghosts-extends"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_ENTITY_MISSING"
+      ],
+      "unchanged": true,
+      "stderr": "the subgraph of \"sales\""
+    }
+  ]
+}

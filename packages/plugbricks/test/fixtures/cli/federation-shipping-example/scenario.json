@@ -1,0 +1,60 @@
+{
+  "description": "the real example bricks: shipping is refused while orders is not installed, then orders and shipping are added; removing orders while shipping extends it is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/shipping"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_OWNER_MISSING"
+      ],
+      "stderr": "extends entity \"Order\" of brick \"orders\", which is not installed; add \"orders\" first",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/shipping"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: orders, shipping; composed with @wundergraph/composition 0.68.1"
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_IN_USE"
+      ],
+      "stderr": "its entities are still extended by \"shipping\"",
+      "unchanged": true
+    }
+  ]
+}

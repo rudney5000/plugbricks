@@ -1,0 +1,52 @@
+{
+  "description": "router.port changes the published port on Compose and the Service port on Kubernetes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 8080
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "        published: \"8080\"\n        host_ip: \"127.0.0.1\"",
+    ".generated/k8s/resources.yaml": "    - name: graphql\n      port: 8080\n      targetPort: 3002"
+  }
+}

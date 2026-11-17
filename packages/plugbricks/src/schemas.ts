@@ -35,6 +35,11 @@ export function schemaIssues(validate: ValidateFunction, data: unknown, prefix =
   });
 }
 
+/** Defaults declared in the platform schema. */
+export const PLATFORM_DEFAULTS = {
+  routerPort: platformSchema.schema.properties.router.properties.port.default as number,
+};
+
 /** Defaults declared in the manifest schema, so the lock never hard-codes them. */
 export const MANIFEST_DEFAULTS = {
   wait: manifestSchema.schema.$defs.require.properties.wait.default as "healthy" | "started",

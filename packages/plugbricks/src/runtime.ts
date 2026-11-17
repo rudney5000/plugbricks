@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { WAIT_TIMEOUT_EXIT } from "./drivers/common.js";
+import { ROUTER_NAME, WAIT_TIMEOUT_EXIT } from "./drivers/common.js";
 import { COMPOSE_FILE, composeVolumeName, renderCompose } from "./drivers/compose.js";
 import {
   BRICK_LABEL,
+  COMPONENT_LABEL,
   DISPOSABLE_KINDS,
   K8S_NAMESPACE_FILE,
   K8S_RESOURCES_FILE,
@@ -119,7 +120,8 @@ export function generate(root: string, runtime: Runtime, deps: RuntimeDeps = {})
 
   writeFileAtomic(join(project.root, GENERATED_DIR, ".gitignore"), "# Written by plugbricks: rebuilt on demand, never committed.\n*\n");
   const dir = `${GENERATED_DIR}/${runtime}`;
-  for (const [path, content] of Object.entries(files)) writeFileAtomic(join(project.root, path), content);
+  // Mode 0644: none of these files holds a secret, and the router container reads its configuration as another user.
+  for (const [path, content] of Object.entries(files)) writeFileAtomic(join(project.root, path), content, 0o644);
   for (const stale of listFiles(join(project.root, dir))) {
     if (!files[`${dir}/${stale}`]) rmSync(join(project.root, dir, stale), { force: true });
   }
@@ -285,6 +287,8 @@ function composeWaitTimeout(plan: Plan): number {
 
 /** How long `up` waits for one Deployment: its own wait timeouts, plus time to pull images and start. */
 function rolloutTimeout(plan: Plan, service: string): number {
+  // The router waits for nothing: time to pull its image and start.
+  if (plan.router?.name === service) return 300;
   const s = plan.services.find((x) => x.name === service)!;
   const waits = plan.requirements.filter((r) => r.consumer === s.brick && r.wait).reduce((n, r) => n + r.wait!.timeoutSeconds, 0);
   return waits + 300;
@@ -340,11 +344,24 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
     const cleanup = [...kubectlBase(plan), "delete", DISPOSABLE_KINDS, "--selector", removedBricksSelector(plan), "--ignore-not-found"];
     const c = kubectl(deps, dir, target, cleanup);
     if (c.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...cleanup], c)]);
-    for (const s of plan.services) {
-      const args = [...kubectlBase(plan), "rollout", "status", `deployment/${s.name}`, `--timeout=${rolloutTimeout(plan, s.name)}s`];
+    if (!plan.router) {
+      // The router belongs to no brick: with the last subgraph gone, it goes too.
+      const router = [
+        ...kubectlBase(plan),
+        "delete",
+        DISPOSABLE_KINDS,
+        "--selector",
+        `${MANAGED_BY}=plugbricks,${COMPONENT_LABEL}=${ROUTER_NAME}`,
+        "--ignore-not-found",
+      ];
+      const gone = kubectl(deps, dir, target, router);
+      if (gone.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...router], gone)]);
+    }
+    for (const name of [...plan.services.map((s) => s.name), ...(plan.router ? [plan.router.name] : [])]) {
+      const args = [...kubectlBase(plan), "rollout", "status", `deployment/${name}`, `--timeout=${rolloutTimeout(plan, name)}s`];
       const r = kubectl(deps, dir, target, args);
       if (r.status !== 0) {
-        const timeouts = k8sWaitTimeouts(deps, dir, target, plan, s.name);
+        const timeouts = plan.services.some((s) => s.name === name) ? k8sWaitTimeouts(deps, dir, target, plan, name) : [];
         throw new PlugbricksError(timeouts.length ? timeouts : [failed("kubectl", [...target, ...args], r)]);
       }
     }

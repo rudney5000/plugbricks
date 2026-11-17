@@ -1,0 +1,312 @@
+{
+  "description": "a router port that is not an integer between 1024 and 65535, and any other router option, is refused by every command that reads platform.json, before anything is written",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 80
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "OUT_OF_RANGE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "OUT_OF_RANGE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 65536
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "OUT_OF_RANGE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "OUT_OF_RANGE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "OUT_OF_RANGE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "OUT_OF_RANGE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": "4000"
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 4000.5
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "stderr": "/router/port",
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "INVALID_TYPE"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 4000,
+              "host": "0.0.0.0"
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "UNKNOWN_FIELD"
+      ],
+      "stderr": "/router/host",
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": {
+            "router": {
+              "port": 1024
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "stdout": "router-config.json"
+    }
+  ]
+}

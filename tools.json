@@ -97,12 +97,18 @@
     }
   },
   "images": {
-    "$comment": "Container images the end-to-end tests pull, pinned by digest. The digest is the one the registry returned for the tag on 2026-11-17 (the multi-architecture index, so it works on amd64 and arm64). k3s is the Kubernetes the throwaway cluster runs; its minor version must be within one of the kubectl version above (the kubectl skew policy).",
+    "$comment": "Container images the end-to-end tests pull, pinned by digest. The digest is the one the registry returned for the tag on 2026-11-17 (the multi-architecture index, so it works on amd64 and arm64). k3s is the Kubernetes the throwaway cluster runs; its minor version must be within one of the kubectl version above (the kubectl skew policy). The router entry is the Cosmo router that plugbricks renders (decision D9): the multi-architecture index digest, re-read from ghcr.io on 2026-11-17; src/drivers/common.ts holds the same reference and a test keeps them equal.",
     "k3s": {
       "repository": "rancher/k3s",
       "tag": "v1.37.2-k3s1",
       "digest": "sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332",
       "reference": "rancher/k3s:v1.37.2-k3s1@sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332"
+    },
+    "router": {
+      "repository": "ghcr.io/wundergraph/cosmo/router",
+      "tag": "0.372.0",
+      "digest": "sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205",
+      "reference": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205"
     }
   }
 }

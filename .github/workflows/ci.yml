@@ -41,6 +41,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apis/orders/package-lock.json
+            apis/shipping/package-lock.json
 
       - run: node --version
 
@@ -55,6 +56,13 @@ jobs:
       # and are skipped elsewhere, with the reason in the test title.
       - name: Example API orders
         working-directory: apis/orders
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - name: Example API shipping
+        working-directory: apis/shipping
         run: |
           npm ci
           npm run typecheck
@@ -82,6 +90,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apis/orders/package-lock.json
+            apis/shipping/package-lock.json
 
       - run: npm ci
 
@@ -134,6 +143,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apis/orders/package-lock.json
+            apis/shipping/package-lock.json
 
       - run: npm ci
 

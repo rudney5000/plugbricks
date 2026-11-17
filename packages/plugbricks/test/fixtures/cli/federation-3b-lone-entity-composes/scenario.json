@@ -1,0 +1,24 @@
+{
+  "description": "a lone entity with no owner composes, so no composer refuses it: only extends can express the intent",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/ghosts-v2"
+      ]
+    }
+  ]
+}

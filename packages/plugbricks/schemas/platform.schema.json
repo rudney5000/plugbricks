@@ -13,6 +13,20 @@
       "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$",
       "description": "Platform name: lowercase letters, digits and dashes, 2 to 40 characters."
     },
+    "router": {
+      "type": "object",
+      "description": "The Cosmo router that plugbricks adds in front of the subgraphs of the installed bricks. There is none while no brick serves a subgraph.",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 4000,
+          "description": "Docker Compose: the port the router is published on, on 127.0.0.1 only. Kubernetes: the port of its ClusterIP Service. 1024 to 65535 (the router never runs as root)."
+        }
+      }
+    },
     "bricks": {
       "type": "object",
       "description": "Installed bricks, keyed by the name in their plugin.json.",

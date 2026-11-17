@@ -1,0 +1,17 @@
+{
+  "name": "ghosts-v1",
+  "version": "0.1.0",
+  "description": "Extends a type that nobody defines (v1 style).",
+  "services": [
+    {
+      "name": "api",
+      "image": "node:22.23.5-alpine",
+      "port": 4000
+    }
+  ],
+  "subgraph": {
+    "service": "api",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}

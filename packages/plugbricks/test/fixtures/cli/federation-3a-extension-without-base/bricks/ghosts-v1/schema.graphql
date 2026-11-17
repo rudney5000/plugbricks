@@ -1,0 +1,8 @@
+extend type Ghost @key(fields: "id") {
+  id: ID! @external
+  note: String!
+}
+
+type Query {
+  ghostNote: String
+}

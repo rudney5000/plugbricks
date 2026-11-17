@@ -84,6 +84,39 @@ services:
         source: postgres-db-data
         target: /var/lib/postgresql/data
     restart: unless-stopped
+  router:
+    image: ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      COSMO_TELEMETRY_DISABLED: "true"
+      DO_NOT_TRACK: "1"
+      EXECUTION_CONFIG_FILE_PATH: /config/router-config.json
+      LISTEN_ADDR: "0.0.0.0:3002"
+      METRICS_OTLP_ENABLED: "false"
+      PLAYGROUND_ENABLED: "false"
+      PROMETHEUS_ENABLED: "false"
+      TRACING_ENABLED: "false"
+    labels:
+      plugbricks.router-config-sha256: a9e016339b29163741017a3f25f92e2bc5793a1b3f0d6618b2631d2e5a77c5ae
+    volumes:
+      - type: bind
+        source: "./router-config.json"
+        target: /config/router-config.json
+        read_only: true
+    ports:
+      - target: 3002
+        published: "4000"
+        host_ip: "127.0.0.1"
+        protocol: tcp
+    depends_on:
+      orders-app:
+        condition: service_healthy
+    restart: unless-stopped
 volumes:
   postgres-db-data:
     name: demo_postgres-db-data

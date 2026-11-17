@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "orders": {
+      "integrity": "sha256-8e79d15c5d17d5758aea6fe758383d19695feb957bd4864e937be6d02ae18d83",
+      "provides": [],
+      "requires": {
+        "database": {
+          "provider": "postgres",
+          "timeoutSeconds": 120,
+          "wait": "healthy"
+        }
+      },
+      "source": "examples/orders",
+      "version": "0.1.0",
+      "volumes": []
+    },
+    "postgres": {
+      "integrity": "sha256-6d46102aa4c0852f79ac5a0cf44a7d37f7733d98943fcfc6890eb980c08c4b47",
+      "provides": [
+        "database"
+      ],
+      "requires": {},
+      "source": "examples/postgres",
+      "version": "1.0.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "retain",
+          "service": "db"
+        }
+      ]
+    },
+    "shipping": {
+      "integrity": "sha256-906a9be99586f6718813ce1ced0316c98cd1b91575abf2607b443d030fa9eb43",
+      "provides": [],
+      "requires": {
+        "database": {
+          "provider": "postgres",
+          "timeoutSeconds": 120,
+          "wait": "healthy"
+        }
+      },
+      "source": "examples/shipping",
+      "version": "0.1.0",
+      "volumes": []
+    }
+  },
+  "capabilities": {
+    "database": "postgres"
+  },
+  "federation": {
+    "composer": {
+      "name": "@wundergraph/composition",
+      "version": "0.68.1"
+    },
+    "routerCompatibilityVersion": "1",
+    "schemaSha256": "a0884fc57e668782953d3d624e8e739faab1a94194da573417234437d532b654",
+    "subgraphs": [
+      "orders",
+      "shipping"
+    ]
+  },
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}
