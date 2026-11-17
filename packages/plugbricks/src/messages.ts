@@ -45,6 +45,7 @@ export const MESSAGES = {
   K8S_CONTEXT_REFUSED:
     'context "{context}" is refused: it is the name of the protected cluster "platform" (k3d calls its context "k3d-platform"), which plugbricks must not modify by accident; if you really mean it, add --allow-context {context}',
   K8S_KUBECONFIG_NOT_FOUND: "kubeconfig file {path} does not exist or is not a file",
+  RUNTIME_UNAVAILABLE: "cannot read the state of the {runtime} runtime: {detail}",
 
   // CLI usage (exit code 2).
   USAGE_UNKNOWN_COMMAND: 'unknown command "{command}"; run "plugbricks --help"',

@@ -654,6 +654,47 @@ end yet.
 
 ---
 
+## D10. status --runtime is read-only and never queries GraphQL
+
+- **Status:** implemented (step 5a): `src/live.ts` (pure parsing and the report), `statusRuntime` in
+  `src/runtime.ts` (the calls), `schemas/status-runtime.schema.json` (the JSON report, version 1).
+- **Decision:** `plugbricks status --runtime` reports what the runtime runs using only the runtime's
+  own listings and health state: `docker compose ps --all --format json`, `docker inspect` with a Go
+  template that prints the restart count and the OOM flag and nothing else, or one
+  `kubectl get deployments,pods,services --output json` in the platform's namespace. It never execs into a
+  container, never reads logs, Secrets, ConfigMaps or environment variables, and never sends a request
+  (GraphQL or HTTP) to a subgraph or to the router. Reasons are fixed wordings built from exit codes and
+  the runtime's reason codes (`CrashLoopBackOff`, `ImagePullBackOff`, `Unschedulable`), never a runtime
+  message or a log line. Every call is killed after 15 s; a runtime that cannot be read is
+  `RUNTIME_UNAVAILABLE`, exit code 4.
+- **Why:**
+  - **Safe to run anywhere, any time, by anyone allowed to list.** A status command is run often, by
+    scripts and later by an admin page; it must not change anything, need exec rights, or put load on the
+    services it observes. Listing rights are enough.
+  - **No secret can leak.** Pod specs and container configurations hold environment values, and logs can
+    hold anything; the report is built from a short list of status fields only, and the tests check that no
+    secret value or environment variable reaches it (`test/live.test.ts`, the `e2e-compose` scenario).
+  - **The runtime already knows.** Compose runs the healthcheck of each service and Kubernetes its
+    readiness probe; reporting their verdict keeps one definition of "healthy", the one `up` waits on. A
+    GraphQL request would test something else (the request path through the router), would depend on the
+    schema, and would fail differently from what the runtime acts on.
+- **Consequences:**
+  - The router has no health check on Compose (its image has no shell and no `wget`, D9): there it is
+    `unknown` ("running; no health check") and does not fail the exit code. On Kubernetes its HTTP
+    readiness probe makes it `healthy`.
+  - Whether the router can actually reach a subgraph is not tested by this command; each subgraph's own
+    state is shown under the router instead.
+  - Compose prints the exit code of a restarting container only in `Status` ("Restarting (255) …";
+    `ExitCode` is 0 then), and no publisher while it restarts: the address is null at that moment.
+  - Kubernetes cannot tell "not ready yet" from "failing" for a container that is running and not ready:
+    plugbricks says `starting` while the Deployment is still rolling out, `unhealthy` once the rollout
+    is over.
+  - `platform.json` has no runtime field and was not changed: the runtime is named with `--runtime`, as
+    for `up` and `down`.
+  - `enabled` is "installed in platform.json" for now: there is no switch to disable an installed brick.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

@@ -17,6 +17,15 @@ import {
 } from "./drivers/k8s.js";
 import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
+import {
+  buildLiveStatus,
+  composeLiveInput,
+  DOCKER_INSPECT_TEMPLATE,
+  k8sLiveInput,
+  MANAGED_SELECTOR,
+  parseComposePs,
+  type LiveStatus,
+} from "./live.js";
 import { initContainerName, planProject, volumeName, type Plan } from "./plan.js";
 import { confirmPruned, PlugbricksError, readProject, volumesToPrune, type VolumeRef } from "./platform.js";
 import { ensureSecrets, SECRETS_DIR, SECRETS_FILE, writePrivateFile, type RestrictOptions } from "./secrets.js";
@@ -35,12 +44,20 @@ export interface ExecResult {
   /** Set when the program could not be started at all (ENOENT: not installed). */
   error?: string;
 }
-/** Runs a program without a shell. Injectable so tests can check the exact commands. */
-export type Exec = (cmd: string, args: string[], opts: { cwd: string }) => ExecResult;
+/**
+ * Runs a program without a shell. Injectable so tests can check the exact commands. With timeoutMs the
+ * program is killed when it runs longer, and `error` is "ETIMEDOUT".
+ */
+export type Exec = (cmd: string, args: string[], opts: { cwd: string; timeoutMs?: number }) => ExecResult;
 
 export const defaultExec: Exec = (cmd, args, opts) => {
   // stdio inherited for stderr would hide it from error reports; output is captured and shown on failure.
-  const r = spawnSync(cmd, args, { cwd: opts.cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const r = spawnSync(cmd, args, {
+    cwd: opts.cwd,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    ...(opts.timeoutMs !== undefined ? { timeout: opts.timeoutMs, killSignal: "SIGKILL" as const } : {}),
+  });
   return {
     status: r.status,
     stdout: r.stdout ?? "",
@@ -137,9 +154,9 @@ function lastLines(text: string, n = 5): string {
   return ls.slice(-n).join("\n");
 }
 
-function run(deps: RuntimeDeps, root: string, cmd: string, args: string[]): ExecResult {
+function run(deps: RuntimeDeps, root: string, cmd: string, args: string[], timeoutMs?: number): ExecResult {
   deps.log?.(`$ ${shown(cmd, args)}`);
-  return (deps.exec ?? defaultExec)(cmd, args, { cwd: root });
+  return (deps.exec ?? defaultExec)(cmd, args, { cwd: root, ...(timeoutMs !== undefined ? { timeoutMs } : {}) });
 }
 
 function failed(cmd: string, args: string[], r: ExecResult): Issue {
@@ -221,8 +238,8 @@ export function k8sTargetFlags(target: K8sTarget | undefined): string[] {
  * The only way the drivers call kubectl: the cluster flags always come first, so no command can
  * run against whatever context happens to be current.
  */
-function kubectl(deps: RuntimeDeps, root: string, target: string[], args: string[]): ExecResult {
-  return run(deps, root, "kubectl", [...target, ...args]);
+function kubectl(deps: RuntimeDeps, root: string, target: string[], args: string[], timeoutMs?: number): ExecResult {
+  return run(deps, root, "kubectl", [...target, ...args], timeoutMs);
 }
 
 const kubectlBase = (plan: Plan) => ["--namespace", plan.platform];
@@ -407,5 +424,97 @@ export function down(root: string, runtime: Runtime, deps: RuntimeDeps = {}): vo
     const args = ["--namespace", platform, "delete", DISPOSABLE_KINDS, "--selector", `${MANAGED_BY}=plugbricks`, "--ignore-not-found"];
     const r = kubectl(deps, project.root, target, args);
     if (r.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...args], r)]);
+  }
+}
+
+// ---------- status --runtime ----------
+
+/** The runtime could not be read: not installed, not answering, or too slow. `status --runtime` exits with STATUS_UNAVAILABLE_EXIT. */
+export class RuntimeUnavailableError extends PlugbricksError {}
+
+/** Exit code of `status --runtime` when an enabled service is starting, unhealthy, stopped or not deployed. */
+export const STATUS_DEGRADED_EXIT = 3;
+/** Exit code of `status --runtime` when the runtime cannot be read (RUNTIME_UNAVAILABLE). */
+export const STATUS_UNAVAILABLE_EXIT = 4;
+/** Every call `status --runtime` makes is killed after this long. */
+export const STATUS_CALL_TIMEOUT_MS = 15_000;
+/** kubectl's own limit for one request to the API server, below STATUS_CALL_TIMEOUT_MS. */
+export const KUBECTL_REQUEST_TIMEOUT = "10s";
+
+function unavailable(runtime: Runtime, detail: string): RuntimeUnavailableError {
+  return new RuntimeUnavailableError([
+    issue("RUNTIME_UNAVAILABLE", "", { runtime: runtime === "k8s" ? "Kubernetes" : "Docker Compose", detail }),
+  ]);
+}
+
+/** Why one read call failed, in one line: not installed, timed out, or the tool's last line of error output. */
+function callFailure(cmd: string, args: string[], r: ExecResult): string {
+  if (r.error === "ENOENT") return `${cmd} was not found`;
+  if (r.error === "ETIMEDOUT") return `"${shown(cmd, args)}" did not answer within ${STATUS_CALL_TIMEOUT_MS / 1000} s`;
+  if (r.error) return `"${shown(cmd, args)}" could not run (${r.error})`;
+  return `"${shown(cmd, args)}" exited with ${r.status}${lastLines(r.stderr || r.stdout, 1) ? `: ${lastLines(r.stderr || r.stdout, 1)}` : ""}`;
+}
+
+/**
+ * Reads what the runtime runs for this platform and compares it with the plan. Read-only (D10): one
+ * listing call, plus `docker inspect` for the restart counts on Compose; never exec, logs, Secrets,
+ * environment variables or a request to a service. Every call has a timeout. For Kubernetes the
+ * cluster must be named, with the same guards as up and down. `problems` are the declared state's.
+ */
+export function statusRuntime(root: string, runtime: Runtime, problems: Issue[], deps: RuntimeDeps = {}): LiveStatus {
+  // First, as for up and down: a refused cluster is refused before anything runs.
+  const target = runtime === "k8s" ? k8sTargetFlags(deps.k8s) : [];
+  const project = readProject(root);
+  const plan = planProject(project);
+  const dir = project.root;
+  // No progress lines: stdout may be a JSON document.
+  const quiet: RuntimeDeps = { ...deps, log: undefined };
+  const call = (cmd: string, args: string[]) => run(quiet, dir, cmd, args, STATUS_CALL_TIMEOUT_MS);
+
+  if (runtime === "compose") {
+    const version = ["compose", "version"];
+    const v = call("docker", version);
+    if (v.error || v.status !== 0) throw unavailable(runtime, callFailure("docker", version, v));
+    // By project name, like down: works even when .generated/ was deleted.
+    const ps = ["compose", "--project-name", plan.platform, "ps", "--all", "--format", "json"];
+    const listed = call("docker", ps);
+    if (listed.error || listed.status !== 0) throw unavailable(runtime, callFailure("docker", ps, listed));
+    let ids: string[];
+    try {
+      ids = parseComposePs(listed.stdout)
+        .map((r) => r.ID ?? "")
+        .filter(Boolean);
+    } catch {
+      throw unavailable(runtime, `unexpected output from "${shown("docker", ps)}"`);
+    }
+    // Restart counts only; a container removed between the two calls just has no count.
+    const inspected = ids.length ? call("docker", ["inspect", "--format", DOCKER_INSPECT_TEMPLATE, ...ids]) : undefined;
+    const inspectText = (inspected?.stdout ?? "")
+      .split(/\r?\n/)
+      .filter((l) => l.startsWith("{"))
+      .join("\n");
+    return buildLiveStatus({ plan, runtime, context: null, problems, ...composeLiveInput(plan, listed.stdout, inspectText) });
+  }
+
+  const client = kubectl(quiet, dir, target, ["version", "--client"], STATUS_CALL_TIMEOUT_MS);
+  if (client.error || client.status !== 0) throw unavailable(runtime, callFailure("kubectl", ["version", "--client"], client));
+  // Deployments, Pods and Services only: never Secrets, never ConfigMaps.
+  const get = [
+    `--request-timeout=${KUBECTL_REQUEST_TIMEOUT}`,
+    ...kubectlBase(plan),
+    "get",
+    "deployments,pods,services",
+    "--selector",
+    MANAGED_SELECTOR,
+    "--output",
+    "json",
+  ];
+  const listed = kubectl(quiet, dir, target, get, STATUS_CALL_TIMEOUT_MS);
+  if (listed.error || listed.status !== 0) throw unavailable(runtime, callFailure("kubectl", [...target, ...get], listed));
+  try {
+    return buildLiveStatus({ plan, runtime, context: deps.k8s?.context ?? null, problems, ...k8sLiveInput(plan, listed.stdout) });
+  } catch (e) {
+    if (e instanceof PlugbricksError) throw e;
+    throw unavailable(runtime, `unexpected output from "${shown("kubectl", [...target, ...get])}"`);
   }
 }
