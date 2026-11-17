@@ -19,6 +19,15 @@ updates:
       orders-dependencies:
         patterns: ["*"]
 
+  # Same for apis/shipping: it is kept on the same versions as apis/orders, so merge both together.
+  - package-ecosystem: npm
+    directory: /apis/shipping
+    schedule:
+      interval: weekly
+    groups:
+      shipping-dependencies:
+        patterns: ["*"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
