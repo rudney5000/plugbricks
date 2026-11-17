@@ -166,3 +166,50 @@ export function composeSubgraphs(inputs: SubgraphInput[]): { ok: true; federatio
     },
   };
 }
+
+/** Id of the version of the schema in a static router configuration: the router only needs one. */
+const STATIC_SCHEMA_VERSION_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * The execution configuration of the Cosmo router (router-config.json) for these subgraphs, built in
+ * process: the same composition as `composeSubgraphs`, then `buildRouterConfig` of @wundergraph/cosmo-shared.
+ * Deterministic: the same subgraphs always give the same text. The few lines that describe each subgraph
+ * to `buildRouterConfig` follow what `wgc router compose` passes to it; the output was compared with
+ * `wgc` (see decision D8 and D9). Nothing here is read from the network.
+ */
+export function buildRouterConfigFile(inputs: SubgraphInput[]): { ok: true; json: string } | { ok: false; issues: Issue[] } {
+  const composed = federate(inputs);
+  if (!composed.ok) return composed;
+  const { sorted, result } = composed;
+  const lib = loadComposition();
+  // cosmo-shared and its protobuf packages are ES modules: require() loads them synchronously on the Node versions we support.
+  const shared: typeof import("@wundergraph/cosmo-shared") = nodeRequire("@wundergraph/cosmo-shared");
+  const { RouterConfigSchema }: typeof import("@wundergraph/cosmo-connect/dist/node/v1/node_pb") = nodeRequire(
+    "@wundergraph/cosmo-connect/dist/node/v1/node_pb",
+  );
+  const { toJsonString }: typeof import("@bufbuild/protobuf") = nodeRequire("@bufbuild/protobuf");
+  const { printSchemaWithDirectives }: typeof import("@graphql-tools/utils") = nodeRequire("@graphql-tools/utils");
+
+  const config = shared.buildRouterConfig({
+    federatedClientSDL: result.shouldIncludeClientSchema ? printSchemaWithDirectives(result.federatedGraphClientSchema) : "",
+    federatedSDL: printSchemaWithDirectives(result.federatedGraphSchema),
+    fieldConfigurations: result.fieldConfigurations,
+    routerCompatibilityVersion: lib.ROUTER_COMPATIBILITY_VERSION_ONE,
+    schemaVersionId: STATIC_SCHEMA_VERSION_ID,
+    subgraphs: sorted.map((p, index) => {
+      const subgraphConfig = result.subgraphConfigBySubgraphName.get(p.brick);
+      return {
+        kind: shared.SubgraphKind.Standard,
+        id: String(index),
+        name: p.brick,
+        url: p.url,
+        sdl: p.sdl,
+        subscriptionUrl: "",
+        schema: subgraphConfig?.schema,
+        configurationDataByTypeName: subgraphConfig?.configurationDataByTypeName,
+        costs: subgraphConfig?.costs,
+      };
+    }),
+  });
+  return { ok: true, json: toJsonString(RouterConfigSchema, config) };
+}

@@ -31,6 +31,8 @@ export const MESSAGES = {
   RUNTIME_NAME_CONFLICT:
     'the {first} and the {second} would both be named "{name}" in the runtime; rename one of the bricks, services, volumes or capabilities',
   RUNTIME_NAME_INVALID: '"{name}" ({what}) cannot be used as a runtime name: {detail}',
+  ROUTER_CONFIG_TOO_LARGE:
+    "the router configuration takes {size} bytes; a Kubernetes ConfigMap holds at most {max}; remove a subgraph or use the Compose runtime",
   PROVISION_SCRIPTS_TOO_LARGE:
     'the provision scripts of "{brick}" for "{capability}" take {size} bytes; a Kubernetes ConfigMap holds at most {max}',
   SECRETS_FILE_INVALID:

@@ -35,6 +35,8 @@ export function isValidPlatformName(name: string): boolean {
 export interface Platform {
   $schema?: string;
   name: string;
+  /** Absent in files written before the router existed: the default port applies. */
+  router?: { port?: number };
   bricks: Record<string, { source: string }>;
 }
 

@@ -35,7 +35,8 @@
         "kubectl --context test-cluster apply --filename .generated/k8s/resources.yaml",
         "kubectl --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick,plugbricks/brick notin (orders,postgres) --ignore-not-found",
         "kubectl --context test-cluster --namespace demo rollout status deployment/orders-app --timeout=420s",
-        "kubectl --context test-cluster --namespace demo rollout status deployment/postgres-db --timeout=300s"
+        "kubectl --context test-cluster --namespace demo rollout status deployment/postgres-db --timeout=300s",
+        "kubectl --context test-cluster --namespace demo rollout status deployment/router --timeout=300s"
       ]
     }
   ]

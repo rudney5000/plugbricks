@@ -61,6 +61,7 @@
         "kubectl --kubeconfig <kubeconfig> --context test-cluster apply --filename .generated/k8s/namespace.yaml",
         "kubectl --kubeconfig <kubeconfig> --context test-cluster apply --filename .secrets/k8s-secret.yaml",
         "kubectl --kubeconfig <kubeconfig> --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick --ignore-not-found",
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/component=router --ignore-not-found",
         "kubectl --kubeconfig <kubeconfig> --context test-cluster --namespace demo delete persistentvolumeclaim cache-redis-data --ignore-not-found"
       ]
     },

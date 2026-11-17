@@ -1,8 +1,29 @@
 import { issue } from "../issues.js";
-import { initContainerName, type Plan, type PlanRequirement, type PlanScripts, type PlanService, type Value } from "../plan.js";
+import {
+  initContainerName,
+  type Plan,
+  type PlanRequirement,
+  type PlanRouter,
+  type PlanScripts,
+  type PlanService,
+  type Value,
+} from "../plan.js";
 import { isText, PlugbricksError } from "../platform.js";
 import { toYaml, toYamlDocuments, type Yaml } from "../yaml.js";
-import { escapeDollars, PROVISION_MOUNT, WAIT_ARGV0, WAIT_SCRIPT } from "./common.js";
+import {
+  escapeDollars,
+  PROVISION_MOUNT,
+  ROUTER_CONFIG_DIR,
+  ROUTER_CONFIG_FILE,
+  ROUTER_CONTAINER_PORT,
+  ROUTER_ENV,
+  ROUTER_LIVE_PATH,
+  ROUTER_NAME,
+  ROUTER_READY_PATH,
+  ROUTER_UID,
+  WAIT_ARGV0,
+  WAIT_SCRIPT,
+} from "./common.js";
 
 export const K8S_NAMESPACE_FILE = ".generated/k8s/namespace.yaml";
 export const K8S_RESOURCES_FILE = ".generated/k8s/resources.yaml";
@@ -13,6 +34,12 @@ export const K8S_SECRET_NAME = "plugbricks-secrets";
 export const MANAGED_BY = "app.kubernetes.io/managed-by";
 export const BRICK_LABEL = "plugbricks/brick";
 export const SERVICE_LABEL = "plugbricks/service";
+/** Marks the objects of the router, which belongs to no brick: `up` removes them when the last subgraph goes. */
+export const COMPONENT_LABEL = "plugbricks/component";
+/** The router configuration, beside the other generated files (the router's ConfigMap holds the same text). */
+export const K8S_ROUTER_CONFIG_FILE = `.generated/k8s/${ROUTER_CONFIG_FILE}`;
+/** Name of the router's ConfigMap. */
+export const ROUTER_CONFIGMAP = `${ROUTER_NAME}-config`;
 /** Kinds `up` deletes for removed bricks and `down` deletes for all. Never PersistentVolumeClaim, never Secret. */
 export const DISPOSABLE_KINDS = "deployment,service,configmap";
 
@@ -30,6 +57,12 @@ function labels(plan: Plan, brick?: string): Record<string, string> {
     ...(brick ? { [BRICK_LABEL]: brick } : {}),
   };
 }
+
+const routerMeta = (plan: Plan, name: string) => ({
+  name,
+  namespace: plan.platform,
+  labels: { ...labels(plan), [COMPONENT_LABEL]: ROUTER_NAME },
+});
 
 const meta = (plan: Plan, name: string, brick?: string) => ({ name, namespace: plan.platform, labels: labels(plan, brick) });
 
@@ -171,6 +204,78 @@ function deployment(s: PlanService, plan: Plan): Yaml {
 }
 
 /**
+ * The router's ConfigMap, Service and Deployment. A ClusterIP Service only: nothing is exposed outside the
+ * cluster (no Ingress, no NodePort, no LoadBalancer). Probes are HTTP, since the image has no shell. It runs
+ * as a non-root user with a read-only root filesystem, no capability and no privilege escalation.
+ */
+function routerDocs(r: PlanRouter, plan: Plan): Yaml[] {
+  const size = Buffer.byteLength(r.config) + ROUTER_CONFIG_FILE.length;
+  if (size > CONFIGMAP_MAX_BYTES) {
+    throw new PlugbricksError([issue("ROUTER_CONFIG_TOO_LARGE", "", { size: String(size), max: String(CONFIGMAP_MAX_BYTES) })]);
+  }
+  const podLabels = { ...routerMeta(plan, r.name).labels, [SERVICE_LABEL]: r.name };
+  return [
+    { apiVersion: "v1", kind: "ConfigMap", metadata: routerMeta(plan, ROUTER_CONFIGMAP), data: { [ROUTER_CONFIG_FILE]: r.config } },
+    {
+      apiVersion: "v1",
+      kind: "Service",
+      metadata: routerMeta(plan, r.name),
+      spec: {
+        type: "ClusterIP",
+        selector: { [SERVICE_LABEL]: r.name },
+        ports: [{ name: "graphql", port: r.port, targetPort: ROUTER_CONTAINER_PORT }],
+      },
+    },
+    {
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: routerMeta(plan, r.name),
+      spec: {
+        replicas: 1,
+        selector: { matchLabels: { [SERVICE_LABEL]: r.name } },
+        template: {
+          // The router reads its configuration once, at start; a changed hash restarts the pod.
+          metadata: { labels: podLabels, annotations: { "plugbricks/router-config-sha256": r.configSha256 } },
+          spec: {
+            securityContext: { seccompProfile: { type: "RuntimeDefault" } },
+            containers: [
+              {
+                name: r.name,
+                image: r.image,
+                ports: [{ name: "graphql", containerPort: ROUTER_CONTAINER_PORT }],
+                env: Object.entries(ROUTER_ENV).map(([name, value]) => ({ name, value })),
+                readinessProbe: {
+                  httpGet: { path: ROUTER_READY_PATH, port: ROUTER_CONTAINER_PORT },
+                  periodSeconds: 5,
+                  timeoutSeconds: 2,
+                  failureThreshold: 6,
+                },
+                livenessProbe: {
+                  httpGet: { path: ROUTER_LIVE_PATH, port: ROUTER_CONTAINER_PORT },
+                  periodSeconds: 10,
+                  timeoutSeconds: 2,
+                  failureThreshold: 6,
+                },
+                securityContext: {
+                  runAsNonRoot: true,
+                  runAsUser: ROUTER_UID,
+                  runAsGroup: ROUTER_UID,
+                  readOnlyRootFilesystem: true,
+                  allowPrivilegeEscalation: false,
+                  capabilities: { drop: ["ALL"] },
+                },
+                volumeMounts: [{ name: "config", mountPath: ROUTER_CONFIG_DIR, readOnly: true }],
+              },
+            ],
+            volumes: [{ name: "config", configMap: { name: ROUTER_CONFIGMAP, defaultMode: 0o444 } }],
+          },
+        },
+      },
+    },
+  ];
+}
+
+/**
  * plan -> Kubernetes manifests, in the namespace named after the platform. One Deployment and
  * one Service per service; before a consumer's container starts, its init containers wait for
  * each required capability (wait: healthy) and run the provision task. Volumes are
@@ -193,10 +298,12 @@ export function renderK8s(plan: Plan): Record<string, string> {
       spec: { selector: { [SERVICE_LABEL]: s.name }, ports: [{ name: "main", port: s.port, targetPort: s.port }] },
     })),
     ...plan.services.map((s) => deployment(s, plan)),
+    ...(plan.router ? routerDocs(plan.router, plan) : []),
   ];
   return {
     [K8S_NAMESPACE_FILE]: HEADER + toYaml(namespace),
     [K8S_RESOURCES_FILE]: HEADER + (docs.length ? toYamlDocuments(docs) : "# No brick installed.\n"),
+    ...(plan.router ? { [K8S_ROUTER_CONFIG_FILE]: plan.router.config } : {}),
   };
 }
 
