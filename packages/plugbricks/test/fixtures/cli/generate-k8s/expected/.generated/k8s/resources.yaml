@@ -141,7 +141,7 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: ghcr.io/example/orders-app:0.1.0
+          image: plugbricks-example/orders:0.1.0
           ports:
             - containerPort: 4000
           env:

@@ -42,7 +42,7 @@
       "stderr": "\"orders\" gave up waiting for capability \"database\" from \"postgres\" after 120s",
       "commands": [
         "docker compose version",
-        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420",
         "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env ps --all --format json"
       ]
     }

@@ -38,6 +38,9 @@ jobs:
           # Exact Node 22 version, shared with local development; matches the dev container image.
           node-version-file: .node-version
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apis/orders/package-lock.json
 
       - run: node --version
 
@@ -46,3 +49,13 @@ jobs:
       - run: npm run typecheck
 
       - run: npm test
+
+      # Example APIs: standalone packages with their own lockfile (not npm workspaces), so that a
+      # brick folder never contains node_modules. Their database tests need a Linux Docker engine
+      # and are skipped elsewhere, with the reason in the test title.
+      - name: Example API orders
+        working-directory: apis/orders
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
