@@ -169,6 +169,9 @@ export function main(argv: string[], io: Io): number {
             const locked = s.federation.lockedComposer ? ` (platform.lock was written with ${s.federation.lockedComposer})` : "";
             io.stdout(`Federation: ${s.federation.subgraphs.join(", ")}; composed with ${s.federation.composer}${locked}`);
           }
+          if (s.router) {
+            io.stdout(`Router: port ${s.router.port} (Compose: 127.0.0.1 only; Kubernetes: ClusterIP service); image ${s.router.image}`);
+          }
           io.stdout(`Retained volumes: ${s.retainedVolumes.length ? s.retainedVolumes.map(vol).join(", ") : "none"}`);
           io.stdout(`Pending deletion: ${s.pendingDeletion.length ? s.pendingDeletion.map(vol).join(", ") : "none"}`);
         }

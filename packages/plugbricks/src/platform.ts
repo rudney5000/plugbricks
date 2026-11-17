@@ -12,13 +12,22 @@ import {
   writeFileSync,
 } from "node:fs";
 import path, { basename, dirname, join, resolve, sep } from "node:path";
+import { ROUTER_IMAGE } from "./drivers/common.js";
 import { composeSubgraphs, composerVersion, type FederationLock, type SubgraphInput } from "./federation.js";
 import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
 import { buildPlan, type BrickManifest } from "./plan.js";
 import type { IssueCode, IssueParams } from "./messages.js";
-import { LOCK_SCHEMA_ID, lockSchema, MANIFEST_DEFAULTS, PLATFORM_SCHEMA_ID, platformSchema, schemaIssues } from "./schemas.js";
+import {
+  LOCK_SCHEMA_ID,
+  lockSchema,
+  MANIFEST_DEFAULTS,
+  PLATFORM_DEFAULTS,
+  PLATFORM_SCHEMA_ID,
+  platformSchema,
+  schemaIssues,
+} from "./schemas.js";
 
 export const PLATFORM_FILE = "platform.json";
 export const LOCK_FILE = "platform.lock";
@@ -276,6 +285,7 @@ export function initPlatform(root: string, name?: string): { name: string; creat
   const platform: Platform = {
     $schema: PLATFORM_SCHEMA_ID,
     name: platformName,
+    router: { port: PLATFORM_DEFAULTS.routerPort },
     bricks: {},
   };
   writeFileAtomic(join(dir, LOCK_FILE), canonicalJson(emptyLock()));
@@ -656,6 +666,8 @@ export interface StatusResult {
   pendingDeletion: VolumeRef[];
   /** Present when at least one subgraph is installed. The composer version is informational. */
   federation?: { subgraphs: string[]; composer: string; lockedComposer?: string; schemaSha256: string };
+  /** Present with the federation: how the router is published. */
+  router?: { port: number; image: string };
   /** Empty when everything matches the lock. */
   problems: Issue[];
 }
@@ -686,7 +698,7 @@ export function platformStatus(root: string): StatusResult {
     capabilities: lock.capabilities,
     retainedVolumes: lock.retainedVolumes,
     pendingDeletion: lock.pendingDeletion,
-    ...(federation ? { federation } : {}),
+    ...(federation ? { federation, router: { port: platform.router?.port ?? PLATFORM_DEFAULTS.routerPort, image: ROUTER_IMAGE } } : {}),
     problems,
   };
 }
