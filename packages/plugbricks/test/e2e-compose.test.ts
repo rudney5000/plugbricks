@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
@@ -180,144 +181,6 @@ describe("Docker Compose driver against a real Docker engine", () => {
   );
 
   it.skipIf(!ready)(
-    `runs orders and shipping on their own databases: shipping extends Order, cannot reach the orders database, data kept across down/up${why}`,
-    () => {
-      const repo = fileURLToPath(new URL("../../../", import.meta.url));
-      for (const api of ["orders", "shipping"]) {
-        const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
-          encoding: "utf8",
-        });
-        expect(build.status, build.stderr).toBe(0);
-      }
-
-      const name = "pbtest-shipping";
-      const work = project(name, []);
-      for (const brick of ["orders", "shipping"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
-      for (const args of [
-        ["init", "--name", name],
-        ["add", "postgres"],
-        ["add", "orders"],
-        ["add", "shipping"],
-      ])
-        expect(cli(work, args).code, args.join(" ")).toBe(0);
-      routerPort(work, 14102);
-      const up = cli(work, ["up"]);
-      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
-
-      const ps = spawnSync(
-        "docker",
-        ["ps", "--filter", `label=com.docker.compose.project=${name}`, "--format", "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"],
-        { encoding: "utf8" },
-      );
-      console.log(`docker ps (project ${name}):\n${ps.stdout}`);
-      // The router is the only thing published on the host, on the loopback address; the APIs are reached by their network names.
-      expect(ps.stdout).not.toMatch(/0\.0\.0\.0:|\[::\]:/);
-      expect(ps.stdout.match(/127\.0\.0\.1:\d+->/g)).toEqual(["127.0.0.1:14102->"]);
-
-      const psql = (sql: string) =>
-        spawnSync("docker", ["compose", "--project-name", name, "exec", "-T", "postgres-db", "psql", "-U", "postgres", "-Atc", sql], {
-          encoding: "utf8",
-        });
-      const databases = psql("SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY 1");
-      expect(databases.stdout.trim().split("\n"), databases.stderr).toEqual(["orders", "postgres", "shipping"]);
-      const roles = psql("SELECT rolname FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY 1");
-      expect(roles.stdout.trim().split("\n"), roles.stderr).toEqual(["orders", "postgres", "shipping"]);
-      console.log(`databases: ${databases.stdout.trim().split("\n").join(", ")}; roles: ${roles.stdout.trim().split("\n").join(", ")}`);
-
-      // Throwaway containers on the Compose network: one for psql, one for the GraphQL calls.
-      const network = `${name}_default`;
-      const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8");
-      const password = (consumer: string) =>
-        new RegExp(`^PB_POSTGRES__${consumer.toUpperCase()}__CONSUMER_PASSWORD=(\\w+)$`, "m").exec(secrets)![1];
-      const connect = (role: string, database: string) =>
-        spawnSync(
-          "docker",
-          [
-            "run",
-            "--rm",
-            "--network",
-            network,
-            "postgres:16.4-alpine",
-            "psql",
-            `postgres://${role}:${password(role)}@postgres-db:5432/${database}`,
-            "-Atc",
-            "select current_user, current_database()",
-          ],
-          {
-            encoding: "utf8",
-          },
-        );
-      expect(connect("shipping", "shipping").stdout.trim()).toBe("shipping|shipping");
-      const denied = connect("shipping", "orders");
-      expect(denied.status).not.toBe(0);
-      expect(denied.stderr).toMatch(/permission denied for database "orders"/);
-      console.log(`shipping role on the orders database: ${denied.stderr.trim().split("\n")[0]}`);
-      expect(connect("orders", "shipping").stderr).toMatch(/permission denied for database "shipping"/);
-
-      const gql = (host: string, query: string, variables?: Record<string, unknown>) => {
-        const r = spawnSync(
-          "docker",
-          [
-            "run",
-            "--rm",
-            "--network",
-            network,
-            "node:22.23.5-alpine",
-            "wget",
-            "-qO-",
-            "--header",
-            "content-type: application/json",
-            "--post-data",
-            JSON.stringify({ query, variables }),
-            `http://${host}:4000/graphql`,
-          ],
-          { encoding: "utf8" },
-        );
-        expect(r.status, r.stderr).toBe(0);
-        return JSON.parse(r.stdout);
-      };
-      const id = gql("orders-app", "mutation { createOrder(total: 99.9) { id } }").data.createOrder.id;
-      const shipped = gql(
-        "shipping-app",
-        'mutation($id: ID!) { shipOrder(orderId: $id, carrier: "ups") { carrier trackingNumber status } }',
-        { id },
-      );
-      expect(shipped.errors).toBeUndefined();
-      expect(shipped.data.shipOrder).toMatchObject({ carrier: "ups", status: "SHIPPED" });
-      const tracking = shipped.data.shipOrder.trackingNumber;
-
-      const readBack = () => ({
-        order: gql("orders-app", "query($id: ID!) { order(id: $id) { id total status } }", { id }),
-        shipment: gql("shipping-app", "query($id: ID!) { shipment(orderId: $id) { carrier trackingNumber status } }", { id }),
-        // What the router will send to shipping to complete an Order it got from orders.
-        entities: gql(
-          "shipping-app",
-          "query($r: [_Any!]!) { _entities(representations: $r) { ... on Order { id shipment { carrier trackingNumber status } } } }",
-          {
-            r: [{ __typename: "Order", id }],
-          },
-        ),
-      });
-      const expectState = (state: ReturnType<typeof readBack>) => {
-        expect(state.order).toEqual({ data: { order: { id, total: 99.9, status: "pending" } } });
-        expect(state.shipment).toEqual({ data: { shipment: { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" } } });
-        expect(state.entities).toEqual({
-          data: { _entities: [{ id, shipment: { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" } }] },
-        });
-      };
-      const before = readBack();
-      console.log(`_entities answer from shipping:\n${JSON.stringify(before.entities)}`);
-      expectState(before);
-
-      expect(cli(work, ["down"]).code).toBe(0);
-      const again = cli(work, ["up"]);
-      expect(again.code, `${again.out}\n${again.err}`).toBe(0);
-      expectState(readBack());
-    },
-    900_000,
-  );
-
-  it.skipIf(!ready)(
     `reports WAIT_TIMEOUT when a capability never becomes ready${why}`,
     () => {
       const name = "pbtest-timeout";
@@ -333,5 +196,331 @@ describe("Docker Compose driver against a real Docker engine", () => {
       expect(up.err).toContain('error WAIT_TIMEOUT: "patient" gave up waiting for capability "slow" from "never" after 3s');
     },
     240_000,
+  );
+});
+
+// ---------- the router in front of orders and shipping ----------
+// Real requests through the router, on the loopback address it is published on, to the real orders and
+// shipping APIs and real PostgreSQL databases: never to an API directly. The three scenarios of
+// "the router in front of orders and shipping" SHARE ONE RUNNING PROJECT and run in order (an order is
+// created in the first and read in the second): it saves two builds and two `up` of the same stack, about
+// a minute. They are independent of every other project of this file, which has its own name and port.
+
+// The shape of "data" depends on the query sent, so it is not typed here.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Answer = { status: number; body: any };
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function until(what: string, check: () => Promise<boolean>, timeoutMs = 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      if (await check()) return;
+    } catch {
+      // not yet: the connection is refused until the router listens
+    }
+    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what} after ${timeoutMs / 1000}s`);
+    await sleep(500);
+  }
+}
+
+const get = async (port: number, path: string): Promise<number> => (await fetch(`http://127.0.0.1:${port}${path}`)).status;
+const routerReady = (port: number) => until(`the router on ${port}`, async () => (await get(port, "/health/ready")) === 200);
+
+/** One GraphQL request to the router, and its real answer (printed for the record). */
+async function through(port: number, label: string, query: string, variables?: Record<string, unknown>): Promise<Answer> {
+  const res = await fetch(`http://127.0.0.1:${port}/graphql`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  const answer = { status: res.status, body: await res.json() };
+  console.log(
+    `${label}\n  request:  ${query.replace(/\s+/g, " ").trim()}${variables ? ` ${JSON.stringify(variables)}` : ""}\n  response: HTTP ${answer.status} ${JSON.stringify(answer.body)}`,
+  );
+  return answer;
+}
+
+/** The router container of a project: its id and the configuration hash it was created with. */
+function routerContainer(project: string): { id: string; hash: string } | undefined {
+  const ps = spawnSync("docker", ["compose", "--project-name", project, "ps", "--all", "--quiet", "router"], { encoding: "utf8" });
+  const id = ps.stdout.trim().split("\n")[0];
+  if (!id) return undefined;
+  const hash = spawnSync("docker", ["inspect", "--format", '{{index .Config.Labels "plugbricks.router-config-sha256"}}', id], {
+    encoding: "utf8",
+  });
+  return { id, hash: hash.stdout.trim() };
+}
+
+const containersOf = (project: string, ...extra: string[]) =>
+  spawnSync("docker", ["ps", "--all", "--filter", `label=com.docker.compose.project=${project}`, ...extra], { encoding: "utf8" }).stdout;
+
+/** sha256 of every file of a folder: two equal snapshots mean nothing was written, changed or removed. */
+function folderHash(dir: string, rel = ""): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const entry of readdirSync(join(dir, rel)).sort()) {
+    const r = rel ? `${rel}/${entry}` : entry;
+    if (statSync(join(dir, r)).isDirectory()) Object.assign(out, folderHash(dir, r));
+    else
+      out[r] = createHash("sha256")
+        .update(readFileSync(join(dir, r)))
+        .digest("hex");
+  }
+  return out;
+}
+
+let apisBuilt = false;
+function buildExampleApis(): void {
+  if (apisBuilt) return;
+  const repo = fileURLToPath(new URL("../../../", import.meta.url));
+  for (const api of ["orders", "shipping"]) {
+    const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
+      encoding: "utf8",
+    });
+    expect(build.status, build.stderr).toBe(0);
+  }
+  apisBuilt = true;
+}
+
+describe("the router in front of orders and shipping", () => {
+  const name = "pbtest-router";
+  const port = 14103;
+  let work = "";
+  let orderId = "";
+  let tracking = "";
+  let firstRouter: { id: string; hash: string };
+  const ask = (label: string, query: string, variables?: Record<string, unknown>) => through(port, label, query, variables);
+  const ORDER = "query($id: ID!) { order(id: $id) { id total status shipment { carrier trackingNumber status } } }";
+
+  it.skipIf(!ready)(
+    `serves one graph from two services: the order from orders and its shipment from shipping, in a single request${why}`,
+    async () => {
+      buildExampleApis();
+      work = project(name, []);
+      for (const brick of ["orders", "shipping"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "postgres"],
+        ["add", "orders"],
+        ["add", "shipping"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+      routerPort(work, port);
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      await routerReady(port);
+      console.log(
+        `docker ps (project ${name}):\n${containersOf(name, "--format", "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}")}`,
+      );
+      firstRouter = routerContainer(name)!;
+      expect(firstRouter.hash).toMatch(/^[a-f0-9]{64}$/);
+
+      // The playground is off, the readiness endpoint answers.
+      expect(await get(port, "/")).toBe(404);
+      expect(await get(port, "/health/ready")).toBe(200);
+      // The router is the only thing published on the host, on the loopback address only.
+      expect(containersOf(name, "--format", "{{.Ports}}")).not.toMatch(/0\.0\.0\.0:|\[::\]:/);
+      expect(containersOf(name, "--format", "{{.Ports}}").match(/127\.0\.0\.1:\d+->/g)).toEqual([`127.0.0.1:${port}->`]);
+
+      // Each API has its own database and role, and cannot even connect to the other's (checked here, on the
+      // stack the requests below use; these assertions were a separate test that started the same stack again).
+      const psql = (sql: string) =>
+        spawnSync("docker", ["compose", "--project-name", name, "exec", "-T", "postgres-db", "psql", "-U", "postgres", "-Atc", sql], {
+          encoding: "utf8",
+        });
+      const databases = psql("SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY 1");
+      expect(databases.stdout.trim().split("\n"), databases.stderr).toEqual(["orders", "postgres", "shipping"]);
+      const roles = psql("SELECT rolname FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY 1");
+      expect(roles.stdout.trim().split("\n"), roles.stderr).toEqual(["orders", "postgres", "shipping"]);
+      const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8");
+      const password = (consumer: string) =>
+        new RegExp(`^PB_POSTGRES__${consumer.toUpperCase()}__CONSUMER_PASSWORD=(\\w+)$`, "m").exec(secrets)![1];
+      const connect = (role: string, database: string) =>
+        spawnSync(
+          "docker",
+          [
+            "run",
+            "--rm",
+            "--network",
+            `${name}_default`,
+            "postgres:16.4-alpine",
+            "psql",
+            `postgres://${role}:${password(role)}@postgres-db:5432/${database}`,
+            "-Atc",
+            "select current_user, current_database()",
+          ],
+          { encoding: "utf8" },
+        );
+      expect(connect("shipping", "shipping").stdout.trim()).toBe("shipping|shipping");
+      const denied = connect("shipping", "orders");
+      expect(denied.status).not.toBe(0);
+      expect(denied.stderr).toMatch(/permission denied for database "orders"/);
+      console.log(`shipping role on the orders database: ${denied.stderr.trim().split("\n")[0]}`);
+      expect(connect("orders", "shipping").stderr).toMatch(/permission denied for database "shipping"/);
+
+      // 1. An order, created through the router (the orders subgraph), asked for with its shipment before it is shipped.
+      const created = await ask("createOrder", "mutation { createOrder(total: 42.5) { id total status } }");
+      expect(created.body.errors).toBeUndefined();
+      orderId = created.body.data.createOrder.id;
+      expect(created.body.data.createOrder).toEqual({ id: orderId, total: 42.5, status: "pending" });
+      const before = await ask("order before shipping", ORDER, { id: orderId });
+      expect(before.body).toEqual({ data: { order: { id: orderId, total: 42.5, status: "pending", shipment: null } } });
+
+      // 2. Shipped through the router (the shipping subgraph), then the same query: one request, two services.
+      const shipped = await ask(
+        "shipOrder",
+        'mutation($id: ID!) { shipOrder(orderId: $id, carrier: "ups") { carrier trackingNumber status } }',
+        { id: orderId },
+      );
+      expect(shipped.body.errors).toBeUndefined();
+      tracking = shipped.body.data.shipOrder.trackingNumber;
+      expect(shipped.body.data.shipOrder).toEqual({
+        carrier: "ups",
+        trackingNumber: expect.stringMatching(/^TRK-[0-9A-F]{10}$/),
+        status: "SHIPPED",
+      });
+      const after = await ask("order after shipping", ORDER, { id: orderId });
+      // total and status exist only in orders; carrier, trackingNumber and the shipment status only in shipping.
+      expect(after.body).toEqual({
+        data: {
+          order: { id: orderId, total: 42.5, status: "pending", shipment: { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" } },
+        },
+      });
+
+      // 3. A field that does not exist is a GraphQL validation error, and the router stays up.
+      const unknown = await ask("unknown field", 'query { order(id: "1") { nope } }');
+      expect(unknown.status).toBe(200); // the router reports GraphQL errors in the body, as the GraphQL over HTTP convention allows
+      expect(unknown.body.data).toBeUndefined();
+      expect(unknown.body.errors[0].message).toContain('Cannot query field "nope" on type "Order"');
+      expect(await get(port, "/health/ready")).toBe(200);
+
+      // Known limits (docs/decisions.md, D8), asserted so that the day one is fixed, this test says so: shipping
+      // cannot know which orders exist (it has its own database), so it ships an order id that orders never created,
+      // and that shipment is visible through the graph only by asking shipping directly, never through an Order.
+      const ghost = await ask(
+        "shipOrder for an order that does not exist",
+        'mutation { shipOrder(orderId: "999999", carrier: "ups") { carrier status } }',
+      );
+      expect(ghost.body.data.shipOrder).toEqual({ carrier: "ups", status: "SHIPPED" });
+      expect(
+        (await ask("shipment of the unknown order, asked directly", 'query { shipment(orderId: "999999") { carrier status } }')).body.data
+          .shipment,
+      ).toEqual({
+        carrier: "ups",
+        status: "SHIPPED",
+      });
+      expect((await ask("the unknown order itself", 'query { order(id: "999999") { id shipment { carrier } } }')).body).toEqual({
+        data: { order: null },
+      });
+    },
+    900_000,
+  );
+
+  it.skipIf(!ready)(
+    `follows the composition: remove shipping drops the field and recreates the router, add brings it back, remove orders is refused${why}`,
+    async () => {
+      // remove shipping, then up: the router is recreated with a configuration that has no shipment.
+      expect(cli(work, ["remove", "shipping"]).code).toBe(0);
+      const removed = cli(work, ["up"]);
+      expect(removed.code, `${removed.out}\n${removed.err}`).toBe(0);
+      const withoutShipping = routerContainer(name)!;
+      expect(withoutShipping.id).not.toBe(firstRouter.id);
+      expect(withoutShipping.hash).not.toBe(firstRouter.hash);
+      expect(containersOf(name, "--format", "{{.Names}}")).not.toContain("shipping-app");
+      await routerReady(port);
+      const gone = await ask("shipment after remove shipping", ORDER, { id: orderId });
+      expect(gone.body.data).toBeUndefined();
+      expect(gone.body.errors[0].message).toContain('Cannot query field "shipment" on type "Order"');
+      // orders alone still works, with the order it kept.
+      const alone = await ask("orders alone", "query($id: ID!) { order(id: $id) { id total status } }", { id: orderId });
+      expect(alone.body).toEqual({ data: { order: { id: orderId, total: 42.5, status: "pending" } } });
+
+      // add shipping again, then up: recreated again, not left stale; the same bricks give the same hash as at the start.
+      expect(cli(work, ["add", "shipping"]).code).toBe(0);
+      const added = cli(work, ["up"]);
+      expect(added.code, `${added.out}\n${added.err}`).toBe(0);
+      const again = routerContainer(name)!;
+      expect(again.id).not.toBe(withoutShipping.id);
+      expect(again.hash).not.toBe(withoutShipping.hash);
+      expect(again.hash).toBe(firstRouter.hash);
+      await routerReady(port);
+      // The shipment is back, and so is its data: the shipping database kept it.
+      const back = await ask("shipment after add shipping", ORDER, { id: orderId });
+      expect(back.body).toEqual({
+        data: {
+          order: { id: orderId, total: 42.5, status: "pending", shipment: { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" } },
+        },
+      });
+
+      // orders cannot be removed while shipping extends its Order entity, and nothing changes: no file, no container.
+      const snapshot = folderHash(work);
+      const refused = cli(work, ["remove", "orders"]);
+      expect(refused.code).toBe(1);
+      expect(refused.err).toMatch(/^error EXTENDS_IN_USE: cannot remove "orders": its entities are still extended by "shipping"/m);
+      console.log(`remove orders: ${refused.err}`);
+      expect(folderHash(work)).toEqual(snapshot);
+      expect(routerContainer(name)!.id).toBe(again.id);
+      expect(await get(port, "/health/ready")).toBe(200);
+    },
+    900_000,
+  );
+
+  it.skipIf(!ready)(
+    `after down there is no router container, nothing is published and the volumes are kept; up brings the graph and its data back${why}`,
+    async () => {
+      const down = cli(work, ["down"]);
+      expect(down.code, down.err).toBe(0);
+      expect(containersOf(name, "--format", "{{.Names}}").trim()).toBe("");
+      expect(routerContainer(name)).toBeUndefined();
+      // Nothing listens on the published port any more.
+      await expect(get(port, "/health/ready")).rejects.toThrow();
+      // down never deletes what generate wrote, so the configuration is still there; and no volume is deleted (D3).
+      expect(readFileSync(join(work, ".generated/compose/router-config.json"), "utf8")).toContain('"subgraphs"');
+      const volumes = spawnSync("docker", ["volume", "ls", "--quiet", "--filter", `name=${name}_`], { encoding: "utf8" })
+        .stdout.trim()
+        .split("\n");
+      expect(volumes).toEqual([`${name}_postgres-db-data`]);
+      console.log(
+        `after down: containers=[${containersOf(name, "--format", "{{.Names}}").trim()}] volumes=[${volumes.join(", ")}] router-config.json kept`,
+      );
+
+      // up again brings the whole graph back, with the data of both databases.
+      const again = cli(work, ["up"]);
+      expect(again.code, `${again.out}\n${again.err}`).toBe(0);
+      await routerReady(port);
+      const back = await through(port, "order after down and up", ORDER, { id: orderId });
+      expect(back.body).toEqual({
+        data: {
+          order: { id: orderId, total: 42.5, status: "pending", shipment: { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" } },
+        },
+      });
+    },
+    300_000,
+  );
+});
+
+describe("a platform with no subgraph", () => {
+  it.skipIf(!ready)(
+    `gets no router container and publishes nothing${why}`,
+    () => {
+      const name = "pbtest-nosubgraph";
+      const work = project(name, []);
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "postgres"],
+      ])
+        expect(cli(work, args).code).toBe(0);
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const table = containersOf(name, "--format", "table {{.Names}}\t{{.Image}}\t{{.Ports}}");
+      console.log(`docker ps (project ${name}):\n${table}`);
+      expect(containersOf(name, "--format", "{{.Names}}")).not.toContain("router");
+      expect(routerContainer(name)).toBeUndefined();
+      // The database port exists inside the container only: no host mapping at all.
+      expect(table).not.toContain("->");
+      expect(existsSync(join(work, ".generated/compose/router-config.json"))).toBe(false);
+    },
+    300_000,
   );
 });
