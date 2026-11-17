@@ -496,6 +496,21 @@ end yet.
   (case 3b). The `extends` field says it, and plugbricks checks it (`EXTENDS_ENTITY_MISSING`).
   The other direction is not checked: a brick that defines an entity another brick owns, without
   listing it in `extends`, composes too.
+- **Known limits, observed through the router on Docker Compose (4b-4, 2026-11-17).** Neither is fixed
+  on purpose; the end-to-end test asserts the first, so that fixing it makes the test say so.
+  - **`shipOrder` accepts an order id that does not exist.** Shipping has its own database and cannot
+    know which orders exist. Through the router: `mutation { shipOrder(orderId: "999999", carrier: "ups")
+    { carrier status } }` answers `{"data":{"shipOrder":{"carrier":"ups","status":"SHIPPED"}}}`; the
+    shipment is then visible only by asking shipping directly, `{ shipment(orderId: "999999") { carrier
+    status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`, and never through an
+    `Order`: `{ order(id: "999999") { id shipment { carrier } } }` answers `{"data":{"order":null}}`.
+    The shipment of an order that was never created is an orphan row in the shipping database.
+  - **No implicit `extends` detection.** With the `extends` field removed from the shipping manifest,
+    `add` succeeds, the federation is `orders, shipping`, and through the router the graph behaves the
+    same: `{ order(id: "1") { id total shipment { carrier status } } }` answers
+    `{"data":{"order":{"id":"1","total":10,"shipment":{"carrier":"dhl","status":"SHIPPED"}}}}`. What is
+    lost is the protection: `remove orders` is then accepted (exit 0), because nothing says shipping
+    depends on it, and shipping alone keeps defining `Order`, so the graph silently loses the order fields.
 - **The lock:** a `federation` section, only when at least one brick serves a subgraph: the
   composer's name and version, `routerCompatibilityVersion`, the sorted list of subgraphs and the
   sha256 of the federated schema (its definitions sorted by kind and name, then printed). No date.
@@ -529,9 +544,11 @@ end yet.
 
 ## D9. The router is rendered by plugbricks and is not a brick; loopback only
 
-- **Status:** implemented for the rendering (milestone 4, step 4b-3). The router has been run by hand
-  against its image with fake subgraphs; no end-to-end test runs it yet (4b-4 on Compose, 4b-5 on
-  Kubernetes).
+- **Status:** implemented (milestone 4, steps 4b-3 and 4b-4). 4b-3 rendered it and ran it by hand against its
+  image with fake subgraphs. 4b-4 tests it on Docker Compose with the real orders and shipping APIs and real
+  databases, with real requests through it (the `e2e-compose` test "the router in front of orders and
+  shipping"). On Kubernetes, the k3d CI job deploys it (see below); requests through it on a cluster, and a
+  cross-check of its configuration against `wgc router compose`, are 4b-5.
 - **Decision:**
   - **Not a brick.** A brick declares exec probes and a wait step that runs a shell in an image. The
     Cosmo router image (`ghcr.io/wundergraph/cosmo/router:0.372.0`, pinned by the digest of its
@@ -579,13 +596,16 @@ end yet.
     It therefore runs as uid/gid 65532 with a read-only root filesystem and no capability on both
     runtimes (`runAsNonRoot`, `runAsUser`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`,
     `drop: [ALL]` and the `RuntimeDefault` seccomp profile on Kubernetes). Its 3002 port is above 1024.
-- **Verified on Docker only:** `runAsNonRoot` (a numeric `runAsUser` 65532), `readOnlyRootFilesystem` and the
-  HTTP probes were verified by running the image with Docker (`--user`, `--read-only`, `curl` on the health paths),
-  not on a kubelet. They are verified on a kubelet only by the k3d CI job, which runs the router for the first
-  time when this is merged; until it is green, treat the Kubernetes security context and probes as unverified.
-- **Not verified:** the router on a Kubernetes cluster (no cluster was used); `securityContext` and the
-  probes on a real kubelet; a query that goes through the router to real subgraphs (the manual check used
-  fake ones); macOS and Windows (the rendering is pure text, the router runs only in Linux containers);
+- **Verified on Docker first, then on a kubelet:** `runAsNonRoot` (a numeric `runAsUser` 65532),
+  `readOnlyRootFilesystem` and the HTTP probes were first verified by running the image with Docker (`--user`,
+  `--read-only`, `curl` on the health paths). The k3d CI job of pull request 9 (workflow runs 44087159424 and
+  44091435148, job "kubernetes (k3d)", both green) then deployed the router on a real cluster: its test expects
+  the four pods `orders-app`, `postgres-db`, `router` and `scratch-redis` to be `Running`, and `up` waits for the
+  router's rollout, which waits for its readiness probe. So the kubelet accepted the security context and the
+  readiness probe passed. Not shown there: a request through the router on the cluster, and the liveness probe
+  failing or not over time.
+- **Not verified:** a request through the router on a Kubernetes cluster (4b-5); macOS and Windows (the
+  rendering is pure text, the router runs only in Linux containers, the end-to-end tests are skipped there);
   that the router keeps working after an upgrade of its image (the digest is pinned on purpose).
 - **Node versions:** the router configuration loads `@wundergraph/cosmo-shared`, an ES module, with
   `require()`. Run on 2026-11-17 in containers: Node 20.18.3 fails with `ERR_REQUIRE_ESM`; Node 20.19.0 and
