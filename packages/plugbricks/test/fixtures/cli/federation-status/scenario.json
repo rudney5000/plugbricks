@@ -1,0 +1,102 @@
+{
+  "description": "status compares the schema hash only: another composer version is reported and accepted, another schema hash is a problem",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: sales; composed with @wundergraph/composition 0.68.1"
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "federation": {
+              "composer": {
+                "name": "@wundergraph/composition",
+                "version": "0.0.1"
+              },
+              "routerCompatibilityVersion": "1",
+              "subgraphs": [
+                "sales"
+              ],
+              "schemaSha256": "bf5ad17552486d0043ebf3d0cb17bfffff03e64296acd8dcb23d84dc3a9e8eee"
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "(platform.lock was written with @wundergraph/composition 0.0.1)",
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "federation": {
+              "composer": {
+                "name": "@wundergraph/composition",
+                "version": "0.68.1"
+              },
+              "routerCompatibilityVersion": "1",
+              "subgraphs": [
+                "sales"
+              ],
+              "schemaSha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "FEDERATION_CHANGED"
+      ],
+      "stderr": "does not match platform.lock",
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "federation": {
+              "composer": {
+                "name": "@wundergraph/composition",
+                "version": "0.68.1"
+              },
+              "routerCompatibilityVersion": "1",
+              "subgraphs": [
+                "sales"
+              ],
+              "schemaSha256": "bf5ad17552486d0043ebf3d0cb17bfffff03e64296acd8dcb23d84dc3a9e8eee"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -60,6 +60,18 @@ export const MESSAGES = {
   LOCK_OUT_OF_SYNC: 'platform.json and platform.lock disagree on brick "{brick}"; {detail}',
   LOCK_INCONSISTENT: "platform.lock lists volume {volume} {detail}; fix the lock before going further",
 
+  // Federation: the subgraphs of the installed bricks (add, remove, status)
+  COMPOSITION_FAILED: "the subgraphs of the installed bricks do not compose: {detail}",
+  SUBGRAPH_SCHEMA_INVALID: 'the subgraph schema {file} of brick "{brick}" is not valid GraphQL (line {line}, column {column}): {detail}',
+  EXTENDS_OWNER_MISSING: 'brick "{brick}" extends entity "{entity}" of brick "{owner}", which is not installed; add "{owner}" first',
+  EXTENDS_ENTITY_MISSING:
+    'brick "{brick}" extends entity "{entity}" of brick "{owner}", but the subgraph of "{owner}" ({file}) does not define it: an entity is an object type with @key',
+  EXTENDS_ENTITY_NOT_DECLARED:
+    'brick "{brick}" lists entity "{entity}" in extends, but its own subgraph schema {file} does not declare it: an entity is an object type with @key',
+  EXTENDS_IN_USE: 'cannot remove "{brick}": its entities are still extended by {consumers}',
+  FEDERATION_CHANGED:
+    "the federated schema of the installed subgraphs (sha256 {actual}) does not match platform.lock ({locked}); a subgraph changed since it was added",
+
   // add
   BRICK_NOT_FOUND: "no plugin.json found at {path}",
   BRICK_PATH_NOT_PORTABLE: 'brick "{brick}" cannot be used on every OS: {detail}',

@@ -1,0 +1,30 @@
+{
+  "description": "two subgraphs compose, the second one extends the Order entity of the first; the lock records the federation, and status shows it",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/shipping"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: sales, shipping; composed with @wundergraph/composition 0.68.1"
+    }
+  ]
+}

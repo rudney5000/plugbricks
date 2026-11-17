@@ -1,0 +1,30 @@
+{
+  "description": "a subgraph that uses an undefined type is refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/undefined-type"
+      ],
+      "exit": 1,
+      "codes": [
+        "COMPOSITION_FAILED"
+      ],
+      "unchanged": true,
+      "stderr": "The type \"Carrier\" was referenced in the schema, but it was never defined"
+    }
+  ]
+}

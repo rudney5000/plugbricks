@@ -1,0 +1,31 @@
+{
+  "description": "the same entity field with two types is refused, naming both bricks, the type and the field; nothing changes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/shipping-total"
+      ],
+      "exit": 1,
+      "codes": [
+        "COMPOSITION_FAILED",
+        "COMPOSITION_FAILED"
+      ],
+      "unchanged": true,
+      "stderr": "The field \"Order.total\" could not be federated due to incompatible types across subgraphs"
+    }
+  ]
+}

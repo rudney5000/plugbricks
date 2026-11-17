@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path, { basename, dirname, join, resolve, sep } from "node:path";
+import { composeSubgraphs, composerVersion, type FederationLock, type SubgraphInput } from "./federation.js";
 import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
@@ -60,6 +61,8 @@ export interface Lock {
   retainedVolumes: VolumeRef[];
   /** The only volumes a driver may delete, and only with --prune-volumes. */
   pendingDeletion: VolumeRef[];
+  /** Only when at least one installed brick serves a subgraph. */
+  federation?: FederationLock;
 }
 
 /** A refusal. Carries one or more issues; the first one gives the headline code. */
@@ -221,10 +224,11 @@ export function brickIntegrity(dir: string, brick: string): string {
 interface Manifest {
   name: string;
   version: string;
-  services: { name: string; volumes?: { name: string; retention?: "retain" | "delete" }[] }[];
+  services: { name: string; port: number; volumes?: { name: string; retention?: "retain" | "delete" }[] }[];
   provides?: Record<string, { provision: { command: string[]; scripts?: string } }>;
   requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number }>;
-  subgraph?: { schema: string };
+  subgraph?: { service: string; schema: string; path?: string };
+  extends?: { plugin: string; entities: string[] }[];
 }
 
 /** Files a manifest points at must ship with the brick. */
@@ -267,7 +271,11 @@ export function initPlatform(root: string, name?: string): { name: string; creat
   if (!NAME.test(platformName)) fail("PLATFORM_INVALID_NAME", { name: platformName });
 
   mkdirSync(join(dir, BRICKS_DIR), { recursive: true });
-  const platform: Platform = { $schema: PLATFORM_SCHEMA_ID, name: platformName, bricks: {} };
+  const platform: Platform = {
+    $schema: PLATFORM_SCHEMA_ID,
+    name: platformName,
+    bricks: {},
+  };
   writeFileAtomic(join(dir, LOCK_FILE), canonicalJson(emptyLock()));
   writeFileAtomic(join(dir, PLATFORM_FILE), canonicalJson(platform));
   return { name: platformName, created: [PLATFORM_FILE, LOCK_FILE, `${BRICKS_DIR}/`] };
@@ -346,12 +354,80 @@ export function confirmPruned(root: string, deleted: VolumeRef[]): void {
   save(project);
 }
 
+/** The federation section exists only while at least one subgraph is installed. */
+function setFederation(lock: Lock, federation: FederationLock | undefined): void {
+  if (federation) lock.federation = federation;
+  else delete lock.federation;
+}
+
 function save(project: Project): void {
   project.lock.retainedVolumes.sort(byKey);
   project.lock.pendingDeletion.sort(byKey);
   // Lock first: if the second write fails, readProject reports LOCK_OUT_OF_SYNC instead of silently drifting.
   writeFileAtomic(join(project.root, LOCK_FILE), canonicalJson(project.lock));
   writeFileAtomic(join(project.root, PLATFORM_FILE), canonicalJson(project.platform));
+}
+
+// ---------- federation ----------
+
+/** Where the router will reach a brick's subgraph: the runtime name of its service, its port, the manifest's path. */
+function subgraphUrl(brick: string, m: Manifest): string {
+  const service = m.services.find((s) => s.name === m.subgraph!.service);
+  return `http://${brick}-${m.subgraph!.service}:${service?.port ?? 80}${m.subgraph!.path ?? "/graphql"}`;
+}
+
+/** The subgraph of a brick, or undefined when it has none. `dir` is where its files are, `file` how messages name them. */
+function subgraphOf(brick: string, m: Manifest, dir: string, shown: (rel: string) => string): SubgraphInput | undefined {
+  if (!m.subgraph) return undefined;
+  return {
+    brick,
+    file: shown(m.subgraph.schema),
+    sdl: readFileSync(join(dir, m.subgraph.schema), "utf8"),
+    url: subgraphUrl(brick, m),
+    extends: m.extends ?? [],
+  };
+}
+
+/**
+ * The subgraphs of the installed bricks (read from their copies in .platform/bricks), without
+ * `leaving`, plus `joining`. A copy that cannot be read is listed in `unreadable` and left out,
+ * like in the runtime name check: "status" says which brick it is.
+ */
+function installedSubgraphs(
+  project: Project,
+  leaving?: string,
+  joining?: SubgraphInput,
+): { inputs: SubgraphInput[]; manifests: Map<string, Manifest>; unreadable: Issue[] } {
+  const inputs: SubgraphInput[] = [];
+  const manifests = new Map<string, Manifest>();
+  const unreadable: Issue[] = [];
+  for (const brick of Object.keys(project.lock.bricks).sort()) {
+    if (brick === leaving) continue;
+    const dir = join(project.root, BRICKS_DIR, brick);
+    try {
+      const m = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf8")) as Manifest;
+      const input = subgraphOf(brick, m, dir, (rel) => `${BRICKS_DIR}/${brick}/${rel}`);
+      manifests.set(brick, m);
+      if (input) inputs.push(input);
+    } catch (e) {
+      unreadable.push(issue("BRICK_UNREADABLE", "", { brick, detail: (e as Error).message }));
+    }
+  }
+  if (joining) inputs.push(joining);
+  return { inputs, manifests, unreadable };
+}
+
+/**
+ * Composes the subgraphs the platform would have; throws the refusals, returns what the lock records.
+ * An unreadable installed copy only matters when there is a federation to get right: a subgraph is
+ * joining, or the lock already records one (the broken brick may be one of its subgraphs).
+ */
+function checkFederation(project: Project, leaving?: string, joining?: SubgraphInput): FederationLock | undefined {
+  const { inputs, unreadable } = installedSubgraphs(project, leaving, joining);
+  if (unreadable.length && (joining || project.lock.federation)) throw new PlugbricksError(unreadable);
+  const result = composeSubgraphs(inputs);
+  if (!result.ok) throw new PlugbricksError(result.issues);
+  return result.federation;
 }
 
 // ---------- add ----------
@@ -473,6 +549,12 @@ export function addBrick(root: string, brickPath: string): AddResult {
   // Runtime names (services, tasks, volumes, secrets) must stay unique with the installed bricks,
   // or "generate" could never succeed. Checked on the plan the platform would have after this add.
   checkRuntimeNames(project, m.name, raw as BrickManifest, entry);
+  // The subgraphs must compose with the installed ones, and what `extends` promises must exist.
+  const federation = checkFederation(
+    project,
+    undefined,
+    subgraphOf(m.name, m, brickDir, (rel) => portableRelative(project.root, join(brickDir, rel)) || rel),
+  );
 
   // Copy through a temp dir + rename so .platform/bricks/<name> is never half-written.
   const dest = join(project.root, BRICKS_DIR, m.name);
@@ -503,6 +585,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   const cancelledDeletions = lock.pendingDeletion.filter((r) => r.brick === m.name);
   lock.pendingDeletion = lock.pendingDeletion.filter((r) => r.brick !== m.name);
   platform.bricks[m.name] = { source };
+  setFederation(lock, federation);
   save(project);
   return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions };
 }
@@ -532,6 +615,14 @@ export function removeBrick(root: string, name: string): RemoveResult {
   });
   if (inUse.length) throw new PlugbricksError(inUse);
 
+  // Entities of this brick that an installed brick extends, then composition of what stays.
+  const { manifests } = installedSubgraphs(project, name);
+  const extenders = [...manifests]
+    .filter(([, other]) => (other.extends ?? []).some((e) => e.plugin === name))
+    .map(([other]) => `"${other}"`);
+  if (extenders.length) throw new PlugbricksError([issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })]);
+  const federation = checkFederation(project, name);
+
   const ref = (v: LockedBrick["volumes"][number]): VolumeRef => ({ brick: name, service: v.service, name: v.name });
   const retainedVolumes = brick.volumes.filter((v) => v.retention === "retain").map(ref);
   const pendingDeletion = brick.volumes.filter((v) => v.retention === "delete").map(ref);
@@ -545,6 +636,7 @@ export function removeBrick(root: string, name: string): RemoveResult {
   add(lock.retainedVolumes, retainedVolumes);
   add(lock.pendingDeletion, pendingDeletion);
   delete platform.bricks[name];
+  setFederation(lock, federation);
   save(project);
 
   const copy = join(project.root, BRICKS_DIR, name);
@@ -560,6 +652,8 @@ export interface StatusResult {
   capabilities: Record<string, string>;
   retainedVolumes: VolumeRef[];
   pendingDeletion: VolumeRef[];
+  /** Present when at least one subgraph is installed. The composer version is informational. */
+  federation?: { subgraphs: string[]; composer: string; lockedComposer?: string; schemaSha256: string };
   /** Empty when everything matches the lock. */
   problems: Issue[];
 }
@@ -583,12 +677,43 @@ export function platformStatus(root: string): StatusResult {
       }
       return { name, ...lock.bricks[name] };
     });
+  const federation = federationStatus({ root: dir, platform, lock }, problems);
   return {
     name: platform.name,
     bricks,
     capabilities: lock.capabilities,
     retainedVolumes: lock.retainedVolumes,
     pendingDeletion: lock.pendingDeletion,
+    ...(federation ? { federation } : {}),
     problems,
+  };
+}
+
+/**
+ * Composes again and compares the schema hash with the lock. Only a different hash is a problem:
+ * a different composer version that produces the same schema is reported, not refused. A broken
+ * brick is already reported above, so composition is skipped when its copy cannot be read.
+ */
+function federationStatus(project: Project, problems: Issue[]): StatusResult["federation"] {
+  const locked = project.lock.federation;
+  const { inputs, unreadable } = installedSubgraphs(project);
+  if (unreadable.length) return undefined;
+  const result = composeSubgraphs(inputs);
+  if (!result.ok) {
+    problems.push(...result.issues);
+    return undefined;
+  }
+  const actual = result.federation;
+  if (actual?.schemaSha256 !== locked?.schemaSha256) {
+    problems.push(issue("FEDERATION_CHANGED", "", { actual: actual?.schemaSha256 ?? "none", locked: locked?.schemaSha256 ?? "none" }));
+  }
+  if (!actual) return undefined;
+  return {
+    subgraphs: actual.subgraphs,
+    composer: `${actual.composer.name} ${composerVersion()}`,
+    ...(locked && locked.composer.version !== actual.composer.version
+      ? { lockedComposer: `${locked.composer.name} ${locked.composer.version}` }
+      : {}),
+    schemaSha256: actual.schemaSha256,
   };
 }

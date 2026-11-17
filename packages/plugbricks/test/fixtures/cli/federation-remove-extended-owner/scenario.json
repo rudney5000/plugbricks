@@ -1,0 +1,48 @@
+{
+  "description": "removing a brick whose entity is extended by an installed brick is refused; removing in the right order works and drops the federation section",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/sales"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/shipping"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "sales"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_IN_USE"
+      ],
+      "unchanged": true,
+      "stderr": "its entities are still extended by \"shipping\""
+    },
+    {
+      "run": [
+        "remove",
+        "shipping"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "sales"
+      ]
+    }
+  ]
+}

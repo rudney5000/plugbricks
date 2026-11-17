@@ -1,0 +1,17 @@
+{
+  "name": "sales",
+  "version": "0.1.0",
+  "description": "Owns the Order entity.",
+  "services": [
+    {
+      "name": "api",
+      "image": "node:22.23.5-alpine",
+      "port": 4000
+    }
+  ],
+  "subgraph": {
+    "service": "api",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}

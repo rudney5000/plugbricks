@@ -165,6 +165,10 @@ export function main(argv: string[], io: Io): number {
             ];
             io.stdout(`  ${b.name} ${b.version}${parts.length ? `  ${parts.join("; ")}` : ""}`);
           }
+          if (s.federation) {
+            const locked = s.federation.lockedComposer ? ` (platform.lock was written with ${s.federation.lockedComposer})` : "";
+            io.stdout(`Federation: ${s.federation.subgraphs.join(", ")}; composed with ${s.federation.composer}${locked}`);
+          }
           io.stdout(`Retained volumes: ${s.retainedVolumes.length ? s.retainedVolumes.map(vol).join(", ") : "none"}`);
           io.stdout(`Pending deletion: ${s.pendingDeletion.length ? s.pendingDeletion.map(vol).join(", ") : "none"}`);
         }

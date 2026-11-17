@@ -1,0 +1,25 @@
+{
+  "name": "undeclared",
+  "version": "0.1.0",
+  "description": "Lists Order in extends but never declares it.",
+  "services": [
+    {
+      "name": "api",
+      "image": "node:22.23.5-alpine",
+      "port": 4000
+    }
+  ],
+  "subgraph": {
+    "service": "api",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  },
+  "extends": [
+    {
+      "plugin": "sales",
+      "entities": [
+        "Order"
+      ]
+    }
+  ]
+}

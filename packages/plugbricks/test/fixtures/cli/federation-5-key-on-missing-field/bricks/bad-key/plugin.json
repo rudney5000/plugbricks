@@ -1,0 +1,17 @@
+{
+  "name": "bad-key",
+  "version": "0.1.0",
+  "description": "Declares a @key on a field that does not exist.",
+  "services": [
+    {
+      "name": "api",
+      "image": "node:22.23.5-alpine",
+      "port": 4000
+    }
+  ],
+  "subgraph": {
+    "service": "api",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}
