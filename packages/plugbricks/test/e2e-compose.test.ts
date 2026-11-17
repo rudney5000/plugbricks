@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
+import { get, through, until } from "./helpers/graphql.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
 // down. Skipped, with the reason in the title, where no Linux Docker engine answers (macOS and
@@ -206,41 +207,7 @@ describe("Docker Compose driver against a real Docker engine", () => {
 // created in the first and read in the second): it saves two builds and two `up` of the same stack, about
 // a minute. They are independent of every other project of this file, which has its own name and port.
 
-// The shape of "data" depends on the query sent, so it is not typed here.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Answer = { status: number; body: any };
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function until(what: string, check: () => Promise<boolean>, timeoutMs = 60_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    try {
-      if (await check()) return;
-    } catch {
-      // not yet: the connection is refused until the router listens
-    }
-    if (Date.now() > deadline) throw new Error(`gave up waiting for ${what} after ${timeoutMs / 1000}s`);
-    await sleep(500);
-  }
-}
-
-const get = async (port: number, path: string): Promise<number> => (await fetch(`http://127.0.0.1:${port}${path}`)).status;
 const routerReady = (port: number) => until(`the router on ${port}`, async () => (await get(port, "/health/ready")) === 200);
-
-/** One GraphQL request to the router, and its real answer (printed for the record). */
-async function through(port: number, label: string, query: string, variables?: Record<string, unknown>): Promise<Answer> {
-  const res = await fetch(`http://127.0.0.1:${port}/graphql`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query, variables }),
-  });
-  const answer = { status: res.status, body: await res.json() };
-  console.log(
-    `${label}\n  request:  ${query.replace(/\s+/g, " ").trim()}${variables ? ` ${JSON.stringify(variables)}` : ""}\n  response: HTTP ${answer.status} ${JSON.stringify(answer.body)}`,
-  );
-  return answer;
-}
 
 /** The router container of a project: its id and the configuration hash it was created with. */
 function routerContainer(project: string): { id: string; hash: string } | undefined {
