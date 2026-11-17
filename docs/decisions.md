@@ -473,6 +473,13 @@ end yet.
   The error texts of the composer are shown as they are (it names the bricks, because a subgraph
   is named after its brick, the type and the field) and are not parsed: only their codes and
   structure would be stable with Apollo's library, and we accepted that trade.
+- **`extends` exercised by a real second API (4b-2, 2026-11-17):** `examples/shipping` extends
+  `Order` of `examples/orders`. A test composes all the example bricks together and expects
+  success; scenarios on the real example bricks show `EXTENDS_OWNER_MISSING` while orders is not
+  installed, a successful add after it, and `EXTENDS_IN_USE` when orders is removed. On Docker
+  Compose the two APIs ran on their own databases: the shipping role is refused on the orders
+  database (`permission denied for database "orders"`), and shipping answers `_entities` for an
+  `Order` it never stored. The router itself (4b-3) was not involved.
 - **Where it runs:** `add` and `remove` compose the subgraphs the platform would have, before any
   file is written; `status` composes again. The library is loaded the first time it is needed:
   a platform with no subgraph never loads it. It is a CommonJS package, loaded with `require`, so
