@@ -204,7 +204,7 @@ end yet.
 - **Status:** implemented (milestone 3), replaces D1 and D2.
 - **Who decided:** the decision to drop Score was taken by Dedy (the project owner). The
   verification of the Kubernetes driver on a real cluster was postponed by Dedy, and is the end-to-end
-  test `packages/plugbricks/test/e2e-k8s.test.ts` (CI job "kubernetes (k3d)"; added 2026-11-17).
+  test `packages/plugbricks/test/e2e-k8s.test.ts` (CI job "kubernetes (k3d)"; added 2026-11-17, first green on pull request 4).
 - **Context:** first run of score-compose 0.50.0 (2026-11-17). Only score-compose was looked at
   for this decision; **no reason below was checked with score-k8s**. The three reasons are not
   equally solid, and the evidence below was re-run on 2026-11-17 to say exactly what it shows.
@@ -226,11 +226,11 @@ end yet.
   would then depend on an external binary, its state file (`.score-compose/state.yaml`, with
   secrets in clear) and its version, and would no longer be a pure function plan → files. That
   trade-off, not a failure of Score, is the reason for the decision.
-  **Kubernetes is an extrapolation.** score-k8s 0.22.0 and 0.23.0 were tested earlier on a k3d
-  cluster, only for the init-container wait of D2, which worked. None of the three reasons above
-  was verified with score-k8s. Dropping score-k8s rests on the Compose observations and on the
-  dependency argument, and stays an extrapolation until the k3d end-to-end test exists
-  (see Consequences).
+  **Kubernetes: the reasons are an extrapolation, the driver is now verified.** score-k8s 0.22.0
+  and 0.23.0 were tested earlier on a k3d cluster, only for the init-container wait of D2, which
+  worked. None of the three reasons above was verified with score-k8s, so dropping score-k8s
+  still rests on the Compose observations and on the dependency argument. What changed on
+  2026-11-17 is that plugbricks' own Kubernetes driver ran on a real cluster (see Consequences).
 - **Evidence** (score-compose 0.50.0, `linux_amd64` archive sha256
   `7257a7eed0079f92382668ff3ea4abc3158d93bce4b5b2f40b1476d84d313564`, equal to the published
   checksums file; run offline with the built-in provisioners):
@@ -320,10 +320,16 @@ end yet.
 - **Consequences:** `tools.json` no longer pins score-k8s and score-compose; it keeps k3d and
   kubectl for a Kubernetes end-to-end test. The Compose driver is tested end to end against a
   real Docker engine (`test/e2e-compose.test.ts`, skipped with its reason where no Linux engine
-  answers). The Kubernetes driver is tested by golden files and a fake `kubectl`; **it has not
-  run on a cluster yet**, so the Kubernetes half of this decision is not yet backed by a
-  running system. The decision stands until that test exists; if it shows the driver needs
-  more than a patch to be reliable, revisit score-k8s then, with that evidence.
+  answers). The Kubernetes driver is tested by golden files and a fake `kubectl`, and **since
+  2026-11-17 also on a real k3d cluster** (`test/e2e-k8s.test.ts`, CI job "kubernetes (k3d)").
+  First green run, pull request 4 (workflow run 44053589871): `up` with postgres, orders and a
+  volume brick (three pods `Running`), a GraphQL `createOrder`, `down` keeping both
+  PersistentVolumeClaims, `remove` then `up --prune-volumes` deleting only the pending one, and
+  `WAIT_TIMEOUT` after 304 s; the job took 6 min 13 s, of which the `WAIT_TIMEOUT` test is about
+  five minutes (Kubernetes has no fast failure for a crash-looping init container, so `up` waits
+  for the rollout deadline). The decision stands. That run shows the driver works; it does not
+  compare it with score-k8s, so the Score reasons above stay as evidence, not as a measurement.
+  Not yet tested on a cluster: killing the database pod and running `up` again (roadmap).
   - plugbricks now owns what Score provided: the YAML for Compose and Kubernetes objects
     (`src/yaml.ts`, `src/drivers/`), the start order, and the wait and provision steps.
 - **Kubernetes safety** (added 2026-11-17): `up` and `down` with `--runtime k8s` never use the

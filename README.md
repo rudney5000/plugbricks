@@ -2,7 +2,7 @@
 
 Add plugins and infrastructure bricks (PostgreSQL, a message queue, …) to a federated GraphQL project, on Docker Compose or Kubernetes, from a single `platform.json`.
 
-Status: **milestone 4, first part merged** — the real `orders` API, a GraphQL subgraph with its own database, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. The Compose driver has run end to end against Docker; **the Kubernetes driver has not run on a cluster yet** (golden files and a fake `kubectl` only). The Cosmo router and a second API with `extends` are still to come.
+Status: **milestone 4, first part merged** — the real `orders` API, a GraphQL subgraph with its own database, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17). The Cosmo router and a second API with `extends` are still to come.
 
 ## Use
 
@@ -115,7 +115,7 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
 2. **CLI core** — done: `init`, `add`, `remove`, `status`, `platform.json` / `platform.lock`, `npm create plugbricks`
    - Manifest: `requires.<cap>.timeoutSeconds`, `provides.<cap>.ready`, healthcheck `timeoutSeconds` and `startPeriodSeconds` (from experiment D).
 3. **Drivers** — done: `generate`, `up`, `down`, `up --prune-volumes` on Docker Compose and Kubernetes, rendered by plugbricks itself (D5, Score dropped); generated secrets (D6); templates checked at `add`.
-   - Written, not yet seen green: the Kubernetes end-to-end test (`packages/plugbricks/test/e2e-k8s.test.ts`) and the CI job "kubernetes (k3d)": `up` with postgres and orders, a GraphQL call, `down`, `remove` + `up --prune-volumes`, `WAIT_TIMEOUT`, on a throwaway k3d cluster named `pbtest-*` (it is skipped for any other context).
+   - Done: the Kubernetes end-to-end test (`packages/plugbricks/test/e2e-k8s.test.ts`) and the CI job "kubernetes (k3d)": `up` with postgres and orders, a GraphQL call, `down`, `remove` + `up --prune-volumes`, `WAIT_TIMEOUT`, on a throwaway k3d cluster named `pbtest-*` (it is skipped for any other context). About 6 minutes, most of it the `WAIT_TIMEOUT` test.
    - Later pass: kill the database pod, then `up` again, and check that the platform recovers and the data is kept.
 4. **Federation**: real APIs, the Cosmo router, composition checked at `add`, a second API with `extends`
    - Done: the `orders` API (`apis/orders`), tested alone and on a platform.
