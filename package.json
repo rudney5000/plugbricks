@@ -19,7 +19,8 @@
     "test:unit": "npm run test:unit --workspaces --if-present",
     "coverage": "npm run coverage --workspaces --if-present",
     "quality": "npm run format:check && npm run lint && npm run typecheck && npm test",
-    "hooks:install": "git config core.hooksPath .githooks"
+    "hooks:install": "git config core.hooksPath .githooks",
+    "crosscheck:install": "npm ci --prefix tools/wgc-crosscheck"
   },
   "overrides": {
     "@graphql-tools/utils": "12.1.0"
