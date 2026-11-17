@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
@@ -28,6 +28,17 @@ function project(name: string, bricks: string[]): string {
   // A project left over by an interrupted run would keep its volume and its old passwords.
   spawnSync("docker", ["compose", "--project-name", name, "down", "--volumes", "--remove-orphans"], { encoding: "utf8" });
   return work;
+}
+
+/**
+ * A platform with a subgraph gets a router published on 127.0.0.1:<router.port>. These projects stay up
+ * until the end of the file, so each one gets its own port: two routers on 4000 would collide.
+ */
+function routerPort(work: string, port: number): void {
+  const file = join(work, "platform.json");
+  const platform = JSON.parse(readFileSync(file, "utf8"));
+  platform.router = { port };
+  writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
 }
 
 function cli(work: string, args: string[]): { code: number; out: string; err: string } {
@@ -108,10 +119,11 @@ describe("Docker Compose driver against a real Docker engine", () => {
         ["add", "shop"],
       ])
         expect(cli(work, args).code).toBe(0);
+      routerPort(work, 14101);
       const up = cli(work, ["up"]);
       expect(up.code, up.err).toBe(0);
 
-      // Nothing is published on the host: query the API by its network name from a throwaway container.
+      // Only the router is published on the host (4b-4 tests it): query the API by its network name from a throwaway container.
       const gql = (query: string) => {
         const r = spawnSync(
           "docker",
@@ -188,6 +200,7 @@ describe("Docker Compose driver against a real Docker engine", () => {
         ["add", "shipping"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
+      routerPort(work, 14102);
       const up = cli(work, ["up"]);
       expect(up.code, `${up.out}\n${up.err}`).toBe(0);
 
@@ -197,8 +210,9 @@ describe("Docker Compose driver against a real Docker engine", () => {
         { encoding: "utf8" },
       );
       console.log(`docker ps (project ${name}):\n${ps.stdout}`);
-      // Nothing is published on the host: the router does not exist yet, and the APIs are reached by their network names.
-      expect(ps.stdout).not.toMatch(/0\.0\.0\.0:|127\.0\.0\.1:/);
+      // The router is the only thing published on the host, on the loopback address; the APIs are reached by their network names.
+      expect(ps.stdout).not.toMatch(/0\.0\.0\.0:|\[::\]:/);
+      expect(ps.stdout.match(/127\.0\.0\.1:\d+->/g)).toEqual(["127.0.0.1:14102->"]);
 
       const psql = (sql: string) =>
         spawnSync("docker", ["compose", "--project-name", name, "exec", "-T", "postgres-db", "psql", "-U", "postgres", "-Atc", sql], {

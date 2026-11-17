@@ -119,9 +119,12 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(podList.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual([
         "orders-app",
         "postgres-db",
+        // orders serves a subgraph, so plugbricks also deploys the router (4b-3). This is the first time it
+        // runs on a cluster: its probes, security context and image pull are checked here.
+        "router",
         "scratch-redis",
       ]);
-      expect(podList.map((p) => p.status.phase)).toEqual(["Running", "Running", "Running"]);
+      expect(podList.map((p) => p.status.phase)).toEqual(["Running", "Running", "Running", "Running"]);
 
       // Nothing is published outside the cluster: call the API by its Service name from inside a pod.
       const gql = (query: string) => {

@@ -1,0 +1,34 @@
+{
+  "description": "a platform whose bricks have no subgraph gets no router and no router-config.json, on Compose and on Kubernetes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ]
+    }
+  ],
+  "absent": [
+    ".generated/compose/router-config.json",
+    ".generated/k8s/router-config.json"
+  ]
+}

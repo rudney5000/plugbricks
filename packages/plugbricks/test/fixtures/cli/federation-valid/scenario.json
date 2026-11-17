@@ -25,6 +25,12 @@
         "status"
       ],
       "stdout": "Federation: sales, shipping; composed with @wundergraph/composition 0.68.1"
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Router: port 4000 (Compose: 127.0.0.1 only; Kubernetes: ClusterIP service); image ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205"
     }
   ]
 }

@@ -1,0 +1,60 @@
+{
+  "description": "removing the last subgraph removes the router and its configuration on the next generate, on both runtimes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ],
+      "stdout": "  .generated/compose/router-config.json"
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ],
+      "stdout": "  .generated/k8s/router-config.json"
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ]
+    }
+  ],
+  "absent": [
+    ".generated/compose/router-config.json",
+    ".generated/k8s/router-config.json"
+  ]
+}
