@@ -26,6 +26,8 @@ async function gql(query: string, variables?: Record<string, unknown>) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
+  // The shape of "data" depends on the query sent, so it is not typed here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (await res.json()) as { data?: any; errors?: { message: string; extensions?: { code?: string } }[] };
 }
 

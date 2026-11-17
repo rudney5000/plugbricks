@@ -10,7 +10,11 @@ export const LOCK_SCHEMA_ID = `${SCHEMA_BASE_URL}platform-lock.schema.json`;
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 
-/** Loads a schema shipped in ../schemas and refuses to start if its $id is not the expected one. */
+/**
+ * Loads a schema shipped in ../schemas and refuses to start if its $id is not the expected one.
+ * `schema` stays untyped on purpose: MANIFEST_DEFAULTS reads defaults deep inside it by path.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function load(file: string, id: string): { schema: any; validate: ValidateFunction } {
   const schema = JSON.parse(readFileSync(new URL(`../schemas/${file}`, import.meta.url), "utf8"));
   if (schema.$id !== id) throw new Error(`schema ${file} has $id "${schema.$id}", expected "${id}"`);

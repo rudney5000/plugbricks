@@ -4,6 +4,7 @@ dist/
 .secrets/
 *.log
 .test-work/
+coverage/
 
 # Golden files of the CLI scenarios: generated output that the tests compare against.
 !packages/plugbricks/test/fixtures/cli/*/expected/.generated/

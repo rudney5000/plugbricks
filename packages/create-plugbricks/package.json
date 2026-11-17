@@ -10,7 +10,8 @@
   "files": ["bin", "lib", "template"],
   "scripts": {
     "pretest": "npm run build -w plugbricks",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:unit": "npm test"
   },
   "dependencies": {
     "plugbricks": "0.0.1"

@@ -1,0 +1,28 @@
+# Files that must stay byte for byte as they are. Formatting them would change what the tests compare
+# or hash. The same list is in eslint.config.mjs (ignores).
+
+# Test inputs and golden files: scenario bricks, expected platform.json / platform.lock, generated output.
+**/test/fixtures/**
+
+# Bricks shipped as examples: their integrity hash is recorded in golden lock files.
+packages/plugbricks/examples/**
+
+# The project template is copied as is by create-plugbricks.
+packages/create-plugbricks/template/**
+
+# Build output, work folders, dependencies, coverage, runtime files.
+**/dist/**
+**/node_modules/**
+**/.test-work/**
+**/coverage/**
+.generated/**
+.secrets/**
+.platform/**
+
+# Lock files are written by npm.
+package-lock.json
+
+# Markdown and plain files are not formatted by Prettier here (only code, JSON and YAML are).
+*.md
+*.graphql
+Dockerfile

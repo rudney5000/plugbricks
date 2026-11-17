@@ -6,6 +6,15 @@ import { describe, expect, it } from "vitest";
 const file = JSON.parse(readFileSync(new URL("../../../tools.json", import.meta.url), "utf8"));
 const tools = file.tools;
 const images = file.images;
+
+interface PlatformEntry {
+  version: string;
+  available?: boolean;
+  reason?: string;
+  url?: string;
+  sha256?: string;
+  binary: string;
+}
 const PLATFORMS = ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "windows-arm64"];
 const names = Object.keys(tools);
 
@@ -19,7 +28,7 @@ describe("tools.json", () => {
     expect(t.version).toMatch(/^v?\d+\.\d+\.\d+$/);
     expect(t.checksums).toMatch(/^https:\/\//);
     expect(Object.keys(t.platforms).sort()).toEqual([...PLATFORMS].sort());
-    for (const [platform, p] of Object.entries<any>(t.platforms)) {
+    for (const [platform, p] of Object.entries<PlatformEntry>(t.platforms)) {
       expect(p.version, `${name} ${platform}`).toBe(t.version);
       if (p.available === false) {
         expect(p.reason, `${name} ${platform}`).toMatch(/\S/);
@@ -36,7 +45,7 @@ describe("tools.json", () => {
   });
 
   it("no two entries share a sha256", () => {
-    const all = names.flatMap((n) => Object.values<any>(tools[n].platforms).map((p) => p.sha256).filter(Boolean));
+    const all = names.flatMap((n) => Object.values<PlatformEntry>(tools[n].platforms).map((p) => p.sha256).filter(Boolean));
     expect(new Set(all).size).toBe(all.length);
   });
 

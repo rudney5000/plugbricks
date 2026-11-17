@@ -219,7 +219,8 @@ const kubectlBase = (plan: Plan) => ["--namespace", plan.platform];
 function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan: Plan, service: string): Issue[] {
   const r = kubectl(deps, root, target, [...kubectlBase(plan), "get", "pods", "--selector", `${SERVICE_LABEL}=${service}`, "--output", "json"]);
   if (r.status !== 0) return [];
-  let pods: { status?: { initContainerStatuses?: { name: string; state?: any; lastState?: any }[] } }[];
+  type ContainerState = { terminated?: { exitCode?: number }; waiting?: object };
+  let pods: { status?: { initContainerStatuses?: { name: string; state?: ContainerState; lastState?: ContainerState }[] } }[];
   try {
     pods = JSON.parse(r.stdout).items ?? [];
   } catch {

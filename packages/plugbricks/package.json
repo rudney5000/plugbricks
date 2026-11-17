@@ -17,6 +17,8 @@
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude \"**/e2e-*.test.ts\" --exclude \"**/node_modules/**\"",
+    "coverage": "vitest run --exclude \"**/e2e-*.test.ts\" --exclude \"**/node_modules/**\" --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=lcov",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
