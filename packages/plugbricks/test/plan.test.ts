@@ -6,13 +6,7 @@ import { renderCompose } from "../src/drivers/compose.js";
 import { CONFIGMAP_MAX_BYTES, renderK8s, renderK8sSecret } from "../src/drivers/k8s.js";
 import { buildPlan, type BrickManifest } from "../src/plan.js";
 import { PlugbricksError, type Lock, type LockedBrick } from "../src/platform.js";
-import {
-  ensureSecrets,
-  isRestrictedToCurrentUser,
-  randomSecret,
-  readSecrets,
-  WINDOWS_ACL_CHECK_SCRIPT,
-} from "../src/secrets.js";
+import { ensureSecrets, isRestrictedToCurrentUser, randomSecret, readSecrets, WINDOWS_ACL_CHECK_SCRIPT } from "../src/secrets.js";
 import { parseTemplate } from "../src/templates.js";
 import { toYaml, toYamlDocuments } from "../src/yaml.js";
 
@@ -37,7 +31,9 @@ function lockFor(manifests: BrickManifest[], waits: Record<string, "healthy" | "
           { provider: capabilities[cap], wait: waits[m.name] ?? r.wait ?? "healthy", timeoutSeconds: r.timeoutSeconds ?? 120 },
         ]),
       ),
-      volumes: m.services.flatMap((s) => (s.volumes ?? []).map((v) => ({ service: s.name, name: v.name, retention: v.retention ?? "retain" }))),
+      volumes: m.services.flatMap((s) =>
+        (s.volumes ?? []).map((v) => ({ service: s.name, name: v.name, retention: v.retention ?? "retain" })),
+      ),
     };
   }
   return { lockfileVersion: 1, bricks, capabilities, retainedVolumes: [], pendingDeletion: [] };
@@ -45,7 +41,10 @@ function lockFor(manifests: BrickManifest[], waits: Record<string, "healthy" | "
 
 const SCRIPT = { path: "create-database.sh", data: Buffer.from("#!/bin/sh\necho ok\n") };
 
-function plan(manifests: BrickManifest[], opts: { waits?: Record<string, "healthy" | "started">; lock?: Partial<Lock>; scripts?: typeof SCRIPT[] } = {}) {
+function plan(
+  manifests: BrickManifest[],
+  opts: { waits?: Record<string, "healthy" | "started">; lock?: Partial<Lock>; scripts?: (typeof SCRIPT)[] } = {},
+) {
   const lock = { ...lockFor(manifests, opts.waits), ...opts.lock };
   return buildPlan("demo", lock, new Map(manifests.map((m) => [m.name, m])), () => opts.scripts ?? [SCRIPT]);
 }
@@ -219,17 +218,21 @@ describe("plan", () => {
   it("adds a startupProbe only with a start period, counting it in the failure threshold", () => {
     const m = consumer("shop", { healthcheck: { exec: ["true"], intervalSeconds: 5, startPeriodSeconds: 12, retries: 3 } });
     const k8s = renderK8s(plan([example("postgres"), m]))[".generated/k8s/resources.yaml"];
-    expect(k8s).toMatch(/startupProbe:\n\s+exec:\n\s+command:\n\s+- "true"\n\s+periodSeconds: 5\n\s+timeoutSeconds: 3\n\s+failureThreshold: 6/);
+    expect(k8s).toMatch(
+      /startupProbe:\n\s+exec:\n\s+command:\n\s+- "true"\n\s+periodSeconds: 5\n\s+timeoutSeconds: 3\n\s+failureThreshold: 6/,
+    );
     expect(renderCompose(plan([example("postgres"), m]))[".generated/compose/compose.yaml"]).toContain('start_period: "12s"');
   });
 
   it("puts binary provision files in binaryData and refuses scripts too large for a ConfigMap", () => {
     const bin = { path: "lib/tool.bin", data: Buffer.from([0, 1, 2, 255]) };
     const k8s = renderK8s(plan([example("postgres"), consumer("shop")], { scripts: [SCRIPT, bin] }))[".generated/k8s/resources.yaml"];
-    expect(k8s).toContain("binaryData:\n  lib_tool.bin: \"AAEC/w==\"");
+    expect(k8s).toContain('binaryData:\n  lib_tool.bin: "AAEC/w=="');
     expect(k8s).toContain("- key: lib_tool.bin\n                path: lib/tool.bin");
     const big = { path: "big.sql", data: Buffer.alloc(CONFIGMAP_MAX_BYTES, "a") };
-    expect(codes(() => renderK8s(plan([example("postgres"), consumer("shop")], { scripts: [big] })))).toEqual(["PROVISION_SCRIPTS_TOO_LARGE"]);
+    expect(codes(() => renderK8s(plan([example("postgres"), consumer("shop")], { scripts: [big] })))).toEqual([
+      "PROVISION_SCRIPTS_TOO_LARGE",
+    ]);
   });
 
   it("refuses two secret keys that map to the same variable", () => {

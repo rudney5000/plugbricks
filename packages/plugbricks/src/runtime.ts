@@ -105,7 +105,11 @@ export function generate(root: string, runtime: Runtime, deps: RuntimeDeps = {})
   const plan = planProject(project);
   const files = runtime === "compose" ? renderCompose(plan) : renderK8s(plan);
 
-  const secrets = ensureSecrets(project.root, plan.secrets.map((s) => s.env), { ...deps.restrict, random: deps.random });
+  const secrets = ensureSecrets(
+    project.root,
+    plan.secrets.map((s) => s.env),
+    { ...deps.restrict, random: deps.random },
+  );
   if (!secrets.ok) throw new PlugbricksError([secrets.issue]);
   const out = [COMPOSE_ENV_FILE];
   if (runtime === "k8s") {
@@ -148,7 +152,8 @@ function requireTool(deps: RuntimeDeps, root: string, cmd: string, args: string[
 
 function requireKubectl(deps: RuntimeDeps, root: string, target: string[]): void {
   const r = kubectl(deps, root, target, ["version", "--client"]);
-  if (r.error || r.status !== 0) throw new PlugbricksError([issue("RUNTIME_TOOL_MISSING", "", { tool: "kubectl", hint: "install kubectl" })]);
+  if (r.error || r.status !== 0)
+    throw new PlugbricksError([issue("RUNTIME_TOOL_MISSING", "", { tool: "kubectl", hint: "install kubectl" })]);
 }
 
 // ---------- Docker Compose ----------
@@ -169,7 +174,12 @@ function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, failur
   let rows: { Service?: string; ExitCode?: number }[] = [];
   try {
     // Compose prints either one JSON array or one JSON object per line, depending on its version.
-    rows = text.startsWith("[") ? JSON.parse(text) : text.split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+    rows = text.startsWith("[")
+      ? JSON.parse(text)
+      : text
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((l) => JSON.parse(l));
   } catch {
     return [];
   }
@@ -217,9 +227,18 @@ const kubectlBase = (plan: Plan) => ["--namespace", plan.platform];
 
 /** Wait init containers that exited with the timeout code, from the pods of one service. */
 function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan: Plan, service: string): Issue[] {
-  const r = kubectl(deps, root, target, [...kubectlBase(plan), "get", "pods", "--selector", `${SERVICE_LABEL}=${service}`, "--output", "json"]);
+  const r = kubectl(deps, root, target, [
+    ...kubectlBase(plan),
+    "get",
+    "pods",
+    "--selector",
+    `${SERVICE_LABEL}=${service}`,
+    "--output",
+    "json",
+  ]);
   if (r.status !== 0) return [];
-  let pods: { status?: { initContainerStatuses?: { name: string; state?: any; lastState?: any }[] } }[];
+  type ContainerState = { terminated?: { exitCode?: number }; waiting?: object };
+  let pods: { status?: { initContainerStatuses?: { name: string; state?: ContainerState; lastState?: ContainerState }[] } }[];
   try {
     pods = JSON.parse(r.stdout).items ?? [];
   } catch {
@@ -254,7 +273,9 @@ function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan
 /** Label selector of everything plugbricks created for bricks that are no longer installed. */
 export function removedBricksSelector(plan: Plan): string {
   const installed = [...new Set(plan.services.map((s) => s.brick))].sort();
-  return installed.length ? `${MANAGED_BY}=plugbricks,${BRICK_LABEL},${BRICK_LABEL} notin (${installed.join(",")})` : `${MANAGED_BY}=plugbricks,${BRICK_LABEL}`;
+  return installed.length
+    ? `${MANAGED_BY}=plugbricks,${BRICK_LABEL},${BRICK_LABEL} notin (${installed.join(",")})`
+    : `${MANAGED_BY}=plugbricks,${BRICK_LABEL}`;
 }
 
 /** How long `docker compose up --wait` may take: the longest chain of waits, plus time to pull images and start. */
@@ -342,7 +363,10 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
       const r = runtime === "compose" ? run(deps, dir, "docker", args) : kubectl(deps, dir, target, args);
       // A volume that is already gone counts as deleted.
       if (r.status === 0 || (runtime === "compose" && /no such volume/i.test(r.stderr))) pruned.push(v);
-      else problems.push(issue("VOLUME_PRUNE_FAILED", "", { volume: `${v.brick}/${v.service}/${v.name}`, detail: lastLines(r.stderr || r.stdout, 1) }));
+      else
+        problems.push(
+          issue("VOLUME_PRUNE_FAILED", "", { volume: `${v.brick}/${v.service}/${v.name}`, detail: lastLines(r.stderr || r.stdout, 1) }),
+        );
     }
     confirmPruned(root, pruned);
   }

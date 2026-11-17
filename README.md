@@ -64,9 +64,26 @@ Tests write only inside `.test-work/` folders of each package (gitignored).
 
 ```bash
 npm ci
+npm run hooks:install   # once per clone: turns on the git hooks of .githooks/
 npm test
 npm run typecheck
 ```
+
+Code quality, all from the repository root:
+
+| Command                | What it does                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `npm run format`       | Prettier rewrites the code, JSON and YAML                                                              |
+| `npm run format:check` | Prettier only checks (what CI runs)                                                                    |
+| `npm run lint`         | ESLint (flat config, typescript-eslint)                                                                |
+| `npm run typecheck`    | `tsc --noEmit` in each package                                                                         |
+| `npm test`             | every test, including the Docker end-to-end ones                                                       |
+| `npm run test:unit`    | every test except the Docker and Kubernetes end-to-end ones (what the pre-push hook runs)              |
+| `npm run coverage`     | unit tests with a V8 coverage report, no threshold                                                     |
+| `npm run quality`      | `format:check`, `lint`, `typecheck`, `test`, in this order: the CI `quality` job runs exactly this     |
+
+Test inputs, golden files, the example bricks and the project template are never formatted or linted:
+they are hashed or compared byte for byte. Hooks, CI jobs and the reasons are in `docs/decisions.md` (D7).
 
 Supported on Linux, macOS and Windows with Node 22 (the exact version is in `.node-version`).
 CI (`.github/workflows/ci.yml`) runs the three commands above on all three systems; see

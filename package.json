@@ -2,11 +2,32 @@
   "name": "plugbricks-monorepo",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
-  "workspaces": ["packages/plugbricks", "packages/create-plugbricks"],
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/plugbricks",
+    "packages/create-plugbricks"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "coverage": "npm run coverage --workspaces --if-present",
+    "quality": "npm run format:check && npm run lint && npm run typecheck && npm test",
+    "hooks:install": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@vitest/coverage-v8": "2.1.9",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "typescript-eslint": "8.73.0"
   }
 }

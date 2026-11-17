@@ -48,7 +48,10 @@ describe("brick integrity ignores line endings", () => {
   it("a real content change still changes the hash", () => {
     const changed = join(work, "postgres-changed");
     cpSync(join(pkg, "examples/postgres"), changed, { recursive: true });
-    writeFileSync(join(changed, "provision/create-database.sh"), readFileSync(join(changed, "provision/create-database.sh"), "utf8") + "# edit\n");
+    writeFileSync(
+      join(changed, "provision/create-database.sh"),
+      readFileSync(join(changed, "provision/create-database.sh"), "utf8") + "# edit\n",
+    );
     expect(brickIntegrity(changed, "postgres")).not.toBe(brickIntegrity(join(pkg, "examples/postgres"), "postgres"));
   });
 
@@ -157,8 +160,7 @@ describe("the installed copy is exactly what was hashed", () => {
 
   // Without the provider's env the script must stop at its first real check. A CRLF script never
   // gets there: "set -eu\r" is already an error for /bin/sh.
-  const reachesFirstCheck = (r: { status: number | null; stderr: string }) =>
-    r.status !== 0 && r.stderr.includes("PGHOST is required");
+  const reachesFirstCheck = (r: { status: number | null; stderr: string }) => r.status !== 0 && r.stderr.includes("PGHOST is required");
 
   it.skipIf(process.platform === "win32")("the copied script runs under /bin/sh; the CRLF original does not (Linux, macOS)", () => {
     const env = { PATH: process.env.PATH };
@@ -173,9 +175,13 @@ describe("the installed copy is exactly what was hashed", () => {
   it.skipIf(!linuxDocker)(
     `the copied script runs under /bin/sh in a Linux container (${image})${linuxDocker ? "" : " (skipped: no Docker daemon with Linux containers)"}`,
     () => {
-      const r = spawnSync("docker", ["run", "--rm", "-v", `${join(copy, "provision")}:/provision:ro`, image, "/bin/sh", "/provision/create-database.sh"], {
-        encoding: "utf8",
-      });
+      const r = spawnSync(
+        "docker",
+        ["run", "--rm", "-v", `${join(copy, "provision")}:/provision:ro`, image, "/bin/sh", "/provision/create-database.sh"],
+        {
+          encoding: "utf8",
+        },
+      );
       expect(r.stderr).toContain("PGHOST is required");
       expect(reachesFirstCheck(r)).toBe(true);
     },

@@ -24,9 +24,7 @@ function isExecutable(file: URL): boolean {
   return r.stdout.startsWith("100755 ");
 }
 const INVALID_DIR = "test/fixtures/invalid/";
-const expected: Record<string, { code: keyof typeof MESSAGES; path: string; why: string }> = load(
-  `${INVALID_DIR}expected.json`,
-);
+const expected: Record<string, { code: keyof typeof MESSAGES; path: string; why: string }> = load(`${INVALID_DIR}expected.json`);
 
 describe("example manifests (milestone 1 criterion)", () => {
   it.each(EXAMPLES)("%s validates", (name) => {
@@ -41,7 +39,7 @@ describe("example manifests (milestone 1 criterion)", () => {
   it("every provision script referenced by a command is shipped with the plugin", () => {
     for (const name of EXAMPLES) {
       const m = load(`examples/${name}/plugin.json`);
-      for (const p of Object.values<any>(m.provides ?? {})) {
+      for (const p of Object.values<{ provision: { command: string[]; scripts?: string } }>(m.provides ?? {})) {
         for (const arg of p.provision.command as string[]) {
           if (!arg.startsWith("/provision/")) continue;
           expect(p.provision.scripts, `${name}: command uses /provision but no scripts dir`).toBeDefined();

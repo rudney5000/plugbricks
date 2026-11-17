@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed by "npm run hooks:install" (git config core.hooksPath .githooks).
+# Fast checks on the staged files only; the rules live in scripts/hooks/.
+exec node "$(git rev-parse --show-toplevel)/scripts/hooks/pre-commit.mjs"

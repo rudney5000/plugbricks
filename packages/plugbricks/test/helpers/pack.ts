@@ -76,7 +76,11 @@ export function extractTgz(tarball: string, dest: string): void {
   const root = resolve(dest);
   let off = 0;
   let paxPath: string | undefined;
-  const field = (h: Buffer, a: number, b: number) => h.subarray(a, b).toString("utf8").replace(/\0[\s\S]*$/, "");
+  const field = (h: Buffer, a: number, b: number) =>
+    h
+      .subarray(a, b)
+      .toString("utf8")
+      .replace(/\0[\s\S]*$/, "");
   while (off + 512 <= buf.length) {
     const h = buf.subarray(off, off + 512);
     if (h.every((b) => b === 0)) break;

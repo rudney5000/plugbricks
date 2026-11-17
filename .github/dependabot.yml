@@ -1,0 +1,28 @@
+# Weekly update pull requests, grouped so that one week gives few of them.
+# Versions are pinned exactly in package.json and by SHA in the workflows; Dependabot keeps both current.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns: ["*"]
+
+  # apis/orders is a standalone package with its own lock file (not an npm workspace).
+  - package-ecosystem: npm
+    directory: /apis/orders
+    schedule:
+      interval: weekly
+    groups:
+      orders-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

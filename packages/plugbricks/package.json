@@ -5,18 +5,30 @@
   "type": "module",
   "license": "UNLICENSED",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./schema.json": "./schemas/plugin-manifest.schema.json",
     "./package.json": "./package.json"
   },
-  "bin": { "plugbricks": "dist/bin.js" },
-  "files": ["dist", "schemas"],
+  "bin": {
+    "plugbricks": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "schemas"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude \"**/e2e-*.test.ts\" --exclude \"**/node_modules/**\"",
+    "coverage": "vitest run --exclude \"**/e2e-*.test.ts\" --exclude \"**/node_modules/**\" --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=lcov",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -13,7 +13,12 @@ const realTools = JSON.parse(readFileSync(join(pkg, "../../tools.json"), "utf8")
 const bytes = Buffer.from("#!/bin/sh\necho hello\n");
 const sha = createHash("sha256").update(bytes).digest("hex");
 const tools = (sha256: string) => ({
-  demo: { platforms: { "linux-amd64": { url: "https://example.invalid/demo", sha256, archive: "none" }, "windows-amd64": { url: "https://example.invalid/demo.exe", sha256, archive: "none" } } },
+  demo: {
+    platforms: {
+      "linux-amd64": { url: "https://example.invalid/demo", sha256, archive: "none" },
+      "windows-amd64": { url: "https://example.invalid/demo.exe", sha256, archive: "none" },
+    },
+  },
 });
 const serve = async () => bytes;
 

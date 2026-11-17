@@ -70,7 +70,8 @@ export interface AclReport {
  * entry is the current user's SID, and the user has full control. SIDs only, never names.
  */
 export function checkWindowsAcl(acl: AclReport | undefined | null): { ok: true } | { ok: false; detail: string } {
-  if (!acl || typeof acl.user !== "string" || !Array.isArray(acl.rules)) return { ok: false, detail: "unexpected ACL report; cannot check the ACL" };
+  if (!acl || typeof acl.user !== "string" || !Array.isArray(acl.rules))
+    return { ok: false, detail: "unexpected ACL report; cannot check the ACL" };
   if (!acl.protected || acl.rules.some((r) => r.inherited)) return { ok: false, detail: "inherited permissions are still present" };
   const allows = acl.rules.filter((r) => r.type === "Allow");
   const others = allows.filter((r) => r.sid.toUpperCase() !== acl.user.toUpperCase());
@@ -85,11 +86,10 @@ const defaultRun: PowerShellRunner = (cmd, args, env) => {
 };
 
 function runAclScript(dir: string, script: string, run: PowerShellRunner): { ok: true } | { ok: false; detail: string } {
-  const r = run(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-    { ...process.env, PLUGBRICKS_SECRETS_DIR: dir },
-  );
+  const r = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    ...process.env,
+    PLUGBRICKS_SECRETS_DIR: dir,
+  });
   if (r.status !== 0) {
     const why = (r.stderr || r.stdout || "").trim().split(/\r?\n/)[0];
     return { ok: false, detail: `PowerShell exited with ${r.status}${why ? `: ${why}` : ""}` };

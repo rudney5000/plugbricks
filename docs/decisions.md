@@ -367,6 +367,72 @@ end yet.
 
 ---
 
+## D7. Code quality: formatting, linting, git hooks, CI checks, security scans
+
+- **Status:** implemented (2026-11-17).
+- **Context:** the code is read and changed by several people and several assistants. A stray
+  character pasted at the start of `test/helpers/pack.ts` (`лimport ...`) went unnoticed until
+  the type check failed. Checks that run on every commit and on every pull request catch that kind of
+  slip when it is cheap to fix. The design is inspired by common practice; no file from another
+  repository was copied.
+- **Decision:**
+  - **Prettier** (3.10.1, `.prettierrc.json`: 140 columns, double quotes, semicolons, trailing commas,
+    LF) formats code, JSON and YAML. Markdown, GraphQL and the Dockerfile are not formatted.
+    **ESLint** (9.39.5, flat config `eslint.config.mjs`, `@eslint/js` + `typescript-eslint` recommended
+    rules, `eslint-config-prettier`) looks for bugs only; style is Prettier's job. The rules are not
+    type-aware yet (faster, no project setup).
+  - **Never formatted, never linted** (`.prettierignore` and `ignores` in `eslint.config.mjs`, the same
+    list): `test/fixtures/**` (scenario bricks and golden files), `packages/plugbricks/examples/**`
+    (their integrity hash is recorded in golden lock files), `packages/create-plugbricks/template/**`
+    (copied as is), `dist/`, `node_modules/`, `.test-work/`, `coverage/`, `.generated/`, `.secrets/`,
+    `.platform/`, `package-lock.json`. Formatting any of them would change a hash or a byte-for-byte
+    comparison and break a test.
+  - **Scripts** (root `package.json`): `format`, `format:check`, `lint`, `typecheck`, `test`,
+    `test:unit` (everything except the Docker and Kubernetes end-to-end tests), `coverage`, `quality`
+    (`format:check`, `lint`, `typecheck`, `test`, in this order), `hooks:install`.
+  - **Git hooks** live in `.githooks/` (no husky). `npm run hooks:install` sets
+    `core.hooksPath`; the dev container runs it after `npm ci`. There is deliberately no `prepare`
+    script: it would run on every `npm ci`, including in CI and when the package is installed as a
+    dependency, and would change a git setting without being asked.
+    - `pre-commit` (fast, on the **staged content**, not the working tree): whitespace errors
+      (`git diff --cached --check`); forbidden files (`.env` and `.env.*` and `*.env` except
+      `.env.example`, `.env.sample`, `.env.template`; `.secrets/`, `.generated/`, `.test-work/`, `.kube/`;
+      private keys and certificate bundles; kubeconfig files); secret patterns (private key blocks, AWS
+      access keys and secret keys, GitHub tokens, GitLab tokens); a source file (`.ts`, `.js`, `.mjs`,
+      `.json`, `.yml`...) that starts with a non-ASCII character or a byte order mark; Prettier and
+      ESLint on each staged code file. It lists every problem, not only the first. The golden files under
+      `test/fixtures/*/*/expected/.generated/` are the one allowed use of `.generated/`.
+    - `pre-push`: `npm run typecheck` and `npm run test:unit`.
+    - The rules are pure functions in `scripts/hooks/checks.mjs`, tested in
+      `packages/plugbricks/test/hooks.test.ts`.
+  - **CI** (`.github/workflows/ci.yml`, job `quality`, Linux only; the three-OS test matrix is
+    unchanged): `npm run quality`, then `npm audit --omit=dev --audit-level=high`, then a coverage
+    report written to the job summary (V8, **no threshold**). Actions are pinned by commit SHA.
+  - **Security**: `.github/dependabot.yml` (npm at the root and in `apis/orders`, and GitHub Actions;
+    weekly, grouped) and `.github/workflows/codeql.yml` (CodeQL for JavaScript and TypeScript on
+    pushes to `main`, on pull requests and weekly; actions pinned by SHA).
+- **Skipping a hook, in an emergency only:** `git commit --no-verify` or `git push --no-verify`.
+  Do not make it a habit: the hooks are the only check that runs before the code leaves your
+  machine, and a secret that is committed is public in the history even if a later commit removes
+  it. CI runs the same formatting, lint, type and test checks, so a skipped hook only moves the
+  failure to the pull request, but CI does **not** scan for secrets or forbidden files.
+- **Not covered:**
+  - **No container image scan.** plugbricks has no image of its own; the example API's image
+    (`apis/orders/Dockerfile`) and the images named in bricks are not scanned, and are pinned by
+    tag, not always by digest.
+  - **No secret scanning of the history or in CI**: the hooks check only what is staged, and
+    `--no-verify` skips them. Turn on GitHub secret scanning and push protection in the repository
+    settings for that.
+  - **Known advisories in development dependencies**: the test runner (vitest 2.1.9 and what it pulls
+    in: vite, esbuild, tinypool) has open advisories; the fix is a major upgrade (vitest 5). The CI
+    audit looks at production dependencies only, which have none.
+  - ESLint is not type-aware (no `no-floating-promises` and similar rules).
+  - Licenses of dependencies are not checked. CodeQL and Dependabot need the repository settings that
+    allow them (code scanning, Dependabot updates); until they have run on GitHub, their behaviour is
+    unverified.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

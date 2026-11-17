@@ -37,7 +37,9 @@ function lines(v: Yaml, indent: string): string[] {
     return Object.entries(v)
       .filter(([, x]) => x !== undefined)
       .flatMap(([k, x]) =>
-        x && typeof x === "object" && !isEmptyContainer(x) ? [`${indent}${key(k)}:`, ...lines(x, indent + "  ")] : [`${indent}${key(k)}: ${inline(x)}`],
+        x && typeof x === "object" && !isEmptyContainer(x)
+          ? [`${indent}${key(k)}:`, ...lines(x, indent + "  ")]
+          : [`${indent}${key(k)}: ${inline(x)}`],
       );
   }
   return [`${indent}${inline(v)}`];

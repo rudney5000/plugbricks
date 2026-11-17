@@ -46,4 +46,3 @@ export function fromAjv(e: ErrorObject): Issue {
       return issue("SCHEMA_VIOLATION", here, { detail: e.message ?? e.keyword });
   }
 }
-

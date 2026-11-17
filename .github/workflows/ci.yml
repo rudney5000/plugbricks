@@ -117,3 +117,41 @@ jobs:
       - name: Delete the throwaway cluster
         if: always()
         run: k3d cluster delete "$CLUSTER"
+
+  # Code quality, on Linux only (the 3-OS matrix above runs the tests everywhere).
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apis/orders/package-lock.json
+
+      - run: npm ci
+
+      # Prettier, ESLint, typecheck and the tests: the same command as on a developer machine.
+      - run: npm run quality
+
+      # Known vulnerabilities in what ships (dev dependencies are not audited here: the test runner
+      # has open advisories whose fix is a major upgrade, tracked separately).
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # Coverage of the unit tests (v8), reported only: there is no threshold.
+      - name: Coverage report
+        run: |
+          npm run coverage -w plugbricks | tee "$RUNNER_TEMP/coverage.txt"
+          {
+            echo '### Coverage of the unit tests (no threshold)'
+            echo '```'
+            sed -n '/Coverage summary/,/=====$/p' "$RUNNER_TEMP/coverage.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

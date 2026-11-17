@@ -105,7 +105,12 @@ function configMap(sc: PlanScripts, plan: Plan): Yaml {
   const size = files.reduce((n, f) => n + f.data.length + f.key.length, 0);
   if (size > CONFIGMAP_MAX_BYTES) {
     throw new PlugbricksError([
-      issue("PROVISION_SCRIPTS_TOO_LARGE", "", { brick: sc.brick, capability: sc.capability, size: String(size), max: String(CONFIGMAP_MAX_BYTES) }),
+      issue("PROVISION_SCRIPTS_TOO_LARGE", "", {
+        brick: sc.brick,
+        capability: sc.capability,
+        size: String(size),
+        max: String(CONFIGMAP_MAX_BYTES),
+      }),
     ]);
   }
   const text = files.filter((f) => isText(f.data));

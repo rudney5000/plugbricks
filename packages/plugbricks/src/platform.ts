@@ -17,14 +17,7 @@ import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
 import { buildPlan, type BrickManifest } from "./plan.js";
 import type { IssueCode, IssueParams } from "./messages.js";
-import {
-  LOCK_SCHEMA_ID,
-  lockSchema,
-  MANIFEST_DEFAULTS,
-  PLATFORM_SCHEMA_ID,
-  platformSchema,
-  schemaIssues,
-} from "./schemas.js";
+import { LOCK_SCHEMA_ID, lockSchema, MANIFEST_DEFAULTS, PLATFORM_SCHEMA_ID, platformSchema, schemaIssues } from "./schemas.js";
 
 export const PLATFORM_FILE = "platform.json";
 export const LOCK_FILE = "platform.lock";
@@ -102,7 +95,6 @@ export function canonicalJson(value: unknown): string {
   };
   return JSON.stringify(sort(value), null, 2) + "\n";
 }
-
 
 function readJson(file: string, label: string): unknown {
   let text: string;
@@ -321,7 +313,10 @@ function checkVolumeLists(lock: Lock): void {
       fail("LOCK_INCONSISTENT", { volume: volumeKey(v), detail: "both in retainedVolumes and in pendingDeletion" });
     }
   }
-  for (const [list, entries] of [["retainedVolumes", lock.retainedVolumes], ["pendingDeletion", lock.pendingDeletion]] as const) {
+  for (const [list, entries] of [
+    ["retainedVolumes", lock.retainedVolumes],
+    ["pendingDeletion", lock.pendingDeletion],
+  ] as const) {
     for (const v of entries) {
       if (lock.bricks[v.brick]) {
         fail("LOCK_INCONSISTENT", { volume: volumeKey(v), detail: `in ${list} although brick "${v.brick}" is installed` });
@@ -378,7 +373,7 @@ function checkRuntimeNames(project: Project, name: string, manifest: BrickManife
   manifests.set(name, manifest);
   // Leave out consumers whose provider could not be read: their requirements cannot be planned.
   // Repeated until stable: leaving out a provider can leave out one of its own consumers.
-  for (let changed = true; changed; ) {
+  for (let changed = true; changed;) {
     changed = false;
     for (const [b, m] of [...manifests]) {
       const requires = (b === name ? entry : project.lock.bricks[b]).requires;
@@ -423,7 +418,12 @@ export function addBrick(root: string, brickPath: string): AddResult {
 
   const raw = readJson(manifestFile, shown);
   const v = validateManifest(raw);
-  if (!v.ok) fail("MANIFEST_INVALID", { path: shown }, v.issues.map((i) => ({ ...i, path: `${shown}#${i.path}` })));
+  if (!v.ok)
+    fail(
+      "MANIFEST_INVALID",
+      { path: shown },
+      v.issues.map((i) => ({ ...i, path: `${shown}#${i.path}` })),
+    );
   const m = raw as Manifest;
   checkReferencedFiles(brickDir, m);
   const integrity = brickIntegrity(brickDir, m.name);
