@@ -6,7 +6,7 @@
   "features": {
     // Lets scripts drive the host's Docker daemon.
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1.10.2": {}
-    // score-compose, score-k8s, k3d and kubectl are added with milestone step 2.
+    // Score is not used (decision D5). k3d and kubectl are not installed here yet; they come with the Kubernetes end-to-end test.
   },
 
   "postCreateCommand": "npm ci",

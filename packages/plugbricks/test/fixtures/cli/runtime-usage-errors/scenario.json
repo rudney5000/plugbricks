@@ -1,5 +1,5 @@
 {
-  "description": "--runtime and --prune-volumes are checked before anything runs",
+  "description": "--runtime, --context and --prune-volumes are checked before anything runs",
   "steps": [
     {
       "run": [
@@ -51,6 +51,58 @@
       "exit": 2,
       "codes": [
         "USAGE_UNEXPECTED_ARGUMENT"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--context",
+        "x"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--kubeconfig",
+        "k.yaml"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--allow-context",
+        "x"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "status",
+        "--runtime",
+        "k8s",
+        "--context",
+        "x"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
       ],
       "unchanged": true
     }

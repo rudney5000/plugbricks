@@ -1,0 +1,98 @@
+{
+  "description": "--runtime k8s without --context refuses up, up --prune-volumes and down before running or writing anything",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": "kube.yaml",
+          "text": "apiVersion: v1\nkind: Config\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REQUIRED"
+      ],
+      "stderr": "plugbricks never uses the current kubectl context",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--prune-volumes"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REQUIRED"
+      ],
+      "stderr": "plugbricks never uses the current kubectl context",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REQUIRED"
+      ],
+      "stderr": "plugbricks never uses the current kubectl context",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--kubeconfig",
+        "kube.yaml"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REQUIRED"
+      ],
+      "stderr": "plugbricks never uses the current kubectl context",
+      "commands": [],
+      "unchanged": true
+    }
+  ],
+  "absent": [
+    ".generated",
+    ".secrets"
+  ],
+  "expectPrune": [
+    "cache/redis/data"
+  ]
+}

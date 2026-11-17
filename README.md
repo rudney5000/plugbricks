@@ -2,7 +2,7 @@
 
 Add plugins and infrastructure bricks (PostgreSQL, a message queue, …) to a federated GraphQL project, on Docker Compose or Kubernetes, from a single `platform.json`.
 
-Status: **milestone 3** — the drivers: `generate`, `up` and `down` on Docker Compose and on Kubernetes, on top of the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Federation (the router and a second API with `extends`) comes in milestone 4.
+Status: **milestone 4, first part merged** — the real `orders` API, a GraphQL subgraph with its own database, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. The Compose driver has run end to end against Docker; **the Kubernetes driver has not run on a cluster yet** (golden files and a fake `kubectl` only). The Cosmo router and a second API with `extends` are still to come.
 
 ## Use
 
@@ -12,7 +12,8 @@ cd mon-saas
 npx plugbricks add path/to/postgres # a brick that provides "database"
 npx plugbricks add services/orders  # requires "database"
 npx plugbricks status               # add --json for machine-readable output
-npx plugbricks up                    # Docker Compose; --runtime k8s for the current kubectl context
+npx plugbricks up                    # Docker Compose
+npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept
 npx plugbricks remove orders
 npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendingDeletion
@@ -97,7 +98,8 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
 2. **CLI core** — done: `init`, `add`, `remove`, `status`, `platform.json` / `platform.lock`, `npm create plugbricks`
    - Manifest: `requires.<cap>.timeoutSeconds`, `provides.<cap>.ready`, healthcheck `timeoutSeconds` and `startPeriodSeconds` (from experiment D).
 3. **Drivers** — done: `generate`, `up`, `down`, `up --prune-volumes` on Docker Compose and Kubernetes, rendered by plugbricks itself (D5, Score dropped); generated secrets (D6); templates checked at `add`.
-   - Open: run the Kubernetes driver on a k3d cluster in CI.
+   - Written, not yet seen green: the Kubernetes end-to-end test (`packages/plugbricks/test/e2e-k8s.test.ts`) and the CI job "kubernetes (k3d)": `up` with postgres and orders, a GraphQL call, `down`, `remove` + `up --prune-volumes`, `WAIT_TIMEOUT`, on a throwaway k3d cluster named `pbtest-*` (it is skipped for any other context).
+   - Later pass: kill the database pod, then `up` again, and check that the platform recovers and the data is kept.
 4. **Federation**: real APIs, the Cosmo router, composition checked at `add`, a second API with `extends`
    - Done: the `orders` API (`apis/orders`), tested alone and on a platform.
 5. **Message queue** (NATS)

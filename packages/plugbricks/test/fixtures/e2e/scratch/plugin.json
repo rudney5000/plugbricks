@@ -1,0 +1,13 @@
+{
+  "name": "scratch",
+  "version": "0.1.0",
+  "description": "End-to-end test brick with a volume declared retention: delete, to exercise up --prune-volumes on a real cluster.",
+  "services": [
+    {
+      "name": "redis",
+      "image": "redis:7.4.1-alpine",
+      "port": 6379,
+      "volumes": [{ "name": "data", "mountPath": "/data", "retention": "delete" }]
+    }
+  ]
+}

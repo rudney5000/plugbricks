@@ -59,3 +59,61 @@ jobs:
           npm ci
           npm run typecheck
           npm test
+
+  # The Kubernetes driver on a real cluster: a throwaway k3d cluster named pbtest-ci-*, driven only
+  # through an explicit kubeconfig file and context (the test refuses any context that does not
+  # start with "k3d-pbtest-"). Tools and the k3s image come from tools.json: every download is
+  # checked against its sha256 before it is installed, and the k3s image is pinned by digest.
+  k8s:
+    name: kubernetes (k3d)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLUSTER: pbtest-ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apis/orders/package-lock.json
+
+      - run: npm ci
+
+      # k3s opens many inotify instances; with the default limit the control plane can fail to start
+      # ("too many open files"), as it did on a developer machine running other containers.
+      - name: Raise the inotify instance limit
+        run: sudo sysctl -w fs.inotify.max_user_instances=512
+
+      - name: Install k3d and kubectl (sha256 from tools.json, checked before install)
+        run: |
+          node scripts/install-tool.mjs k3d "$RUNNER_TEMP/bin"
+          node scripts/install-tool.mjs kubectl "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Create the throwaway cluster
+        run: |
+          image=$(node -p 'require("./tools.json").images.k3s.reference')
+          k3d cluster create "$CLUSTER" --image "$image" --no-lb --wait --timeout 240s \
+            --kubeconfig-update-default=false --kubeconfig-switch-context=false
+          k3d kubeconfig write "$CLUSTER" --output "$RUNNER_TEMP/kubeconfig.yaml"
+          echo "PLUGBRICKS_K8S_CONTEXT=k3d-$CLUSTER" >> "$GITHUB_ENV"
+          echo "PLUGBRICKS_K8S_KUBECONFIG=$RUNNER_TEMP/kubeconfig.yaml" >> "$GITHUB_ENV"
+
+      - name: Kubernetes end-to-end test
+        run: npm test -w plugbricks -- e2e-k8s
+
+      - name: Cluster state after a failure
+        if: failure()
+        run: |
+          kubectl --kubeconfig "$PLUGBRICKS_K8S_KUBECONFIG" --context "$PLUGBRICKS_K8S_CONTEXT" get pods --all-namespaces --output wide || true
+          kubectl --kubeconfig "$PLUGBRICKS_K8S_KUBECONFIG" --context "$PLUGBRICKS_K8S_CONTEXT" get events --all-namespaces --sort-by=.lastTimestamp || true
+
+      - name: Delete the throwaway cluster
+        if: always()
+        run: k3d cluster delete "$CLUSTER"

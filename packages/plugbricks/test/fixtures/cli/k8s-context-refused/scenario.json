@@ -1,0 +1,199 @@
+{
+  "description": "a context named \"platform\" or \"k3d-platform\" is refused unless --allow-context names it too",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": "kube.yaml",
+          "text": "apiVersion: v1\nkind: Config\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "platform"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "stderr": "protected cluster \"platform\"",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "platform",
+        "--prune-volumes"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "stderr": "protected cluster \"platform\"",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s",
+        "--context",
+        "platform"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "stderr": "protected cluster \"platform\"",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "k3d-platform"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "stderr": "protected cluster \"platform\"",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "k3d-platform",
+        "--prune-volumes"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "stderr": "protected cluster \"platform\"",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s",
+        "--context",
+        "k3d-platform"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "stderr": "protected cluster \"platform\"",
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster",
+        "--allow-context",
+        "platform"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s",
+        "--context",
+        "platform",
+        "--allow-context",
+        "k3d-platform"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s",
+        "--context",
+        "platform",
+        "--allow-context",
+        "platform"
+      ],
+      "commands": [
+        "kubectl --context platform version --client",
+        "kubectl --context platform --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks --ignore-not-found"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "k3d-platform",
+        "--allow-context",
+        "k3d-platform",
+        "--prune-volumes"
+      ],
+      "commands": [
+        "kubectl --context k3d-platform version --client",
+        "kubectl --context k3d-platform apply --filename .generated/k8s/namespace.yaml",
+        "kubectl --context k3d-platform apply --filename .secrets/k8s-secret.yaml",
+        "kubectl --context k3d-platform --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick --ignore-not-found",
+        "kubectl --context k3d-platform --namespace demo delete persistentvolumeclaim cache-redis-data --ignore-not-found"
+      ]
+    }
+  ],
+  "expectPrune": []
+}

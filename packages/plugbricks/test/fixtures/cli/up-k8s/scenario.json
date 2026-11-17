@@ -24,16 +24,18 @@
       "run": [
         "up",
         "--runtime",
-        "k8s"
+        "k8s",
+        "--context",
+        "test-cluster"
       ],
       "commands": [
-        "kubectl version --client",
-        "kubectl apply --filename .generated/k8s/namespace.yaml",
-        "kubectl apply --filename .secrets/k8s-secret.yaml",
-        "kubectl apply --filename .generated/k8s/resources.yaml",
-        "kubectl --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick,plugbricks/brick notin (orders,postgres) --ignore-not-found",
-        "kubectl --namespace demo rollout status deployment/orders-app --timeout=420s",
-        "kubectl --namespace demo rollout status deployment/postgres-db --timeout=300s"
+        "kubectl --context test-cluster version --client",
+        "kubectl --context test-cluster apply --filename .generated/k8s/namespace.yaml",
+        "kubectl --context test-cluster apply --filename .secrets/k8s-secret.yaml",
+        "kubectl --context test-cluster apply --filename .generated/k8s/resources.yaml",
+        "kubectl --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick,plugbricks/brick notin (orders,postgres) --ignore-not-found",
+        "kubectl --context test-cluster --namespace demo rollout status deployment/orders-app --timeout=420s",
+        "kubectl --context test-cluster --namespace demo rollout status deployment/postgres-db --timeout=300s"
       ]
     }
   ]
