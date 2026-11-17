@@ -47,7 +47,7 @@ Start and stop the platform:
 
 ```bash
 npx plugbricks up                       # Docker Compose (needs Docker with Compose v2)
-npx plugbricks up --runtime k8s         # Kubernetes, in the namespace named after the platform
+npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes; you always name the cluster (add --kubeconfig <file> if needed)
 npx plugbricks down                     # stops everything; your data and secrets are kept
 ```
 

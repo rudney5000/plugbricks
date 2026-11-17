@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { WAIT_TIMEOUT_EXIT } from "./drivers/common.js";
 import { COMPOSE_FILE, composeVolumeName, renderCompose } from "./drivers/compose.js";
@@ -55,7 +55,25 @@ export interface RuntimeDeps {
   random?: () => string;
   /** Progress lines (the commands run). */
   log?: (line: string) => void;
+  /** The cluster the Kubernetes runtime acts on. Required for up and down with `k8s`. */
+  k8s?: K8sTarget;
 }
+
+/** The cluster kubectl is pointed at. There is no default: the current kubectl context is never used. */
+export interface K8sTarget {
+  /** kubectl context name (--context). */
+  context?: string;
+  /** Absolute path of the kubeconfig file (--kubeconfig); omitted: kubectl's own default lookup. */
+  kubeconfig?: string;
+  /** Names a protected context on purpose; must equal `context` to have any effect. */
+  allowContext?: string;
+}
+
+/**
+ * Contexts plugbricks refuses unless told twice: the cluster named "platform" and the context
+ * k3d gives it ("k3d-" + cluster name).
+ */
+export const PROTECTED_CONTEXTS = ["platform", "k3d-platform"] as const;
 
 // ---------- generate ----------
 
@@ -128,6 +146,11 @@ function requireTool(deps: RuntimeDeps, root: string, cmd: string, args: string[
   if (r.error || r.status !== 0) throw new PlugbricksError([issue("RUNTIME_TOOL_MISSING", "", { tool, hint })]);
 }
 
+function requireKubectl(deps: RuntimeDeps, root: string, target: string[]): void {
+  const r = kubectl(deps, root, target, ["version", "--client"]);
+  if (r.error || r.status !== 0) throw new PlugbricksError([issue("RUNTIME_TOOL_MISSING", "", { tool: "kubectl", hint: "install kubectl" })]);
+}
+
 // ---------- Docker Compose ----------
 
 const composeBase = (plan: Plan) => ["compose", "--project-name", plan.platform, "--file", COMPOSE_FILE, "--env-file", COMPOSE_ENV_FILE];
@@ -166,11 +189,35 @@ function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, failur
 
 // ---------- Kubernetes ----------
 
+/**
+ * Checks the cluster the user named and returns the kubectl flags that pin it. Called first by
+ * up and down, before any file is written or any command run.
+ */
+export function k8sTargetFlags(target: K8sTarget | undefined): string[] {
+  const { context, kubeconfig, allowContext } = target ?? {};
+  if (!context) throw new PlugbricksError([issue("K8S_CONTEXT_REQUIRED", "")]);
+  if ((PROTECTED_CONTEXTS as readonly string[]).includes(context) && allowContext !== context) {
+    throw new PlugbricksError([issue("K8S_CONTEXT_REFUSED", "", { context })]);
+  }
+  if (kubeconfig !== undefined && !(existsSync(kubeconfig) && statSync(kubeconfig).isFile())) {
+    throw new PlugbricksError([issue("K8S_KUBECONFIG_NOT_FOUND", "", { path: kubeconfig })]);
+  }
+  return [...(kubeconfig !== undefined ? ["--kubeconfig", kubeconfig] : []), "--context", context];
+}
+
+/**
+ * The only way the drivers call kubectl: the cluster flags always come first, so no command can
+ * run against whatever context happens to be current.
+ */
+function kubectl(deps: RuntimeDeps, root: string, target: string[], args: string[]): ExecResult {
+  return run(deps, root, "kubectl", [...target, ...args]);
+}
+
 const kubectlBase = (plan: Plan) => ["--namespace", plan.platform];
 
 /** Wait init containers that exited with the timeout code, from the pods of one service. */
-function k8sWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, service: string): Issue[] {
-  const r = run(deps, root, "kubectl", [...kubectlBase(plan), "get", "pods", "--selector", `${SERVICE_LABEL}=${service}`, "--output", "json"]);
+function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan: Plan, service: string): Issue[] {
+  const r = kubectl(deps, root, target, [...kubectlBase(plan), "get", "pods", "--selector", `${SERVICE_LABEL}=${service}`, "--output", "json"]);
   if (r.status !== 0) return [];
   let pods: { status?: { initContainerStatuses?: { name: string; state?: any; lastState?: any }[] } }[];
   try {
@@ -240,6 +287,8 @@ export interface UpResult {
  * deleted from the lock. Nothing else is ever deleted.
  */
 export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolean } = {}, deps: RuntimeDeps = {}): UpResult {
+  // First, so a refused cluster changes nothing: not even .generated/ or .secrets/.
+  const target = runtime === "k8s" ? k8sTargetFlags(deps.k8s) : [];
   const generated = generate(root, runtime, deps);
   const { plan } = generated;
   const dir = resolve(root);
@@ -259,23 +308,23 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
       throw new PlugbricksError(timeouts.length ? timeouts : [failed("docker", args, r)]);
     }
   } else {
-    requireTool(deps, dir, "kubectl", ["version", "--client"], "kubectl", "install kubectl and select a cluster context");
+    requireKubectl(deps, dir, target);
     for (const f of [K8S_NAMESPACE_FILE, K8S_SECRET_FILE, K8S_RESOURCES_FILE]) {
       // kubectl refuses a file with no object in it.
       if (f === K8S_RESOURCES_FILE && plan.services.length === 0) continue;
       const args = ["apply", "--filename", f];
-      const r = run(deps, dir, "kubectl", args);
-      if (r.status !== 0) throw new PlugbricksError([failed("kubectl", args, r)]);
+      const r = kubectl(deps, dir, target, args);
+      if (r.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...args], r)]);
     }
     const cleanup = [...kubectlBase(plan), "delete", DISPOSABLE_KINDS, "--selector", removedBricksSelector(plan), "--ignore-not-found"];
-    const c = run(deps, dir, "kubectl", cleanup);
-    if (c.status !== 0) throw new PlugbricksError([failed("kubectl", cleanup, c)]);
+    const c = kubectl(deps, dir, target, cleanup);
+    if (c.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...cleanup], c)]);
     for (const s of plan.services) {
       const args = [...kubectlBase(plan), "rollout", "status", `deployment/${s.name}`, `--timeout=${rolloutTimeout(plan, s.name)}s`];
-      const r = run(deps, dir, "kubectl", args);
+      const r = kubectl(deps, dir, target, args);
       if (r.status !== 0) {
-        const timeouts = k8sWaitTimeouts(deps, dir, plan, s.name);
-        throw new PlugbricksError(timeouts.length ? timeouts : [failed("kubectl", args, r)]);
+        const timeouts = k8sWaitTimeouts(deps, dir, target, plan, s.name);
+        throw new PlugbricksError(timeouts.length ? timeouts : [failed("kubectl", [...target, ...args], r)]);
       }
     }
   }
@@ -290,8 +339,7 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
         runtime === "compose"
           ? ["volume", "rm", composeVolumeName(plan.platform, name)]
           : [...kubectlBase(plan), "delete", "persistentvolumeclaim", name, "--ignore-not-found"];
-      const cmd = runtime === "compose" ? "docker" : "kubectl";
-      const r = run(deps, dir, cmd, args);
+      const r = runtime === "compose" ? run(deps, dir, "docker", args) : kubectl(deps, dir, target, args);
       // A volume that is already gone counts as deleted.
       if (r.status === 0 || (runtime === "compose" && /no such volume/i.test(r.stderr))) pruned.push(v);
       else problems.push(issue("VOLUME_PRUNE_FAILED", "", { volume: `${v.brick}/${v.service}/${v.name}`, detail: lastLines(r.stderr || r.stdout, 1) }));
@@ -304,6 +352,7 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
 
 /** Stops the platform. Never deletes a volume, a PersistentVolumeClaim or the secrets. */
 export function down(root: string, runtime: Runtime, deps: RuntimeDeps = {}): void {
+  const target = runtime === "k8s" ? k8sTargetFlags(deps.k8s) : [];
   const project = readProject(root);
   const platform = project.platform.name;
   if (runtime === "compose") {
@@ -313,9 +362,9 @@ export function down(root: string, runtime: Runtime, deps: RuntimeDeps = {}): vo
     const r = run(deps, project.root, "docker", args);
     if (r.status !== 0) throw new PlugbricksError([failed("docker", args, r)]);
   } else {
-    requireTool(deps, project.root, "kubectl", ["version", "--client"], "kubectl", "install kubectl and select a cluster context");
+    requireKubectl(deps, project.root, target);
     const args = ["--namespace", platform, "delete", DISPOSABLE_KINDS, "--selector", `${MANAGED_BY}=plugbricks`, "--ignore-not-found"];
-    const r = run(deps, project.root, "kubectl", args);
-    if (r.status !== 0) throw new PlugbricksError([failed("kubectl", args, r)]);
+    const r = kubectl(deps, project.root, target, args);
+    if (r.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...args], r)]);
   }
 }

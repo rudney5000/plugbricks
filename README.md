@@ -12,7 +12,8 @@ cd mon-saas
 npx plugbricks add path/to/postgres # a brick that provides "database"
 npx plugbricks add services/orders  # requires "database"
 npx plugbricks status               # add --json for machine-readable output
-npx plugbricks up                    # Docker Compose; --runtime k8s for the current kubectl context
+npx plugbricks up                    # Docker Compose
+npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept
 npx plugbricks remove orders
 npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendingDeletion

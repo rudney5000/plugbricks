@@ -216,7 +216,22 @@ describe("plugbricks CLI scenarios", () => {
       expect(codes, detail).toEqual(step.codes ?? []);
       if (step.stdout) expect(stdout.join("\n"), detail).toContain(step.stdout);
       if (step.stderr) expect(stderr.join("\n"), detail).toContain(step.stderr);
-      if (step.commands) expect(ran, detail).toEqual(step.commands);
+      // "<kubeconfig>" stands for the absolute path of kube.yaml in the scenario's work folder.
+      if (step.commands) expect(ran, detail).toEqual(step.commands.map((c) => c.replaceAll("<kubeconfig>", join(work, "kube.yaml"))));
+      // Safety rule, checked for every scenario: a Kubernetes up or down never runs a kubectl
+      // command without the cluster the user named, whatever the scenario expects.
+      const k8sRun = step.run!.includes("k8s") && ["up", "down"].includes(step.run![0]);
+      if (k8sRun) {
+        const optionValue = (name: string) => step.run![step.run!.indexOf(name) + 1];
+        const context = step.run!.includes("--context") ? optionValue("--context") : undefined;
+        const kubeconfig = step.run!.includes("--kubeconfig") ? join(work, optionValue("--kubeconfig")) : undefined;
+        for (const line of ran.filter((l) => l.startsWith("kubectl "))) {
+          if (context === undefined) expect.fail(`${detail}\nkubectl ran without --context: ${line}`);
+          const flags = [...(kubeconfig ? [`--kubeconfig ${kubeconfig}`] : []), `--context ${context}`].join(" ");
+          expect(line.startsWith(`kubectl ${flags} `), `${detail}\nthis kubectl command does not start with "${flags}": ${line}`).toBe(true);
+        }
+        if (context === undefined) expect(ran, `${detail}\nnothing may run without --context`).toEqual([]);
+      }
       if (before) expect(snapshot(work), `${label} must not change any file`).toEqual(before);
     });
 

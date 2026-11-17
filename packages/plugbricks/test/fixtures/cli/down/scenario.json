@@ -27,11 +27,13 @@
       "run": [
         "down",
         "--runtime",
-        "k8s"
+        "k8s",
+        "--context",
+        "test-cluster"
       ],
       "commands": [
-        "kubectl version --client",
-        "kubectl --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks --ignore-not-found"
+        "kubectl --context test-cluster version --client",
+        "kubectl --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks --ignore-not-found"
       ]
     }
   ]

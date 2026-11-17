@@ -25,7 +25,11 @@ Commands:
   down                   Stop the platform; volumes and secrets are kept
 
 Options:
-  --runtime <name>       compose (Docker Compose, default) or k8s (current kubectl context)
+  --runtime <name>       compose (Docker Compose, default) or k8s (Kubernetes)
+  --context <name>       With --runtime k8s, up and down: the kubectl context to use (required; the
+                         current context is never used)
+  --kubeconfig <file>    With --context: the kubeconfig file that defines it (default: kubectl's own)
+  --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
@@ -64,6 +68,9 @@ export function main(argv: string[], io: Io): number {
           name: { type: "string" },
           json: { type: "boolean" },
           runtime: { type: "string" },
+          context: { type: "string" },
+          kubeconfig: { type: "string" },
+          "allow-context": { type: "string" },
           "prune-volumes": { type: "boolean" },
           help: { type: "boolean", short: "h" },
           version: { type: "boolean", short: "v" },
@@ -101,7 +108,21 @@ export function main(argv: string[], io: Io): number {
     if (!RUNTIMES.includes(runtime)) {
       throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
     }
-    const deps: RuntimeDeps = { ...io.runtime, log: (l) => io.stdout(l) };
+    for (const opt of ["context", "kubeconfig", "allow-context"] as const) {
+      if (values[opt] === undefined) continue;
+      optionFor(opt, "up", "down");
+      if (runtime !== "k8s") throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies with --runtime k8s` });
+    }
+    if (values["allow-context"] !== undefined && values["allow-context"] !== values.context) {
+      throw usage("USAGE_INVALID_OPTION", "", { detail: "--allow-context must name the same context as --context" });
+    }
+    const k8s = {
+      context: values.context,
+      // Like a brick path, relative to where the user typed the command, not to --dir.
+      kubeconfig: values.kubeconfig === undefined ? undefined : resolve(io.cwd, values.kubeconfig),
+      allowContext: values["allow-context"],
+    };
+    const deps: RuntimeDeps = { ...io.runtime, k8s, log: (l) => io.stdout(l) };
 
     switch (command) {
       case "init": {

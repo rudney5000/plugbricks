@@ -1,0 +1,83 @@
+{
+  "description": "--kubeconfig is passed to every kubectl command, and a missing file is refused before anything is written",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/cache"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "cache"
+      ]
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": "kube.yaml",
+          "text": "apiVersion: v1\nkind: Config\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster",
+        "--kubeconfig",
+        "nope.yaml"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_KUBECONFIG_NOT_FOUND"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster",
+        "--kubeconfig",
+        "kube.yaml",
+        "--prune-volumes"
+      ],
+      "commands": [
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster version --client",
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster apply --filename .generated/k8s/namespace.yaml",
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster apply --filename .secrets/k8s-secret.yaml",
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick --ignore-not-found",
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster --namespace demo delete persistentvolumeclaim cache-redis-data --ignore-not-found"
+      ]
+    },
+    {
+      "run": [
+        "down",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster",
+        "--kubeconfig",
+        "kube.yaml"
+      ],
+      "commands": [
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster version --client",
+        "kubectl --kubeconfig <kubeconfig> --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks --ignore-not-found"
+      ]
+    }
+  ]
+}

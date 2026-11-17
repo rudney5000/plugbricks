@@ -247,6 +247,12 @@ end yet.
   real Docker engine (`test/e2e-compose.test.ts`, skipped with its reason where no Linux engine
   answers). The Kubernetes driver is tested by golden files and a fake `kubectl`; it has not run
   on a cluster yet.
+- **Kubernetes safety** (added 2026-11-17): `up` and `down` with `--runtime k8s` never use the
+  current kubectl context. They require `--context <name>` (and accept `--kubeconfig <file>`),
+  and every kubectl command carries these flags. The contexts `platform` and `k3d-platform`
+  (the name k3d gives to a cluster called `platform`) are refused unless `--allow-context`
+  names the same context. Error codes: `K8S_CONTEXT_REQUIRED`, `K8S_CONTEXT_REFUSED`,
+  `K8S_KUBECONFIG_NOT_FOUND`. `generate --runtime k8s` only writes files and needs no cluster.
 
 ---
 

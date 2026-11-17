@@ -37,6 +37,11 @@ export const MESSAGES = {
   RUNTIME_TOOL_MISSING: '"{tool}" was not found; {hint}',
   RUNTIME_COMMAND_FAILED: '"{command}" exited with {status}{detail}',
   VOLUME_PRUNE_FAILED: "could not delete volume {volume} ({detail}); it stays in pendingDeletion",
+  K8S_CONTEXT_REQUIRED:
+    'the Kubernetes runtime needs a cluster you name: pass --context <name> (and --kubeconfig <file> when it is not in the default kubeconfig); plugbricks never uses the current kubectl context, so it cannot act on a cluster you did not choose',
+  K8S_CONTEXT_REFUSED:
+    'context "{context}" is refused: it is the name of the protected cluster "platform" (k3d calls its context "k3d-platform"), which plugbricks must not modify by accident; if you really mean it, add --allow-context {context}',
+  K8S_KUBECONFIG_NOT_FOUND: "kubeconfig file {path} does not exist or is not a file",
 
   // CLI usage (exit code 2).
   USAGE_UNKNOWN_COMMAND: 'unknown command "{command}"; run "plugbricks --help"',
