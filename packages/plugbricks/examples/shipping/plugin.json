@@ -1,0 +1,28 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "shipping",
+  "version": "0.1.0",
+  "description": "Example API: a GraphQL subgraph that adds shipment data to the orders. It extends the Order entity of the orders brick and keeps its own data in PostgreSQL. Its source is apis/shipping; build the image with: docker build -t plugbricks-example/shipping:0.1.0 apis/shipping",
+  "services": [
+    {
+      "name": "app",
+      "image": "plugbricks-example/shipping:0.1.0",
+      "port": 4000,
+      "healthcheck": {
+        "exec": ["wget", "-qO-", "http://localhost:4000/health"]
+      }
+    }
+  ],
+  "requires": {
+    "database": {
+      "wait": "healthy",
+      "timeoutSeconds": 120
+    }
+  },
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  },
+  "extends": [{ "plugin": "orders", "entities": ["Order"] }]
+}
