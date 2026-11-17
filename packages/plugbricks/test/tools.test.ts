@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { ROUTER_IMAGE } from "../src/drivers/common.js";
 
 // tools.json pins the external tools of the Kubernetes end-to-end tests. Nothing is downloaded here: this checks
 // that the file is complete and coherent, so a later install step can trust it.
@@ -71,5 +72,18 @@ describe("tools.json", () => {
 
   it("k3s digest is the one the registry returned on 2026-11-17", () => {
     expect(images.k3s.digest).toBe("sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332");
+  });
+
+  it("router image: pinned by digest, the reference spells repository, tag and digest, and it is the one the drivers render", () => {
+    const router = images.router;
+    expect(router.repository).toBe("ghcr.io/wundergraph/cosmo/router");
+    expect(router.tag).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(router.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(router.reference).toBe(`${router.repository}:${router.tag}@${router.digest}`);
+    expect(router.reference).toBe(ROUTER_IMAGE);
+  });
+
+  it("router digest is the multi-architecture index the registry returned on 2026-11-17", () => {
+    expect(images.router.digest).toBe("sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205");
   });
 });
