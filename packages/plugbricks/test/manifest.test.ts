@@ -10,7 +10,7 @@ const root = new URL("../", import.meta.url);
 const read = (p: string) => readFileSync(new URL(p, root), "utf8");
 const load = (p: string) => JSON.parse(read(p));
 
-const EXAMPLES = ["postgres", "orders"];
+const EXAMPLES = ["postgres", "orders", "shipping"];
 
 /**
  * Windows has no executable bit in the file system (mode & 0o111 is always 0), so there the mode
