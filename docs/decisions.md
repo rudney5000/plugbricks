@@ -202,17 +202,89 @@ end yet.
 ## D5. The drivers render their files themselves; Score is not used
 
 - **Status:** implemented (milestone 3), replaces D1 and D2.
-- **Context:** first run of score-compose 0.50.0 with a provisioner written by us (2026-11-17,
-  binary verified against `tools.json`):
-  1. `generate` adds a `wait-for-resources` service with image `alpine`, a floating tag that
-     our manifests forbid (`IMAGE_FLOATING_TAG`), the same problem D1 was about;
-  2. the consumer only waits for the provision task to be **started**
-     (`condition: service_started`), not completed: it can start before its database exists;
-  3. a Score workload is one pod or one Compose service named `<workload>-<container>`; our
-     convention (one network name `<brick>-<service>` per service) does not map onto it.
-  All three can be patched with patch templates, but each driver would then depend on an
-  external binary, its state file (`.score-compose/state.yaml`, with secrets in clear) and
-  its version, and would no longer be a pure function plan → files.
+- **Context:** first run of score-compose 0.50.0 (2026-11-17). Only score-compose was looked at
+  for this decision; **no reason below was checked with score-k8s**. The three reasons are not
+  equally solid, and the evidence below was re-run on 2026-11-17 to say exactly what it shows.
+  1. **`wait-for-resources` uses a floating tag. Confirmed.** `generate` adds a
+     `wait-for-resources` service with image `alpine`, a floating tag that our manifests forbid
+     (`IMAGE_FLOATING_TAG`), the same problem D1 was about.
+  2. **The consumer only waits for the provision task to be started. Does not apply to the
+     built-in provisioner.** The observation was made with a provisioner written by us, whose
+     task the consumer depended on with `condition: service_started`. With score-compose's own
+     postgres provisioner, the same test gives `service_healthy` on the database and
+     `service_completed_successfully` on the init task (evidence below): the consumer cannot
+     start before its database exists. This reason only holds if plugbricks supplies its own
+     provisioners, which is what D1 planned and what is no longer the case.
+  3. **Names do not match our convention. Confirmed.** A Score workload is one pod or one
+     Compose service named `<workload>-<container>`, and provisioned resources get random names
+     (`pg-e3W8IV`); our convention (one network name `<brick>-<service>` per service) does not
+     map onto it.
+  Together, the confirmed reasons (1, 3) can be patched with patch templates, but each driver
+  would then depend on an external binary, its state file (`.score-compose/state.yaml`, with
+  secrets in clear) and its version, and would no longer be a pure function plan → files. That
+  trade-off, not a failure of Score, is the reason for the decision.
+  **Kubernetes is an extrapolation.** score-k8s 0.22.0 and 0.23.0 were tested earlier on a k3d
+  cluster, only for the init-container wait of D2, which worked. None of the three reasons above
+  was verified with score-k8s. Dropping score-k8s rests on the Compose observations and on the
+  dependency argument, and stays an extrapolation until the k3d end-to-end test exists
+  (see Consequences).
+- **Evidence** (score-compose 0.50.0, `linux_amd64` archive sha256
+  `7257a7eed0079f92382668ff3ea4abc3158d93bce4b5b2f40b1476d84d313564`, equal to the published
+  checksums file; run offline with the built-in provisioners):
+
+  ```
+  $ cat score.yaml
+  apiVersion: score.dev/v1b1
+  metadata:
+    name: client
+  containers:
+    main:
+      image: postgres:17.11-alpine
+      variables:
+        PGHOST: ${resources.db.host}
+  resources:
+    db:
+      type: postgres
+
+  $ score-compose init --no-sample && score-compose generate score.yaml
+  INFO: Provisioned 1 resources
+  INFO: Converting workload 'client' to Docker compose
+
+  $ grep -E "^\s+image:" compose.yaml
+      image: postgres:17.11-alpine
+      image: mirror.gcr.io/postgres:17-alpine
+      image: mirror.gcr.io/postgres:17-alpine
+      image: alpine
+
+  $ grep -E "^  [a-z][^ ]*:$" compose.yaml
+    client-main:
+    pg-e3W8IV:
+    pg-e3W8IV-init:
+    wait-for-resources:
+    pg-e3W8IV-data:
+
+  $ awk '/^  wait-for-resources:/,/^volumes:/' compose.yaml
+    wait-for-resources:
+      command:
+        - echo
+      image: alpine
+      depends_on:
+        pg-e3W8IV:
+          condition: service_healthy
+          required: true
+        pg-e3W8IV-init:
+          condition: service_completed_successfully
+          required: true
+  ```
+
+  - Reason 1: the last `image:` line, `alpine`, belongs to `wait-for-resources`, which no
+    provisioner controls. The two `mirror.gcr.io/postgres:17-alpine` lines are the provisioner's
+    own images, with a major-version tag that is also floating.
+  - Reason 2: `wait-for-resources` depends on `service_healthy` and
+    `service_completed_successfully`, and `client-main` depends on `wait-for-resources`
+    completing. Not reproduced.
+  - Reason 3: the services are `client-main` (workload `client` + container `main`) and
+    `pg-e3W8IV` (random), not `<brick>-<service>`.
 - **Decision:**
   - `src/plan.ts` builds a runtime-independent plan from `platform.lock` and the installed
     copies (integrity checked, manifests re-validated). `src/drivers/compose.ts` and
@@ -245,8 +317,12 @@ end yet.
 - **Consequences:** `tools.json` no longer pins score-k8s and score-compose; it keeps k3d and
   kubectl for a Kubernetes end-to-end test. The Compose driver is tested end to end against a
   real Docker engine (`test/e2e-compose.test.ts`, skipped with its reason where no Linux engine
-  answers). The Kubernetes driver is tested by golden files and a fake `kubectl`; it has not run
-  on a cluster yet.
+  answers). The Kubernetes driver is tested by golden files and a fake `kubectl`; **it has not
+  run on a cluster yet**, so the Kubernetes half of this decision is not yet backed by a
+  running system. The decision stands until that test exists; if it shows the driver needs
+  more than a patch to be reliable, revisit score-k8s then, with that evidence.
+  - plugbricks now owns what Score provided: the YAML for Compose and Kubernetes objects
+    (`src/yaml.ts`, `src/drivers/`), the start order, and the wait and provision steps.
 - **Kubernetes safety** (added 2026-11-17): `up` and `down` with `--runtime k8s` never use the
   current kubectl context. They require `--context <name>` (and accept `--kubeconfig <file>`),
   and every kubectl command carries these flags. The contexts `platform` and `k3d-platform`
