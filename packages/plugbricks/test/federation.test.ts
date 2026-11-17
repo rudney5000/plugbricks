@@ -17,7 +17,8 @@ const tracking = sub(
 );
 
 const composerLoaded = () =>
-  Object.keys(createRequire(import.meta.url).cache).some((p) => p.includes("@wundergraph/composition/dist/index.js"));
+  // Windows spells the paths of require.cache with backslashes: compare them with "/".
+  Object.keys(createRequire(import.meta.url).cache).some((p) => p.replaceAll("\\", "/").includes("@wundergraph/composition/dist/index.js"));
 
 describe("composeSubgraphs", () => {
   // Must stay the first test of the file: it looks at what this process has loaded so far.

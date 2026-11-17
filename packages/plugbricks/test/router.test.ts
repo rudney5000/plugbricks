@@ -18,7 +18,8 @@ import { generate } from "../src/runtime.js";
 const pkg = fileURLToPath(new URL("../", import.meta.url));
 const work = join(pkg, ".test-work/router");
 
-const cacheLoaded = (name: string) => Object.keys(createRequire(import.meta.url).cache).some((p) => p.includes(name));
+// Windows spells the paths of require.cache with backslashes: compare them with "/".
+const cacheLoaded = (name: string) => Object.keys(createRequire(import.meta.url).cache).some((p) => p.replaceAll("\\", "/").includes(name));
 
 function run(root: string, args: string[]): { code: number; out: string; err: string } {
   const out: string[] = [];
