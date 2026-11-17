@@ -202,6 +202,9 @@ end yet.
 ## D5. The drivers render their files themselves; Score is not used
 
 - **Status:** implemented (milestone 3), replaces D1 and D2.
+- **Who decided:** the decision to drop Score was taken by Dedy (the project owner). The
+  verification of the Kubernetes driver on a real cluster was postponed by Dedy, and is the end-to-end
+  test `packages/plugbricks/test/e2e-k8s.test.ts` (CI job "kubernetes (k3d)"; added 2026-11-17).
 - **Context:** first run of score-compose 0.50.0 (2026-11-17). Only score-compose was looked at
   for this decision; **no reason below was checked with score-k8s**. The three reasons are not
   equally solid, and the evidence below was re-run on 2026-11-17 to say exactly what it shows.
