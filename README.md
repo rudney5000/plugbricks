@@ -86,7 +86,7 @@ Code quality, all from the repository root:
 Test inputs, golden files, the example bricks and the project template are never formatted or linted:
 they are hashed or compared byte for byte. Hooks, CI jobs and the reasons are in `docs/decisions.md` (D7).
 
-Supported on Linux, macOS and Windows with Node 22 (the exact version is in `.node-version`).
+Supported on Linux, macOS and Windows with Node 22.12 or newer (`engines` says so; the exact version CI and the dev container use is in `.node-version`). The router configuration loads `@wundergraph/cosmo-shared`, an ES module, with `require()`, which Node supports without a flag from 22.12; Node 20.19 also built the configuration in a manual check, but CI does not test it, so it is not claimed.
 CI (`.github/workflows/ci.yml`) runs the three commands above on all three systems; see
 `docs/decisions.md` (D4) for what differs between them and how it is handled. `tools.json` pins
 k3d and kubectl per OS and architecture, for a Kubernetes end-to-end test.
