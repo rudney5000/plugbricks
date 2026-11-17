@@ -119,4 +119,6 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Later pass: kill the database pod, then `up` again, and check that the platform recovers and the data is kept.
 4. **Federation**: real APIs, the Cosmo router, composition checked at `add`, a second API with `extends`
    - Done: the `orders` API (`apis/orders`), tested alone and on a platform.
+   - Done: composition of the subgraphs checked at `add`, `remove` and `status` (`@wundergraph/composition`, D8): `COMPOSITION_FAILED`, `SUBGRAPH_SCHEMA_INVALID`, `EXTENDS_*`; a `federation` section in `platform.lock`.
+   - To do: the second API with `extends`, the router configuration, the Cosmo router on Compose and Kubernetes.
 5. **Message queue** (NATS)

@@ -439,6 +439,87 @@ end yet.
 
 ---
 
+## D8. The subgraphs are composed with @wundergraph/composition, before anything is written
+
+- **Status:** implemented for the check (milestone 4, step 4b-1). The router and the second API
+  come in the following steps.
+- **Context:** bricks can serve a GraphQL subgraph and extend entities of other bricks
+  (`subgraph` and `extends` in the manifest). Two bricks that disagree on a type must be refused
+  when the second one is added, with a message that says who disagrees on what. Three libraries
+  were compared on 2026-11-17, on the same cases (valid pair; the same entity field and the same
+  value type with incompatible types; an extension of a type nobody defines; an undefined type; a
+  `@key` on a missing field; a syntax error):
+  - `@wundergraph/composition` 0.68.1: Apache-2.0, 116 packages in its production closure.
+    Steady-state call 1.3 to 3.2 ms. Errors are plain `Error` objects with a message only, no code,
+    and the same problem can appear twice.
+  - `@apollo/composition` 2.14.4: **Elastic-2.0**, 3 packages under that licence, 73 packages in
+    total. Steady-state call 4.4 to 17 ms. Errors carry stable codes (`FIELD_TYPE_MISMATCH`,
+    `EXTENSION_WITH_NO_BASE`, ...). Its output is a supergraph schema for Apollo's router, not
+    the configuration the Cosmo router reads.
+  - the `wgc` binary 0.133.12: 565 packages, 271 MB, 3.3 s per call: rejected as a dependency.
+- **Decision:** `@wundergraph/composition` 0.68.1, exact version, with `@wundergraph/cosmo-shared`
+  0.50.1 (added now, used from step 4b-3).
+  1. **One chain.** The router reads a `router-config.json` built from the composition result.
+     Checking with one composer and configuring with another would let them disagree. The
+     configuration built in process from this library was accepted by the router 0.372.0
+     (spike of 2026-11-17: health, `__typename` and a query across two subgraphs, with mock
+     subgraphs), including without the empty `featureFlagConfigs` that `wgc` writes.
+  2. **Licence.** Elastic-2.0 is not an open source licence (it forbids offering the software as a
+     hosted service, among other things). A command line tool that people run themselves is
+     probably allowed, but we would rather not carry the question. Both Apache-2.0 and the
+     permissive licences of the rest of the tree are reviewed in
+     `docs/pre-publication-checklist.md`.
+  3. **Speed**, 3 to 5 times lower per call.
+  The error texts of the composer are shown as they are (it names the bricks, because a subgraph
+  is named after its brick, the type and the field) and are not parsed: only their codes and
+  structure would be stable with Apollo's library, and we accepted that trade.
+- **Where it runs:** `add` and `remove` compose the subgraphs the platform would have, before any
+  file is written; `status` composes again. The library is loaded the first time it is needed:
+  a platform with no subgraph never loads it. It is a CommonJS package, loaded with `require`, so
+  `add`, `remove` and `status` stay synchronous (an `import()` would have made them, `main` and
+  every caller asynchronous, for the same laziness).
+- **Refusals:** `COMPOSITION_FAILED` (one issue per distinct composer error, its text as it is),
+  `SUBGRAPH_SCHEMA_INVALID` (file, line, column; nothing else is tried after a syntax error),
+  `EXTENDS_OWNER_MISSING`, `EXTENDS_ENTITY_MISSING`, `EXTENDS_ENTITY_NOT_DECLARED` (the extending
+  brick's own schema must declare each entity listed in `extends.entities`: an object type, or its
+  extension, with `@key`), and `EXTENDS_IN_USE` for `remove`, which refuses to remove a brick whose
+  entity an installed brick extends. `status` reports `FEDERATION_CHANGED`.
+- **What no composer can see:** a type `Ghost @key(fields: "id")` defined by one subgraph and by
+  nobody else composes without error: composition has no notion of what a brick meant to extend
+  (case 3b). The `extends` field says it, and plugbricks checks it (`EXTENDS_ENTITY_MISSING`).
+  The other direction is not checked: a brick that defines an entity another brick owns, without
+  listing it in `extends`, composes too.
+- **The lock:** a `federation` section, only when at least one brick serves a subgraph: the
+  composer's name and version, `routerCompatibilityVersion`, the sorted list of subgraphs and the
+  sha256 of the federated schema (its definitions sorted by kind and name, then printed). No date.
+  The lock version stays 1: the section is optional. `status` fails only when the schema hash
+  differs; a different composer version is shown and accepted. A brick without a subgraph is
+  ignored; with no subgraph at all nothing is composed and the section is absent.
+- **A brick copy that cannot be read** is left out, as in the runtime name check, unless a
+  federation is involved (a subgraph is being added, or the lock already records one): then `add`
+  and `remove` refuse with `BRICK_UNREADABLE`, because composing without it would record a wrong
+  hash.
+- **Dependency override.** `@wundergraph/composition` 0.68.1 and `@wundergraph/cosmo-shared` 0.50.1
+  depend on `@graphql-tools/utils` 11.x and 8.x, which have two high advisories (prototype
+  pollution in `mergeDeep` and `mergeIncrementalResult`; fixed in 12.0.1). The root `package.json`
+  therefore overrides it to 12.1.0, the version `@graphql-tools/merge` already uses. The composition
+  code only requires `@graphql-tools/merge`. The router configuration built with `cosmo-shared`
+  and the override is byte-identical to the one built before it (checked on 2026-11-17 on the two
+  subgraphs of the spike). The CI audit of production dependencies passes with it and fails
+  without it. Remove the override when the packages move to a fixed version.
+- **Risks:**
+  - the router configuration (step 4b-3) reuses about 25 lines of `wgc` (`constructRouterSubgraph`
+    in its `router compose` command) with `buildRouterConfig` from `cosmo-shared`: these lines are
+    not a public API and can change. A CI job comparing our output with `wgc router compose` (version
+    pinned) is the planned protection; until it exists, the equality was checked once, by hand, and
+    differs only by `featureFlagConfigs`;
+  - the composer and the router are released independently: 0.68.1 and 0.372.0 are known to work
+    together on the cases of the spike, nothing more;
+  - the schema hash depends on the composer's output: a new composer version that prints another
+    schema makes `status` report `FEDERATION_CHANGED` until the bricks are added again.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
