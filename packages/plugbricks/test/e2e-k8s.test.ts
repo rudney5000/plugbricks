@@ -126,24 +126,38 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       ]);
       expect(podList.map((p) => p.status.phase)).toEqual(["Running", "Running", "Running", "Running"]);
 
-      // Nothing is published outside the cluster: call the API by its Service name from inside a pod.
+      // Nothing is published outside the cluster: call the API by its Service name from inside a pod, and from
+      // ANOTHER pod than the one the Service sends the request to (postgres-db, an Alpine image with wget). A pod that
+      // reaches its own Service through the ClusterIP (hairpin) depends on how the node sets up its bridge: it timed
+      // out once in CI (a connection to 10.43.x.x that never answered, in a run whose pods were all Running) after
+      // passing in the runs before. A connection error is retried a few times, which also covers the moment before
+      // kube-proxy has programmed the Service; any other failure is reported at once.
       const gql = (query: string) => {
-        const r = kc([
-          "--namespace",
-          ns,
-          "exec",
-          "deployment/orders-app",
-          "--",
-          "wget",
-          "-qO-",
-          "--header",
-          "content-type: application/json",
-          "--post-data",
-          JSON.stringify({ query }),
-          "http://orders-app:4000/graphql",
-        ]);
-        expect(r.status, r.stderr).toBe(0);
-        return JSON.parse(r.stdout);
+        let last = kc(["version", "--client"]);
+        for (let attempt = 1; attempt <= 6; attempt++) {
+          last = kc([
+            "--namespace",
+            ns,
+            "exec",
+            "deployment/postgres-db",
+            "--",
+            "wget",
+            "-qO-",
+            "-T",
+            "10",
+            "--header",
+            "content-type: application/json",
+            "--post-data",
+            JSON.stringify({ query }),
+            "http://orders-app:4000/graphql",
+          ]);
+          if (last.status === 0) return JSON.parse(last.stdout);
+          if (!/can't connect|timed out|bad address/i.test(last.stderr)) break;
+          console.log(`gql attempt ${attempt} failed (${last.stderr.trim().split("\n").pop()}); trying again in 5 s`);
+          spawnSync("sleep", ["5"]);
+        }
+        expect(last.status, last.stderr).toBe(0);
+        return JSON.parse(last.stdout);
       };
       const created = gql("mutation { createOrder(total: 42.5) { id total status } }");
       expect(created.data.createOrder).toMatchObject({ total: 42.5, status: "pending" });
