@@ -1,5 +1,5 @@
 {
-  "$comment": "Pinned external tools for the Kubernetes end-to-end tests (a throwaway k3d cluster driven by kubectl). The drivers render their files themselves (decision D5): no Score binary is needed. Every sha256 comes from the official release checksum file named in 'checksums', fetched on 2026-11-16; no binary was downloaded to build this file. A tool is verified against this sha256 BEFORE it is extracted or installed. Platforms: <os>-<arch>, os in linux/darwin/windows, arch in amd64/arm64.",
+  "$comment": "Pinned external tools for the Kubernetes end-to-end tests (a throwaway k3d cluster driven by kubectl; see 'images' for the k3s node image). The drivers render their files themselves (decision D5): no Score binary is needed. Every sha256 comes from the official release checksum file named in 'checksums', fetched on 2026-11-16; no binary was downloaded to build this file. A tool is verified against this sha256 BEFORE it is extracted or installed. Platforms: <os>-<arch>, os in linux/darwin/windows, arch in amd64/arm64.",
   "tools": {
     "k3d": {
       "version": "v5.9.0",
@@ -94,6 +94,15 @@
           "binary": "kubectl.exe"
         }
       }
+    }
+  },
+  "images": {
+    "$comment": "Container images the end-to-end tests pull, pinned by digest. The digest is the one the registry returned for the tag on 2026-11-17 (the multi-architecture index, so it works on amd64 and arm64). k3s is the Kubernetes the throwaway cluster runs; its minor version must be within one of the kubectl version above (the kubectl skew policy).",
+    "k3s": {
+      "repository": "rancher/k3s",
+      "tag": "v1.37.2-k3s1",
+      "digest": "sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332",
+      "reference": "rancher/k3s:v1.37.2-k3s1@sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332"
     }
   }
 }
