@@ -9,7 +9,8 @@
     // Score is not used (decision D5). k3d and kubectl are not installed here yet; they come with the Kubernetes end-to-end test.
   },
 
-  "postCreateCommand": "npm ci",
+  // Install the dependencies, then the git hooks (npm run hooks:install sets core.hooksPath; a "prepare" script is deliberately not used).
+  "postCreateCommand": "npm ci && npm run hooks:install",
 
   "customizations": {
     "vscode": {
