@@ -2,7 +2,7 @@
 
 Add plugins and infrastructure bricks (PostgreSQL, a message queue, …) to a federated GraphQL project, on Docker Compose or Kubernetes, from a single `platform.json`.
 
-Status: **milestone 3** — the drivers: `generate`, `up` and `down` on Docker Compose and on Kubernetes, on top of the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Federation (the router and a second API with `extends`) comes in milestone 4.
+Status: **milestone 4, first part merged** — the real `orders` API, a GraphQL subgraph with its own database, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. The Compose driver has run end to end against Docker; **the Kubernetes driver has not run on a cluster yet** (golden files and a fake `kubectl` only). The Cosmo router and a second API with `extends` are still to come.
 
 ## Use
 
