@@ -604,7 +604,40 @@ end yet.
   router's rollout, which waits for its readiness probe. So the kubelet accepted the security context and the
   readiness probe passed. Not shown there: a request through the router on the cluster, and the liveness probe
   failing or not over time.
-- **Not verified:** a request through the router on a Kubernetes cluster (4b-5); macOS and Windows (the
+- **4b-5, the router and shipping on a real cluster (the test is written; the cluster result is NOT yet seen).**
+  `e2e-k8s.test.ts` now runs postgres, orders, shipping and the router on a throwaway k3d cluster, with real requests
+  through the router only (`kubectl port-forward service/router`, bound to 127.0.0.1 on a free port: it needs no
+  client image, it uses the same HTTP client as the Compose test, and the router-to-subgraph path through the Service
+  names and ClusterIPs is exercised by the federated queries themselves). It asserts: the four pods are `Running`
+  and every container `Ready`; no Ingress, only ClusterIP services, no `nodePort`, `hostPort` or host network; the
+  Compose scenario (createOrder, order with `shipment: null`, shipOrder, the order with fields from both services in
+  one request, a validation error on an unknown field, `GET /` is 404); `remove shipping` then `up` rolls the router
+  Deployment (a new `plugbricks/router-config-sha256` annotation, a higher generation, a new pod) and the
+  `shipment` field is gone; `add shipping` then `up` rolls it again, the annotation is the original value and the
+  field is back with its data; `down` removes the Deployments, the Services and the plugbricks ConfigMaps, router
+  included, and keeps the postgres PersistentVolumeClaim (D3) and the Secret (D6). **This was written and
+  type-checked on a machine without a cluster** (`fs.inotify.max_user_instances` is 128 there, below the 512 k3s
+  needs); the port-forward helper was exercised against a fake `kubectl`; everything else is for the first CI run of
+  the job "kubernetes (k3d)" to show: pods ready, the responses above, the rollouts, and `down`. Until that run is
+  green, nothing in this paragraph is a cluster result. The restart behaviour (a rollout when the configuration
+  changes, a new pod, the old one terminating) is what the test asserts; how the router behaves when its pod is
+  killed is not tested.
+- **Cross-check against the official tool (done, locally).** `router-crosscheck.test.ts` gives `wgc router compose`
+  (wgc 0.133.12, pinned in `tools/wgc-crosscheck`, a standalone package with its own lockfile that is not a
+  dependency of plugbricks) the same two subgraphs (the installed copies of the schemas of orders and shipping,
+  the URLs of our runtime names) and compares its `router-config.json` with ours, field by field. Result: **equal,
+  except the one field the test sets aside**: `featureFlagConfigs`, an empty object that wgc always writes and that
+  we do not write (the test requires it to be exactly `{}`, so nothing real can hide behind it). The same 6862 bytes
+  of JSON apart from that field. The test fails and lists the differing paths when anything else differs (checked
+  by changing a URL on wgc's side). Facts found while doing it: wgc contacts the network to check for a newer
+  version before every command unless `DISABLE_UPDATE_CHECK=true`, and reports telemetry unless
+  `COSMO_TELEMETRY_DISABLED` or `DO_NOT_TRACK` is set; with the three set it ran in a network namespace with no
+  network at all and produced the same bytes. The test is skipped, with the reason in its title, where wgc is not
+  installed (`npm run crosscheck:install`) and on Windows; the CI `quality` job installs it, the matrix jobs do not.
+  The tool brings 565 packages, which is why it is not a root devDependency; its lockfile pins every package with its
+  integrity hash.
+- **Not verified:** the cluster results above until the CI run; a real multi-node cluster (the CI cluster has one
+  node, so scheduling, node-to-node networking and several router replicas are untested); macOS and Windows (the
   rendering is pure text, the router runs only in Linux containers, the end-to-end tests are skipped there);
   that the router keeps working after an upgrade of its image (the digest is pinned on purpose).
 - **Node versions:** the router configuration loads `@wundergraph/cosmo-shared`, an ES module, with

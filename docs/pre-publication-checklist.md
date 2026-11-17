@@ -19,4 +19,15 @@ is added. Each item says what to check and why.
 - [ ] **No secret and no generated file in the package.** `npm pack --dry-run` lists only `dist/`
       and `schemas/`.
 - [ ] **Redo the network capture** (no DNS lookup, no outbound connection from the router at startup) whenever the router image version changes; the telemetry variable names may change.
+- [ ] **Package names and the licence field.** The npm names `plugbricks` and `create-plugbricks` are not checked for
+      availability, and every package is `"private": true` with `"license": "UNLICENSED"`: choose the licence, drop
+      `private` on what is published, and check the names before the first publish.
+- [ ] **First version number.** Everything is 0.0.1. Decide what the first published version is (and what 0.x means for
+      the lockfile, the manifest schema and the CLI codes, which are meant to be stable) before tagging it.
+- [ ] **Signature of the tool checksums.** `tools.json` verifies each binary against a sha256 read from the checksum
+      file of the same release; that proves the download is the file the release lists, not that the release is the
+      maintainers'. Verify the signature of the checksum files where the tool publishes one (cosign, minisign or GPG).
+- [ ] **Development-dependency vulnerabilities.** `npm audit` of the whole tree lists open advisories in the vitest 2
+      chain (vite, esbuild, tinypool); the fix is a major upgrade (D7). The production audit is clean. Settle this, and
+      the tree of `tools/wgc-crosscheck`, before depending on the test run for anything beyond this repository.
 - [ ] **The CI is green on Linux, macOS and Windows, and the Kubernetes job passed.**
