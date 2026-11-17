@@ -18,4 +18,5 @@ is added. Each item says what to check and why.
       the root `package.json` (see D8) is checked again: remove it once the composer needs no override.
 - [ ] **No secret and no generated file in the package.** `npm pack --dry-run` lists only `dist/`
       and `schemas/`.
+- [ ] **Redo the network capture** (no DNS lookup, no outbound connection from the router at startup) whenever the router image version changes; the telemetry variable names may change.
 - [ ] **The CI is green on Linux, macOS and Windows, and the Kubernetes job passed.**

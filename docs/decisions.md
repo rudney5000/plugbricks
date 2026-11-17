@@ -527,6 +527,80 @@ end yet.
 
 ---
 
+## D9. The router is rendered by plugbricks and is not a brick; loopback only
+
+- **Status:** implemented for the rendering (milestone 4, step 4b-3). The router has been run by hand
+  against its image with fake subgraphs; no end-to-end test runs it yet (4b-4 on Compose, 4b-5 on
+  Kubernetes).
+- **Decision:**
+  - **Not a brick.** A brick declares exec probes and a wait step that runs a shell in an image. The
+    Cosmo router image (`ghcr.io/wundergraph/cosmo/router:0.372.0`, pinned by the digest of its
+    multi-architecture index, `sha256:bfe6d89a…0205`, re-read from the registry on 2026-11-17) is
+    distroless: **no `/bin/sh`, no `wget`**, so an exec healthcheck or wait step cannot run in it. It
+    belongs to no brick either: it exists because some brick serves a subgraph. `plan.ts` adds it to the
+    plan when at least one installed brick has a subgraph, and the two drivers render it. With no
+    subgraph there is no router, no `router-config.json`, and the next `generate`, `up` or `down`
+    removes what an earlier run created (Compose `--remove-orphans`; Kubernetes `up` deletes the objects
+    labelled `plugbricks/component=router`, `down` deletes everything plugbricks created).
+  - **Its configuration** (`router-config.json`, one text, byte-identical for the same bricks) is built
+    in process by `src/federation.ts`, the only file that imports the composer and
+    `@wundergraph/cosmo-shared`: `federateSubgraphs` then `buildRouterConfig` (D8). Each subgraph is
+    reached at `http://<brick>-<service>:<port><path>`, the runtime names our drivers already use. It is
+    written to `.generated/<runtime>/router-config.json` (mode 0644: the container runs as another
+    user). Its sha256 is put on the container (Compose label) and on the pod (annotation), because the
+    router reads its configuration once, at start: a changed configuration recreates it.
+  - **Published on the loopback address only.** Compose: `127.0.0.1:<router.port>:3002`, the long port
+    syntax with `host_ip`, and nothing else in the file has a `ports` entry. Kubernetes: a ClusterIP
+    Service (port `router.port`, target 3002), no Ingress, no NodePort, no LoadBalancer, no hostPort, no
+    hostNetwork. Tests look for all of these in the rendered output. `router.port` is in `platform.json`
+    (integer from 1024 to 65535, default 4000), refused by every command otherwise; `status` shows the
+    port and the image.
+  - **Compose** waits for each subgraph service with `service_healthy`, or `service_started` for a
+    service that declares no healthcheck (Compose refuses `service_healthy` without one). The router has
+    no healthcheck. **Kubernetes** uses HTTP probes, `/health/ready` for readiness and `/health/live` for
+    liveness (both answered 200 in the spike), the configuration in a ConfigMap (refused with
+    `ROUTER_CONFIG_TOO_LARGE` above 1,000,000 bytes, before anything is written), and `up` waits for the
+    rollout like for the other workloads.
+- **What was verified by running the image** (2026-11-17, router 0.372.0, digest above):
+  - **Playground:** by default `GET /` answers 200 (the playground). With `PLAYGROUND_ENABLED=false`,
+    `GET /` answers 404. The variable still works but the router logs that it is deprecated in favour of
+    the `playground.enabled` option of its YAML configuration; we keep the variable (one file less) and
+    this is the first thing to revisit when the router is upgraded. Introspection is not changed.
+  - **Telemetry, a surprise:** with the default settings, and with `TRACING_ENABLED`,
+    `METRICS_OTLP_ENABLED` and `PROMETHEUS_ENABLED` set to `false`, **the router opens an HTTPS
+    connection to `eu.i.posthog.com` at start** (anonymous usage tracking), even with no graph token. A
+    capture inside the container's network namespace showed the DNS question and the connection. The
+    router's source (`router/core/router.go`, tag `router@0.372.0`) skips that tracker when
+    `COSMO_TELEMETRY_DISABLED=true` or `DO_NOT_TRACK=1`; with both set, the same 25 s capture showed no
+    DNS question and no outgoing connection. Both are set. The router without a graph token does not
+    contact the Cosmo control plane (it logs that Cosmo Cloud features are disabled).
+  - **Non-root:** the router starts and answers (`/health/ready` 200, `{ __typename }`) with
+    `--user 65532:65532`, and also with `--read-only --cap-drop ALL --security-opt no-new-privileges`.
+    It therefore runs as uid/gid 65532 with a read-only root filesystem and no capability on both
+    runtimes (`runAsNonRoot`, `runAsUser`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`,
+    `drop: [ALL]` and the `RuntimeDefault` seccomp profile on Kubernetes). Its 3002 port is above 1024.
+- **Verified on Docker only:** `runAsNonRoot` (a numeric `runAsUser` 65532), `readOnlyRootFilesystem` and the
+  HTTP probes were verified by running the image with Docker (`--user`, `--read-only`, `curl` on the health paths),
+  not on a kubelet. They are verified on a kubelet only by the k3d CI job, which runs the router for the first
+  time when this is merged; until it is green, treat the Kubernetes security context and probes as unverified.
+- **Not verified:** the router on a Kubernetes cluster (no cluster was used); `securityContext` and the
+  probes on a real kubelet; a query that goes through the router to real subgraphs (the manual check used
+  fake ones); macOS and Windows (the rendering is pure text, the router runs only in Linux containers);
+  that the router keeps working after an upgrade of its image (the digest is pinned on purpose).
+- **Node versions:** the router configuration loads `@wundergraph/cosmo-shared`, an ES module, with
+  `require()`. Run on 2026-11-17 in containers: Node 20.18.3 fails with `ERR_REQUIRE_ESM`; Node 20.19.0 and
+  22.12.0 build the same configuration (6862 bytes for orders and shipping). `engines` is therefore
+  `>=22.12.0` for the root, `plugbricks` and `create-plugbricks`: 22.12 is the first Node 22 with `require()`
+  of ES modules on by default and CI tests Node 22 (`.node-version`); 20.19 works but nothing tests it, so
+  it is not claimed. On 22.12.0 Node printed an ExperimentalWarning because the requiring file was outside
+  `node_modules`; whether it prints for an installed package was not checked.
+- **Risks:** the router image is large (145 MB) and comes from ghcr.io, which is not pinned by a
+  mirror; the playground variable is deprecated; the telemetry switch is a variable that the router could
+  rename (the check is a capture, not a test in CI); the composer version appears in the configuration
+  (`compatibilityVersion: 1:0.68.1`), so a new composer changes the text and the hash of the file.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

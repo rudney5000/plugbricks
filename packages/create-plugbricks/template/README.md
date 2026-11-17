@@ -8,7 +8,7 @@ them and of what they need from each other.
 
 | Path | What it is | Commit it? | Edit it by hand? |
 |---|---|---|---|
-| `platform.json` | **What you want**: the list of installed bricks and where each came from. | yes | no, use `plugbricks add` / `remove` |
+| `platform.json` | **What you want**: the list of installed bricks and where each came from, and the port of the GraphQL router (`router.port`, 4000 by default; you may change it). | yes | only `router.port`; use `plugbricks add` / `remove` for the bricks |
 | `platform.lock` | **What plugbricks resolved**: exact versions, a fingerprint of every brick, which brick provides which capability, the volumes kept after a removal, and the volumes waiting to be deleted (deleted only when you ask for it explicitly). | yes | never |
 | `.platform/bricks/` | A **copy of every installed brick**, so the project does not depend on where a brick came from. `plugbricks status` warns if a copy was changed. | yes | never |
 | `services/` | **Your own services.** Each folder is a brick: a `plugin.json` that says what the service is, plus its files. `services/orders/` is an example to start from. | yes | yes, this is your code |
@@ -50,6 +50,8 @@ npx plugbricks up                       # Docker Compose (needs Docker with Comp
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes; you always name the cluster (add --kubeconfig <file> if needed)
 npx plugbricks down                     # stops everything; your data and secrets are kept
 ```
+
+If one of the bricks serves a GraphQL subgraph, `up` also starts a router in front of it. With Docker Compose it answers at `http://127.0.0.1:4000/graphql` (change the port with `router.port` in `platform.json`), and only from your own machine: nothing else is published.
 
 `up` creates each service's database before the service starts and gives it its
 `DATABASE_URL`. Removing a brick keeps its data; a volume declared `retention: delete` is
