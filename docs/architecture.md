@@ -2,7 +2,7 @@
 
 How plugbricks works, from the files a user writes to the containers that answer a GraphQL request.
 This document grows with the project: each section says whether it describes what is **built** or
-what is **planned**. The reasons behind each choice are in `docs/decisions.md` (D1 to D9); this
+what is **planned**. The reasons behind each choice are in `docs/decisions.md` (D1 to D10); this
 document links to them instead of repeating them.
 
 ## 1. Vocabulary
@@ -62,8 +62,9 @@ flowchart LR
 4. **`up` / `down`** render, then call the runtime. `up --prune-volumes` deletes only the volumes the
    lock lists in `pendingDeletion`.
 5. **`status`** compares what was asked, what was resolved and the federation hash
-   (`FEDERATION_CHANGED`). Comparing with what the runtime reports is the work of the
-   `feat/status-runtime` branch.
+   (`FEDERATION_CHANGED`). `status --runtime compose|k8s` adds what the runtime really runs,
+   read-only (D10): per brick, service and router, `enabled` vs `deployed`, state, reason, restart
+   count and instances, as a table or as a versioned JSON report (`schemas/status-runtime.schema.json`).
 
 ## 4. Data plane: the example shop (built)
 
@@ -227,8 +228,8 @@ Open questions, in the order they block the mockup:
 
 1. **`enabled` separate from installed.** The mockup distinguishes *Enabled* (asked in `platform.json`)
    from *Deployed* (reported by the runtime). Today a brick in `platform.json` is always meant to run.
-2. **Runtime status per brick** (healthy, starting, down, stopped, with a reason): the
-   `feat/status-runtime` branch.
+2. **Runtime status per brick** (healthy, starting, down, stopped, with a reason): **done** in
+   `status --runtime` (D10); the admin page would consume its JSON report.
 3. **Tags** in the manifest, for filtering.
 4. **Web bricks**: a service that serves pages. The router is GraphQL only, so pages need their own
    published entry (and therefore a change to the loopback-only rule of D9, or a second published port).
