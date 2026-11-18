@@ -144,8 +144,14 @@ jobs:
             package-lock.json
             apis/orders/package-lock.json
             apis/shipping/package-lock.json
+            tools/wgc-crosscheck/package-lock.json
 
       - run: npm ci
+
+      # The official Cosmo CLI, pinned in tools/wgc-crosscheck (a standalone package, never a dependency of
+      # plugbricks): without it the cross-check of our router configuration is skipped, with the reason in its title.
+      - name: Install wgc for the router cross-check
+        run: npm run crosscheck:install
 
       # Prettier, ESLint, typecheck and the tests: the same command as on a developer machine.
       - run: npm run quality

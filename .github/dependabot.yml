@@ -28,6 +28,15 @@ updates:
       shipping-dependencies:
         patterns: ["*"]
 
+  # tools/wgc-crosscheck holds only the official Cosmo CLI for a test; a new version is a new reference to compare with.
+  - package-ecosystem: npm
+    directory: /tools/wgc-crosscheck
+    schedule:
+      interval: weekly
+    groups:
+      wgc-crosscheck:
+        patterns: ["*"]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -1,0 +1,13 @@
+{
+  "name": "plugbricks-wgc-crosscheck",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Not part of plugbricks and never published: it only installs the official Cosmo CLI (wgc) so that a test can compare our router configuration with the one wgc router compose produces. Standalone package with its own lockfile (not an npm workspace): run `npm ci` here, or `npm run crosscheck:install` at the root.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "wgc": "0.133.12"
+  }
+}
