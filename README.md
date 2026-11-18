@@ -12,6 +12,7 @@ cd mon-saas
 npx plugbricks add path/to/postgres # a brick that provides "database"
 npx plugbricks add services/orders  # requires "database"
 npx plugbricks status               # add --json for machine-readable output
+npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
 npx plugbricks up                    # Docker Compose
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept
@@ -30,6 +31,84 @@ npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendin
 `up` returns once every service runs and passes its healthcheck (Compose `--wait`, Kubernetes `rollout status`). It starts, for each consumer and capability, a wait step (the provider's `ready` command, up to `timeoutSeconds`), then the provider's provision task, then the consumer. A wait that gives up is reported as `WAIT_TIMEOUT`. When at least one brick serves a subgraph, plugbricks also starts the Cosmo router in front of them (`generate` builds its configuration from the subgraphs; it is not a brick, see D9). It is the only thing published on the host: with Compose on `127.0.0.1:<router.port>`, with Kubernetes as a ClusterIP Service (no Ingress, no NodePort). `status` shows its port and its image, pinned by digest. See `docs/decisions.md` (D5, D6).
 
 Every refusal prints `error <CODE>: <message>` with a stable code from `src/messages.ts`. Exit codes: 0 success, 1 refused or inconsistent, 2 usage error.
+
+### `status --runtime`: what really runs
+
+`plugbricks status` shows the declared state: the installed bricks, the composition, the router. `plugbricks status --runtime <compose|k8s>` also asks the runtime what it really runs, and puts the two side by side. It only reads (D10): one `docker compose ps --all --format json` and one `docker inspect` restricted to the restart counts, or one `kubectl get deployments,pods,services --output json`. It never execs into a container, never reads logs, Secrets or environment variables, and never sends a request to a service: the health it reports is the runtime's own. Every call has a 15 s timeout (kubectl also gets `--request-timeout=10s`).
+
+```bash
+npx plugbricks status --runtime compose            # a table
+npx plugbricks status --runtime compose --json     # the versioned JSON report
+npx plugbricks status --runtime k8s --context my-cluster [--kubeconfig file] [--json]
+```
+
+There is no runtime field in `platform.json`: name the runtime, as for `up` and `down`. Kubernetes needs the same explicit `--context` (and optional `--kubeconfig`) as `up`, with the same refusals (`K8S_CONTEXT_REQUIRED`, `K8S_CONTEXT_REFUSED`, `K8S_KUBECONFIG_NOT_FOUND`).
+
+For each installed brick and each of its services, and for the router: `enabled` (installed in `platform.json`; there is no switch to disable a brick yet), `deployed` (the runtime has a container or a Deployment for it), `state`, a short `reason`, the restart count and the container or pod names. A difference between the two is flagged: `mismatch` is `not-deployed` (enabled, nothing running) or `not-declared` (running under the platform's name, not in `platform.json`, listed under `undeclared`). The router also gives its published address (Compose: `127.0.0.1:<port>`; Kubernetes: `<cluster IP>:<port>` of its Service), the digest of the image the runtime reports, and the state of each subgraph service it calls.
+
+| `state`        | Meaning                                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `healthy`      | Running, and its health check (Compose healthcheck, Kubernetes readiness probe) passes.                    |
+| `starting`     | Not ready yet: health check not passed yet, init containers running, rollout in progress.                  |
+| `unhealthy`    | Running but failing: failing health check, restart loop, CrashLoopBackOff, image pull error, unschedulable. |
+| `stopped`      | Exited (with its exit code), created but never started, or scaled to 0.                                    |
+| `not deployed` | The runtime has nothing for it.                                                                             |
+| `unknown`      | Running with no health check to tell (the router on Compose: its image has no shell), or a state plugbricks does not know. Never counted as a problem. |
+
+Exit codes of `status --runtime`: **0** every enabled service and the router are `healthy` or `unknown`; **1** the declared state is inconsistent (the same problems as `status`) or the cluster is refused; **2** usage error; **3** an enabled service or the router is `starting`, `unhealthy`, `stopped` or `not deployed`; **4** the runtime cannot be read (`RUNTIME_UNAVAILABLE`: not installed, not answering, or slower than the timeout). Something running but not declared is reported and does not change the exit code.
+
+`--json` prints one document, `"version": 1`, described by [`packages/plugbricks/schemas/status-runtime.schema.json`](packages/plugbricks/schemas/status-runtime.schema.json). Key names are stable within a version; no field holds a time, so two reads of the same runtime state give the same bytes. Shortened example (Compose, the shipping service stopped):
+
+```json
+{
+  "version": 1,
+  "platform": "demo",
+  "runtime": "compose",
+  "context": null,
+  "state": "degraded",
+  "bricks": [
+    {
+      "name": "shipping",
+      "enabled": true,
+      "services": [
+        {
+          "name": "shipping-app",
+          "service": "app",
+          "enabled": true,
+          "deployed": true,
+          "state": "stopped",
+          "reason": "exited with code 0",
+          "restarts": 0,
+          "instances": ["demo-shipping-app-1"],
+          "subgraph": true,
+          "mismatch": null
+        }
+      ]
+    }
+  ],
+  "router": {
+    "name": "router",
+    "enabled": true,
+    "deployed": true,
+    "state": "unknown",
+    "reason": "running; no health check",
+    "restarts": 0,
+    "instances": ["demo-router-1"],
+    "mismatch": null,
+    "address": "127.0.0.1:4000",
+    "image": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a…0205",
+    "digest": "sha256:bfe6d89a…0205",
+    "subgraphs": [
+      { "brick": "orders", "name": "orders-app", "state": "healthy" },
+      { "brick": "shipping", "name": "shipping-app", "state": "stopped" }
+    ]
+  },
+  "undeclared": [],
+  "problems": []
+}
+```
+
+This report is meant to feed an admin web page later; that page does not exist.
 
 ## Layout
 
@@ -125,5 +204,6 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (4b-3): the router is rendered for Docker Compose and Kubernetes: `router-config.json` built in process from the composition, the router image pinned by digest (`tools.json`), `router.port` in `platform.json`, golden-file tests (D9).
    - Done (4b-4): real requests through the router on Docker Compose (`e2e-compose`): an order created through the router, then shipped, then read back in one request that reaches both `orders` and `shipping`; a validation error does not crash it; the playground is off; `remove shipping` then `up` recreates the router without the `shipment` field, `add shipping` brings it back; `remove orders` stays refused while shipping extends it; after `down` no router and no published port; with no subgraph, no router. The known limits observed there are in D8.
    - Done (4b-5): the cross-check of our router configuration against `wgc router compose` (wgc 0.133.12, pinned in `tools/wgc-crosscheck`): equal except an empty `featureFlagConfigs` (D9). The end-to-end test of the router and shipping on k3d, with requests through the router, a rollout when the composition changes and `down`, is written; **its first CI run is still to be seen** (D9 says what it must show).
+   - Done (5a): `status --runtime compose|k8s [--json]`: what the runtime really runs next to what is declared, read-only (D10), with a versioned JSON report (`schemas/status-runtime.schema.json`) and its own exit codes (3 degraded, 4 `RUNTIME_UNAVAILABLE`). Tested with recorded Compose output and hand-written Kubernetes Lists, end to end on Docker Compose, and on k3d in CI.
    - Before the first publication: check the licences of what we ship (`docs/pre-publication-checklist.md`) and the package names (the npm names are not checked and the packages are `private` today); decide the first version number (everything is 0.0.1 and `UNLICENSED`); verify the signature of the tool checksums (`tools.json` checks a sha256 taken from the same release as the binary, not a signature); and settle the development-dependency vulnerabilities of the vitest 2 chain (D7: a major upgrade).
 5. **Message queue** (NATS)

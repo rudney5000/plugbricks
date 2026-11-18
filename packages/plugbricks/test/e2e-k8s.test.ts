@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
+import type { LiveStatus } from "../src/live.js";
+import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
 import { k8sTestTarget } from "./helpers/k8s-guard.js";
 import { portForward, stopAllForwards } from "./helpers/port-forward.js";
@@ -184,6 +186,20 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         "scratch-redis",
       ]);
       expect(podList.map((p) => p.status.phase)).toEqual(["Running", "Running", "Running", "Running"]);
+
+      // status --runtime on the running project, through the same cluster guards as up: nothing degraded,
+      // the router Ready behind its ClusterIP Service, and a report valid against the published schema.
+      const live = cli(work, ["status", "--runtime", "k8s", "--context", context, "--kubeconfig", kubeconfig, "--json"]);
+      console.log(`status --runtime k8s --json: exit ${live.code}\n${live.out}${live.err ? `\n${live.err}` : ""}`);
+      expect(live.code, live.err).toBe(0);
+      const report = JSON.parse(live.out) as LiveStatus;
+      expect(schemaIssues(statusRuntimeSchema.validate, report)).toEqual([]);
+      expect(report).toMatchObject({ runtime: "k8s", context, state: "healthy", undeclared: [] });
+      const states = Object.fromEntries(report.bricks.flatMap((b) => b.services).map((x) => [x.name, x.state]));
+      expect(states).toMatchObject({ "orders-app": "healthy", "postgres-db": "healthy" });
+      expect(report.router).toMatchObject({ state: "healthy", deployed: true });
+      expect(report.router!.address).toMatch(/^\d+\.\d+\.\d+\.\d+:\d+$/);
+      expect(report.router!.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 
       // Nothing is published outside the cluster: call the API by its Service name from inside a pod, and from
       // ANOTHER pod than the one the Service sends the request to (postgres-db, an Alpine image with wget). A pod that

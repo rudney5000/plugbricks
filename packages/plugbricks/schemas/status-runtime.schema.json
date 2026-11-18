@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/status-runtime.schema.json",
+  "title": "plugbricks status --runtime --json",
+  "description": "What the runtime really runs for a platform, next to what platform.json declares. Version 1. Key names are stable; a new key may be added in version 1, a key is never renamed or removed without a new version. No field holds a time, a log line, an environment variable or a secret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "platform", "runtime", "context", "state", "bricks", "router", "undeclared", "problems"],
+  "properties": {
+    "version": { "const": 1 },
+    "platform": { "type": "string", "description": "Platform name: the Compose project, or the Kubernetes namespace." },
+    "runtime": { "enum": ["compose", "k8s"] },
+    "context": {
+      "type": ["string", "null"],
+      "description": "The kubectl context the state was read from (--context); null on Docker Compose."
+    },
+    "state": {
+      "enum": ["healthy", "degraded"],
+      "description": "degraded when an enabled service or the router is starting, unhealthy, stopped or not deployed (exit code 3)."
+    },
+    "bricks": {
+      "type": "array",
+      "description": "Installed bricks, sorted by name.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "enabled", "services"],
+        "properties": {
+          "name": { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "services": { "type": "array", "items": { "$ref": "#/$defs/service" } }
+        }
+      }
+    },
+    "router": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/router" }],
+      "description": "The Cosmo router; null while no installed brick serves a subgraph."
+    },
+    "undeclared": {
+      "type": "array",
+      "description": "What the runtime runs under this platform's name that platform.json does not declare (for example a removed brick before the next up). Never counted in state.",
+      "items": { "$ref": "#/$defs/service" }
+    },
+    "problems": {
+      "type": "array",
+      "description": "Problems of the declared state, the same as `plugbricks status` reports (exit code 1).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "path", "message", "params"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "path": { "type": "string" },
+          "message": { "type": "string" },
+          "params": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "state": {
+      "enum": ["healthy", "starting", "unhealthy", "stopped", "not deployed", "unknown"],
+      "description": "healthy: running and its health check passes. starting: not ready yet (health check or init containers pending). unhealthy: running but failing, crash-looping or unable to pull its image. stopped: exited, created but not started, or scaled to 0. not deployed: the runtime has nothing for it. unknown: running with no health check to tell, or a state plugbricks does not know; never counted as degraded."
+    },
+    "mismatch": {
+      "enum": ["not-deployed", "not-declared", null],
+      "description": "not-deployed: enabled in platform.json but absent from the runtime. not-declared: present in the runtime but not in platform.json."
+    },
+    "observed": {
+      "type": "object",
+      "required": ["state", "reason", "restarts", "instances"],
+      "properties": {
+        "state": { "$ref": "#/$defs/state" },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "Short and fixed wording (an exit code, CrashLoopBackOff, an image pull error, a failing probe); null when healthy. Never a log line or a runtime message."
+        },
+        "restarts": { "type": "integer", "minimum": 0 },
+        "instances": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Container names (Compose) or pod names (Kubernetes), sorted."
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "service", "enabled", "deployed", "state", "reason", "restarts", "instances", "subgraph", "mismatch"],
+      "allOf": [{ "$ref": "#/$defs/observed" }],
+      "properties": {
+        "name": { "type": "string", "description": "Runtime name: the Compose service or the Kubernetes Deployment, <brick>-<service>." },
+        "service": { "type": ["string", "null"], "description": "The service's name in its plugin.json; null when not declared." },
+        "enabled": {
+          "type": "boolean",
+          "description": "Installed in platform.json. There is no switch to disable an installed brick yet: every installed one is enabled."
+        },
+        "deployed": { "type": "boolean", "description": "The runtime has a container or a Deployment for it, in any state." },
+        "state": true,
+        "reason": true,
+        "restarts": true,
+        "instances": true,
+        "subgraph": { "type": "boolean", "description": "Serves a subgraph behind the router." },
+        "mismatch": { "$ref": "#/$defs/mismatch" }
+      }
+    },
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "enabled",
+        "deployed",
+        "state",
+        "reason",
+        "restarts",
+        "instances",
+        "mismatch",
+        "address",
+        "image",
+        "digest",
+        "subgraphs"
+      ],
+      "allOf": [{ "$ref": "#/$defs/observed" }],
+      "properties": {
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "deployed": { "type": "boolean" },
+        "state": true,
+        "reason": true,
+        "restarts": true,
+        "instances": true,
+        "mismatch": { "$ref": "#/$defs/mismatch" },
+        "address": {
+          "type": ["string", "null"],
+          "description": "Compose: the host address it is published on, 127.0.0.1:<port>. Kubernetes: its ClusterIP Service, <cluster IP>:<port>. null when not deployed or not published at the moment it was read."
+        },
+        "image": { "type": "string", "description": "The pinned image reference plugbricks deploys." },
+        "digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Digest of the image the runtime reports running; null when it reports none."
+        },
+        "subgraphs": {
+          "type": "array",
+          "description": "Each subgraph service the router calls, with its state, sorted by name.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["brick", "name", "state"],
+            "properties": {
+              "brick": { "type": "string" },
+              "name": { "type": "string" },
+              "state": { "$ref": "#/$defs/state" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -37,9 +37,9 @@
         "--runtime",
         "k8s"
       ],
-      "exit": 2,
+      "exit": 1,
       "codes": [
-        "USAGE_INVALID_OPTION"
+        "K8S_CONTEXT_REQUIRED"
       ],
       "unchanged": true
     },
@@ -95,8 +95,6 @@
     {
       "run": [
         "status",
-        "--runtime",
-        "k8s",
         "--context",
         "x"
       ],

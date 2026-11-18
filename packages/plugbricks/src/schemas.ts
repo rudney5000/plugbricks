@@ -7,6 +7,7 @@ export const SCHEMA_BASE_URL = "https://raw.githubusercontent.com/rudney5000/plu
 export const MANIFEST_SCHEMA_ID = `${SCHEMA_BASE_URL}plugin-manifest.schema.json`;
 export const PLATFORM_SCHEMA_ID = `${SCHEMA_BASE_URL}platform.schema.json`;
 export const LOCK_SCHEMA_ID = `${SCHEMA_BASE_URL}platform-lock.schema.json`;
+export const STATUS_RUNTIME_SCHEMA_ID = `${SCHEMA_BASE_URL}status-runtime.schema.json`;
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 
@@ -25,6 +26,8 @@ function load(file: string, id: string): { schema: any; validate: ValidateFuncti
 export const manifestSchema = load("plugin-manifest.schema.json", MANIFEST_SCHEMA_ID);
 export const platformSchema = load("platform.schema.json", PLATFORM_SCHEMA_ID);
 export const lockSchema = load("platform-lock.schema.json", LOCK_SCHEMA_ID);
+/** The output of `plugbricks status --runtime --json`, version 1 (tests check every report against it). */
+export const statusRuntimeSchema = load("status-runtime.schema.json", STATUS_RUNTIME_SCHEMA_ID);
 
 /** Runs a compiled schema; returns [] when valid. `prefix` is prepended to every issue path (e.g. "platform.json#"). */
 export function schemaIssues(validate: ValidateFunction, data: unknown, prefix = ""): Issue[] {

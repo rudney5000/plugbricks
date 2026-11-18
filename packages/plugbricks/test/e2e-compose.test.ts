@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
+import type { LiveStatus } from "../src/live.js";
+import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
@@ -489,5 +491,87 @@ describe("a platform with no subgraph", () => {
       expect(existsSync(join(work, ".generated/compose/router-config.json"))).toBe(false);
     },
     300_000,
+  );
+});
+
+// ---------- status --runtime against the running stack ----------
+// What `status --runtime` reports is the runtime's own health state (D10): this checks it against a real
+// stack, then stops one service and starts it again. Its own project and port (14104).
+
+describe("status --runtime against a running platform", () => {
+  const name = "pbtest-status";
+  const port = 14104;
+
+  /** status --runtime compose --json: the exit code and the parsed report (printed for the record). */
+  function liveStatus(work: string, label: string): { code: number; report: LiveStatus; text: string } {
+    const json = cli(work, ["status", "--runtime", "compose", "--json"]);
+    const text = cli(work, ["status", "--runtime", "compose"]);
+    console.log(`${label}: exit ${json.code}\n${text.out}${text.err ? `\n${text.err}` : ""}`);
+    expect(json.err, label).not.toMatch(/RUNTIME_UNAVAILABLE/);
+    const report = JSON.parse(json.out) as LiveStatus;
+    expect(schemaIssues(statusRuntimeSchema.validate, report), label).toEqual([]);
+    expect(text.code, label).toBe(json.code);
+    return { code: json.code, report, text: `${json.out}\n${text.out}` };
+  }
+  const service = (r: LiveStatus, n: string) => r.bricks.flatMap((b) => b.services).find((s) => s.name === n)!;
+
+  it.skipIf(!ready)(
+    `reports every enabled service healthy, then a stopped service with exit code 3, then healthy again${why}`,
+    async () => {
+      buildExampleApis();
+      const work = project(name, []);
+      for (const brick of ["orders", "shipping"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "postgres"],
+        ["add", "orders"],
+        ["add", "shipping"],
+      ])
+        expect(cli(work, args).code).toBe(0);
+      routerPort(work, port);
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      // 1. Healthy: every service healthy; the router runs (it has no health check in Compose), on 127.0.0.1.
+      const healthy = liveStatus(work, "status --runtime, all up");
+      expect(healthy.code).toBe(0);
+      expect(healthy.report.state).toBe("healthy");
+      for (const n of ["orders-app", "postgres-db", "shipping-app"]) expect(service(healthy.report, n).state, n).toBe("healthy");
+      expect(healthy.report.router).toMatchObject({ state: "unknown", address: `127.0.0.1:${port}`, deployed: true });
+      expect(healthy.report.router!.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+
+      // Nothing of the secrets file, and no environment variable, ever reaches the output.
+      const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8")
+        .split("\n")
+        .filter((l) => /^PB_\w+=/.test(l))
+        .map((l) => l.split("=")[1]);
+      expect(secrets.length).toBeGreaterThan(0);
+      for (const value of secrets) expect(healthy.text).not.toContain(value);
+      for (const forbidden of ["DATABASE_URL", "PB_", "postgres://"]) expect(healthy.text).not.toContain(forbidden);
+
+      // 2. Stop one subgraph: exit 3, stopped with its exit code, and visible under the router too.
+      const stop = spawnSync("docker", ["compose", "--project-name", name, "stop", "shipping-app"], { encoding: "utf8" });
+      expect(stop.status, stop.stderr).toBe(0);
+      const stopped = liveStatus(work, "status --runtime, shipping-app stopped");
+      expect(stopped.code).toBe(3);
+      expect(stopped.report.state).toBe("degraded");
+      expect(service(stopped.report, "shipping-app")).toMatchObject({ state: "stopped", deployed: true, enabled: true });
+      expect(service(stopped.report, "shipping-app").reason).toMatch(/^exited with code \d+$/);
+      expect(stopped.report.router!.subgraphs.find((g) => g.name === "shipping-app")!.state).toBe("stopped");
+      expect(service(stopped.report, "orders-app").state).toBe("healthy");
+
+      // 3. Start it again: healthy once its own health check passes.
+      const start = spawnSync("docker", ["compose", "--project-name", name, "start", "shipping-app"], { encoding: "utf8" });
+      expect(start.status, start.stderr).toBe(0);
+      await until(
+        "shipping-app healthy again",
+        async () => service(JSON.parse(cli(work, ["status", "--runtime", "compose", "--json"]).out), "shipping-app").state === "healthy",
+        120_000,
+      );
+      const back = liveStatus(work, "status --runtime, shipping-app started again");
+      expect(back.code).toBe(0);
+      expect(service(back.report, "shipping-app").state).toBe("healthy");
+    },
+    900_000,
   );
 });

@@ -1,0 +1,530 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {
+    "resourceVersion": ""
+  },
+  "items": [
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "postgres-db",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/brick": "postgres"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "name": "db",
+                "image": "postgres:16.4-alpine"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "replicas": 1,
+        "readyReplicas": 1,
+        "conditions": [
+          {
+            "type": "Available",
+            "status": "True",
+            "reason": "MinimumReplicasAvailable"
+          },
+          {
+            "type": "Progressing",
+            "status": "True",
+            "reason": "NewReplicaSetAvailable"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "orders-app",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/brick": "orders"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "name": "app",
+                "image": "plugbricks-example/orders:0.1.0"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "replicas": 1,
+        "readyReplicas": 1,
+        "conditions": [
+          {
+            "type": "Available",
+            "status": "True",
+            "reason": "MinimumReplicasAvailable"
+          },
+          {
+            "type": "Progressing",
+            "status": "True",
+            "reason": "NewReplicaSetAvailable"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "shipping-app",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/brick": "shipping"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "name": "app",
+                "image": "plugbricks-example/shipping:0.1.0"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "replicas": 1,
+        "readyReplicas": 0,
+        "conditions": [
+          {
+            "type": "Available",
+            "status": "False",
+            "reason": "MinimumReplicasUnavailable"
+          },
+          {
+            "type": "Progressing",
+            "status": "True",
+            "reason": "ReplicaSetUpdated"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "router",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/component": "router"
+        }
+      },
+      "spec": {
+        "replicas": 1,
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "name": "router",
+                "image": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "replicas": 1,
+        "readyReplicas": 1,
+        "conditions": [
+          {
+            "type": "Available",
+            "status": "True",
+            "reason": "MinimumReplicasAvailable"
+          },
+          {
+            "type": "Progressing",
+            "status": "True",
+            "reason": "NewReplicaSetAvailable"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "name": "postgres-db-6f7d9c-x2k4q",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "postgres-db",
+          "plugbricks/brick": "postgres"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "db",
+            "image": "postgres:16.4-alpine",
+            "env": [
+              {
+                "name": "DATABASE_URL",
+                "value": "postgres://u:NEVER-PRINTED-env-value-7f3a@postgres-db:5432/db"
+              },
+              {
+                "name": "PB_POSTGRES__SUPERUSER_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "name": "plugbricks-secrets",
+                    "key": "PB_POSTGRES__SUPERUSER_PASSWORD"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "name": "db",
+            "image": "postgres:16.4-alpine",
+            "imageID": "docker.io/postgres:16.4-alpine@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ready": true,
+            "started": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-11-18T00:00:00Z"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "name": "orders-app-6f7d9c-x2k4q",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "orders-app",
+          "plugbricks/brick": "orders"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "app",
+            "image": "plugbricks-example/orders:0.1.0",
+            "env": [
+              {
+                "name": "DATABASE_URL",
+                "value": "postgres://u:NEVER-PRINTED-env-value-7f3a@postgres-db:5432/db"
+              },
+              {
+                "name": "PB_POSTGRES__SUPERUSER_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "name": "plugbricks-secrets",
+                    "key": "PB_POSTGRES__SUPERUSER_PASSWORD"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "name": "app",
+            "image": "plugbricks-example/orders:0.1.0",
+            "imageID": "docker.io/plugbricks-example/orders:0.1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ready": true,
+            "started": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-11-18T00:00:00Z"
+              }
+            }
+          }
+        ],
+        "initContainerStatuses": [
+          {
+            "name": "wait-database",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "terminated": {
+                "exitCode": 0,
+                "reason": "Completed"
+              }
+            }
+          },
+          {
+            "name": "provision-database",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "terminated": {
+                "exitCode": 0,
+                "reason": "Completed"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "name": "shipping-app-6f7d9c-x2k4q",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "shipping-app",
+          "plugbricks/brick": "shipping"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "app",
+            "image": "plugbricks-example/shipping:0.1.0",
+            "env": [
+              {
+                "name": "DATABASE_URL",
+                "value": "postgres://u:NEVER-PRINTED-env-value-7f3a@postgres-db:5432/db"
+              },
+              {
+                "name": "PB_POSTGRES__SUPERUSER_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "name": "plugbricks-secrets",
+                    "key": "PB_POSTGRES__SUPERUSER_PASSWORD"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Pending",
+        "initContainerStatuses": [
+          {
+            "name": "wait-database",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "terminated": {
+                "exitCode": 0,
+                "reason": "Completed"
+              }
+            }
+          },
+          {
+            "name": "provision-database",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "terminated": {
+                "exitCode": 0,
+                "reason": "Completed"
+              }
+            }
+          }
+        ],
+        "conditions": [
+          {
+            "type": "PodScheduled",
+            "status": "False",
+            "reason": "Unschedulable",
+            "message": "0/1 nodes are available"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "name": "router-6f7d9c-x2k4q",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "router",
+          "plugbricks/component": "router"
+        }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "router",
+            "image": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205",
+            "env": [
+              {
+                "name": "DATABASE_URL",
+                "value": "postgres://u:NEVER-PRINTED-env-value-7f3a@postgres-db:5432/db"
+              },
+              {
+                "name": "PB_POSTGRES__SUPERUSER_PASSWORD",
+                "valueFrom": {
+                  "secretKeyRef": {
+                    "name": "plugbricks-secrets",
+                    "key": "PB_POSTGRES__SUPERUSER_PASSWORD"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "containerStatuses": [
+          {
+            "name": "router",
+            "image": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205",
+            "imageID": "ghcr.io/wundergraph/cosmo/router@sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205",
+            "ready": true,
+            "started": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-11-18T00:00:00Z"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "postgres-db",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "postgres-db",
+          "plugbricks/brick": "postgres"
+        }
+      },
+      "spec": {
+        "clusterIP": "10.43.0.10",
+        "ports": [
+          {
+            "name": "main",
+            "port": 5432
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "orders-app",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "orders-app",
+          "plugbricks/brick": "orders"
+        }
+      },
+      "spec": {
+        "clusterIP": "10.43.0.11",
+        "ports": [
+          {
+            "name": "main",
+            "port": 4000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "shipping-app",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "shipping-app",
+          "plugbricks/brick": "shipping"
+        }
+      },
+      "spec": {
+        "clusterIP": "10.43.0.12",
+        "ports": [
+          {
+            "name": "main",
+            "port": 4000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "router",
+        "namespace": "demo",
+        "labels": {
+          "app.kubernetes.io/managed-by": "plugbricks",
+          "app.kubernetes.io/part-of": "demo",
+          "plugbricks/service": "router",
+          "plugbricks/component": "router"
+        }
+      },
+      "spec": {
+        "clusterIP": "10.43.0.13",
+        "ports": [
+          {
+            "name": "main",
+            "port": 4000
+          }
+        ]
+      }
+    }
+  ]
+}

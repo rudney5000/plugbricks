@@ -2,8 +2,20 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
-import { addBrick, initPlatform, PlugbricksError, platformStatus, removeBrick, type VolumeRef } from "./platform.js";
-import { down, generate, RUNTIMES, up, type Runtime, type RuntimeDeps } from "./runtime.js";
+import { addBrick, initPlatform, PlugbricksError, platformStatus, removeBrick, type StatusResult, type VolumeRef } from "./platform.js";
+import { liveStatusText } from "./live.js";
+import {
+  down,
+  generate,
+  RuntimeUnavailableError,
+  RUNTIMES,
+  STATUS_DEGRADED_EXIT,
+  STATUS_UNAVAILABLE_EXIT,
+  statusRuntime,
+  up,
+  type Runtime,
+  type RuntimeDeps,
+} from "./runtime.js";
 
 export interface Io {
   cwd: string;
@@ -20,14 +32,16 @@ Commands:
   add <path>             Install the brick at <path> (a directory with a plugin.json)
   remove <name>          Uninstall a brick
   status [--json]        Show installed bricks, capabilities and retained volumes
+  status --runtime <name> [--json]
+                         Also read what the runtime really runs (read-only): state, reason, restarts
   generate               Write the runtime files to .generated/<runtime>/ and create missing secrets
   up [--prune-volumes]   Generate, then start or update the platform
   down                   Stop the platform; volumes and secrets are kept
 
 Options:
   --runtime <name>       compose (Docker Compose, default) or k8s (Kubernetes)
-  --context <name>       With --runtime k8s, up and down: the kubectl context to use (required; the
-                         current context is never used)
+  --context <name>       With --runtime k8s (up, down, status): the kubectl context to use (required;
+                         the current context is never used)
   --kubeconfig <file>    With --context: the kubeconfig file that defines it (default: kubectl's own)
   --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
@@ -35,12 +49,35 @@ Options:
   -h, --help             Show this help
   -v, --version          Show the version
 
-Exit codes: 0 success, 1 refused or inconsistent, 2 usage error.`;
+Exit codes: 0 success, 1 refused or inconsistent, 2 usage error.
+status --runtime also: 3 an enabled service is starting, unhealthy, stopped or not deployed;
+4 the runtime cannot be read (RUNTIME_UNAVAILABLE).`;
 
 const vol = (v: VolumeRef) => `${v.brick}/${v.service}/${v.name}`;
 
 function printIssues(io: Io, issues: Issue[]): void {
   for (const i of issues) io.stderr(`error ${i.code}${i.path ? ` at ${i.path}` : ""}: ${i.message}`);
+}
+
+/** The declared state, as `plugbricks status` prints it. */
+function printDeclared(io: Io, s: StatusResult): void {
+  io.stdout(`Platform ${s.name}: ${s.bricks.length} brick(s)`);
+  for (const b of s.bricks) {
+    const parts = [
+      ...(b.provides.length ? [`provides ${b.provides.join(", ")}`] : []),
+      ...Object.entries(b.requires).map(([cap, r]) => `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`),
+    ];
+    io.stdout(`  ${b.name} ${b.version}${parts.length ? `  ${parts.join("; ")}` : ""}`);
+  }
+  if (s.federation) {
+    const locked = s.federation.lockedComposer ? ` (platform.lock was written with ${s.federation.lockedComposer})` : "";
+    io.stdout(`Federation: ${s.federation.subgraphs.join(", ")}; composed with ${s.federation.composer}${locked}`);
+  }
+  if (s.router) {
+    io.stdout(`Router: port ${s.router.port} (Compose: 127.0.0.1 only; Kubernetes: ClusterIP service); image ${s.router.image}`);
+  }
+  io.stdout(`Retained volumes: ${s.retainedVolumes.length ? s.retainedVolumes.map(vol).join(", ") : "none"}`);
+  io.stdout(`Pending deletion: ${s.pendingDeletion.length ? s.pendingDeletion.map(vol).join(", ") : "none"}`);
 }
 
 class UsageError extends Error {
@@ -102,7 +139,7 @@ export function main(argv: string[], io: Io): number {
     };
     if (values.name !== undefined) optionFor("name", "init");
     if (values.json !== undefined) optionFor("json", "status");
-    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down");
+    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status");
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
@@ -110,7 +147,7 @@ export function main(argv: string[], io: Io): number {
     }
     for (const opt of ["context", "kubeconfig", "allow-context"] as const) {
       if (values[opt] === undefined) continue;
-      optionFor(opt, "up", "down");
+      optionFor(opt, "up", "down", "status");
       if (runtime !== "k8s") throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies with --runtime k8s` });
     }
     if (values["allow-context"] !== undefined && values["allow-context"] !== values.context) {
@@ -154,27 +191,21 @@ export function main(argv: string[], io: Io): number {
       case "status": {
         only(0, "");
         const s = platformStatus(root);
+        if (values.runtime !== undefined) {
+          // Read-only: what the runtime runs, next to what is declared (D10). Its own deps: no progress lines.
+          const live = statusRuntime(root, runtime, s.problems, { ...io.runtime, k8s });
+          if (values.json) io.stdout(JSON.stringify(live, null, 2));
+          else {
+            printDeclared(io, s);
+            for (const line of liveStatusText(live)) io.stdout(line);
+          }
+          printIssues(io, s.problems);
+          if (s.problems.length) return 1;
+          return live.state === "degraded" ? STATUS_DEGRADED_EXIT : 0;
+        }
         if (values.json) {
           io.stdout(JSON.stringify(s, null, 2));
-        } else {
-          io.stdout(`Platform ${s.name}: ${s.bricks.length} brick(s)`);
-          for (const b of s.bricks) {
-            const parts = [
-              ...(b.provides.length ? [`provides ${b.provides.join(", ")}`] : []),
-              ...Object.entries(b.requires).map(([cap, r]) => `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`),
-            ];
-            io.stdout(`  ${b.name} ${b.version}${parts.length ? `  ${parts.join("; ")}` : ""}`);
-          }
-          if (s.federation) {
-            const locked = s.federation.lockedComposer ? ` (platform.lock was written with ${s.federation.lockedComposer})` : "";
-            io.stdout(`Federation: ${s.federation.subgraphs.join(", ")}; composed with ${s.federation.composer}${locked}`);
-          }
-          if (s.router) {
-            io.stdout(`Router: port ${s.router.port} (Compose: 127.0.0.1 only; Kubernetes: ClusterIP service); image ${s.router.image}`);
-          }
-          io.stdout(`Retained volumes: ${s.retainedVolumes.length ? s.retainedVolumes.map(vol).join(", ") : "none"}`);
-          io.stdout(`Pending deletion: ${s.pendingDeletion.length ? s.pendingDeletion.map(vol).join(", ") : "none"}`);
-        }
+        } else printDeclared(io, s);
         printIssues(io, s.problems);
         return s.problems.length ? 1 : 0;
       }
@@ -211,6 +242,10 @@ export function main(argv: string[], io: Io): number {
     if (e instanceof UsageError) {
       printIssues(io, [e.issueValue]);
       return 2;
+    }
+    if (e instanceof RuntimeUnavailableError) {
+      printIssues(io, e.issues);
+      return STATUS_UNAVAILABLE_EXIT;
     }
     if (e instanceof PlugbricksError) {
       printIssues(io, e.issues);
