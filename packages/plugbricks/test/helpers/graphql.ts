@@ -23,14 +23,19 @@ export async function until(what: string, check: () => Promise<boolean>, timeout
 /** The HTTP status of GET http://127.0.0.1:<port><path>; rejects when nothing listens. */
 export const get = async (port: number, path: string): Promise<number> => (await fetch(`http://127.0.0.1:${port}${path}`)).status;
 
-/** One GraphQL request to the router on 127.0.0.1:<port>, and its real answer (printed for the record). */
-export async function through(port: number, label: string, query: string, variables?: Record<string, unknown>): Promise<Answer> {
+/** One GraphQL request to the router on 127.0.0.1:<port>, without printing it: for retry loops, where only the last answer matters. */
+export async function ask(port: number, query: string, variables?: Record<string, unknown>): Promise<Answer> {
   const res = await fetch(`http://127.0.0.1:${port}/graphql`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
-  const answer = { status: res.status, body: await res.json() };
+  return { status: res.status, body: await res.json() };
+}
+
+/** One GraphQL request to the router on 127.0.0.1:<port>, and its real answer (printed for the record). */
+export async function through(port: number, label: string, query: string, variables?: Record<string, unknown>): Promise<Answer> {
+  const answer = await ask(port, query, variables);
   console.log(
     `${label}\n  request:  ${query.replace(/\s+/g, " ").trim()}${variables ? ` ${JSON.stringify(variables)}` : ""}\n  response: HTTP ${answer.status} ${JSON.stringify(answer.body)}`,
   );

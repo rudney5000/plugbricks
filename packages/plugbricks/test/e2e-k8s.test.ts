@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { main } from "../src/cli.js";
 import type { LiveStatus } from "../src/live.js";
 import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
-import { get, through, until } from "./helpers/graphql.js";
+import { ask, get, through, until, type Answer } from "./helpers/graphql.js";
 import { k8sTestTarget } from "./helpers/k8s-guard.js";
 import { portForward, stopAllForwards } from "./helpers/port-forward.js";
 
@@ -105,11 +105,32 @@ const forward = (ns: string, service: string, servicePort: number) =>
     servicePort,
   });
 
-/** Runs `use` with a forward to the router Service (its port is router.port, 4000 by default), and stops the forward. */
-async function viaRouter<T>(ns: string, use: (port: number) => Promise<T>): Promise<T> {
+/**
+ * Runs `use` with a forward to the router Service (its port is router.port, 4000 by default), and stops the forward.
+ * `preflight` is a query every subgraph of the current composition can answer: it proves the router's path to them.
+ */
+async function viaRouter<T>(ns: string, use: (port: number) => Promise<T>, preflight = "{ orders(limit: 1) { id } }"): Promise<T> {
   const f = await forward(ns, "router", 4000);
   try {
     await until("the router through the forward", async () => (await get(f.port, "/health/ready")) === 200);
+    // /health/ready is the router's own state: it does not say the router can reach a subgraph. Right after `up`, or
+    // after a router rollout, the first call through a fresh Service can still fail (the pod-to-Service call of the
+    // first test retries exactly that). One federated read proves the paths before the scenario; the mutations of the
+    // scenario itself are never retried, so no order is ever created twice.
+    let last: Answer | undefined;
+    try {
+      await until(
+        "the router to answer a federated query",
+        async () => {
+          last = await ask(f.port, preflight);
+          return last.status === 200 && !last.body?.errors?.length;
+        },
+        120_000,
+      );
+    } catch (e) {
+      console.log(`pre-flight query never succeeded; last answer: HTTP ${last?.status} ${JSON.stringify(last?.body)}`);
+      throw e;
+    }
     return await use(f.port);
   } finally {
     f.stop();
@@ -325,45 +346,49 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       const ORDER = "query($id: ID!) { order(id: $id) { id total status shipment { carrier trackingNumber status } } }";
 
       // The same scenario as on Docker Compose, through the router only.
-      const { id, tracking } = await viaRouter(ns, async (port) => {
-        expect(await get(port, "/")).toBe(404);
-        expect(await get(port, "/health/ready")).toBe(200);
-        const created = await through(port, "createOrder", "mutation { createOrder(total: 42.5) { id total status } }");
-        const orderId = created.body.data.createOrder.id;
-        expect(created.body.data.createOrder).toEqual({ id: orderId, total: 42.5, status: "pending" });
-        expect((await through(port, "order before shipping", ORDER, { id: orderId })).body).toEqual({
-          data: { order: { id: orderId, total: 42.5, status: "pending", shipment: null } },
-        });
-        const shipped = await through(
-          port,
-          "shipOrder",
-          'mutation($id: ID!) { shipOrder(orderId: $id, carrier: "ups") { carrier trackingNumber status } }',
-          { id: orderId },
-        );
-        const trackingNumber = shipped.body.data.shipOrder.trackingNumber;
-        expect(shipped.body.data.shipOrder).toEqual({
-          carrier: "ups",
-          trackingNumber: expect.stringMatching(/^TRK-[0-9A-F]{10}$/),
-          status: "SHIPPED",
-        });
-        // total and status exist only in orders; carrier, trackingNumber and the shipment status only in shipping.
-        expect((await through(port, "order after shipping", ORDER, { id: orderId })).body).toEqual({
-          data: {
-            order: {
-              id: orderId,
-              total: 42.5,
-              status: "pending",
-              shipment: { carrier: "ups", trackingNumber: trackingNumber, status: "SHIPPED" },
+      const { id, tracking } = await viaRouter(
+        ns,
+        async (port) => {
+          expect(await get(port, "/")).toBe(404);
+          expect(await get(port, "/health/ready")).toBe(200);
+          const created = await through(port, "createOrder", "mutation { createOrder(total: 42.5) { id total status } }");
+          const orderId = created.body.data.createOrder.id;
+          expect(created.body.data.createOrder).toEqual({ id: orderId, total: 42.5, status: "pending" });
+          expect((await through(port, "order before shipping", ORDER, { id: orderId })).body).toEqual({
+            data: { order: { id: orderId, total: 42.5, status: "pending", shipment: null } },
+          });
+          const shipped = await through(
+            port,
+            "shipOrder",
+            'mutation($id: ID!) { shipOrder(orderId: $id, carrier: "ups") { carrier trackingNumber status } }',
+            { id: orderId },
+          );
+          const trackingNumber = shipped.body.data.shipOrder.trackingNumber;
+          expect(shipped.body.data.shipOrder).toEqual({
+            carrier: "ups",
+            trackingNumber: expect.stringMatching(/^TRK-[0-9A-F]{10}$/),
+            status: "SHIPPED",
+          });
+          // total and status exist only in orders; carrier, trackingNumber and the shipment status only in shipping.
+          expect((await through(port, "order after shipping", ORDER, { id: orderId })).body).toEqual({
+            data: {
+              order: {
+                id: orderId,
+                total: 42.5,
+                status: "pending",
+                shipment: { carrier: "ups", trackingNumber: trackingNumber, status: "SHIPPED" },
+              },
             },
-          },
-        });
-        const unknown = await through(port, "unknown field", 'query { order(id: "1") { nope } }');
-        expect(unknown.status).toBe(200);
-        expect(unknown.body.data).toBeUndefined();
-        expect(unknown.body.errors[0].message).toContain('Cannot query field "nope" on type "Order"');
-        expect(await get(port, "/health/ready")).toBe(200);
-        return { id: orderId, tracking: trackingNumber };
-      });
+          });
+          const unknown = await through(port, "unknown field", 'query { order(id: "1") { nope } }');
+          expect(unknown.status).toBe(200);
+          expect(unknown.body.data).toBeUndefined();
+          expect(unknown.body.errors[0].message).toContain('Cannot query field "nope" on type "Order"');
+          expect(await get(port, "/health/ready")).toBe(200);
+          return { id: orderId, tracking: trackingNumber };
+        },
+        '{ orders(limit: 1) { id } shipment(orderId: "1") { carrier } }',
+      );
       const shipmentOf = { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" };
 
       // remove shipping, then up: the router Deployment is rolled (its pod template carries a new config hash), and the field is gone.
@@ -400,11 +425,15 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       console.log(
         `router after add shipping: hash ${again.hash.slice(0, 12)} (the original), generation ${again.generation}, pod ${again.pods[0]}`,
       );
-      await viaRouter(ns, async (port) => {
-        expect((await through(port, "order after add shipping", ORDER, { id })).body).toEqual({
-          data: { order: { id, total: 42.5, status: "pending", shipment: shipmentOf } },
-        });
-      });
+      await viaRouter(
+        ns,
+        async (port) => {
+          expect((await through(port, "order after add shipping", ORDER, { id })).body).toEqual({
+            data: { order: { id, total: 42.5, status: "pending", shipment: shipmentOf } },
+          });
+        },
+        '{ orders(limit: 1) { id } shipment(orderId: "1") { carrier } }',
+      );
 
       // down removes what plugbricks created, router included, and keeps the data (D3) and the secrets (D6).
       expect(cli(work, ["down"]).code).toBe(0);
