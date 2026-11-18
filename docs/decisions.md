@@ -544,11 +544,11 @@ end yet.
 
 ## D9. The router is rendered by plugbricks and is not a brick; loopback only
 
-- **Status:** implemented (milestone 4, steps 4b-3 and 4b-4). 4b-3 rendered it and ran it by hand against its
-  image with fake subgraphs. 4b-4 tests it on Docker Compose with the real orders and shipping APIs and real
+- **Status:** implemented (milestone 4, steps 4b-3, 4b-4 and 4b-5). 4b-3 rendered it and ran it by hand against
+  its image with fake subgraphs. 4b-4 tests it on Docker Compose with the real orders and shipping APIs and real
   databases, with real requests through it (the `e2e-compose` test "the router in front of orders and
-  shipping"). On Kubernetes, the k3d CI job deploys it (see below); requests through it on a cluster, and a
-  cross-check of its configuration against `wgc router compose`, are 4b-5.
+  shipping"). 4b-5 runs it on Kubernetes in the k3d CI job, with real requests through it on the cluster, and
+  cross-checks its configuration against `wgc router compose` (see below).
 - **Decision:**
   - **Not a brick.** A brick declares exec probes and a wait step that runs a shell in an image. The
     Cosmo router image (`ghcr.io/wundergraph/cosmo/router:0.372.0`, pinned by the digest of its
@@ -602,9 +602,9 @@ end yet.
   44091435148, job "kubernetes (k3d)", both green) then deployed the router on a real cluster: its test expects
   the four pods `orders-app`, `postgres-db`, `router` and `scratch-redis` to be `Running`, and `up` waits for the
   router's rollout, which waits for its readiness probe. So the kubelet accepted the security context and the
-  readiness probe passed. Not shown there: a request through the router on the cluster, and the liveness probe
-  failing or not over time.
-- **4b-5, the router and shipping on a real cluster (the test is written; the cluster result is NOT yet seen).**
+  readiness probe passed. Not shown there: the liveness probe failing or not over time. A request through the
+  router on the cluster is shown by 4b-5, below.
+- **4b-5, the router and shipping on a real cluster (the cluster result is in: the job is green).**
   `e2e-k8s.test.ts` now runs postgres, orders, shipping and the router on a throwaway k3d cluster, with real requests
   through the router only (`kubectl port-forward service/router`, bound to 127.0.0.1 on a free port: it needs no
   client image, it uses the same HTTP client as the Compose test, and the router-to-subgraph path through the Service
@@ -615,14 +615,13 @@ end yet.
   Deployment (a new `plugbricks/router-config-sha256` annotation, a higher generation, a new pod) and the
   `shipment` field is gone; `add shipping` then `up` rolls it again, the annotation is the original value and the
   field is back with its data; `down` removes the Deployments, the Services and the plugbricks ConfigMaps, router
-  included, and keeps the postgres PersistentVolumeClaim (D3) and the Secret (D6). **This was written and
-  type-checked on a machine without a cluster** (`fs.inotify.max_user_instances` is 128 there, below the 512 k3s
-  needs); the port-forward helper was exercised against a fake `kubectl`; everything else is for the first CI run of
-  the job "kubernetes (k3d)" to show: pods ready, the responses above, the rollouts, and `down`. Until that run is
-  green, nothing in this paragraph is a cluster result. The restart behaviour (a rollout when the configuration
-  changes, a new pod, the old one terminating) is what the test asserts; how the router behaves when its pod is
-  killed is not tested.
-- **Cross-check against the official tool (done, locally).** `router-crosscheck.test.ts` gives `wgc router compose`
+  included, and keeps the postgres PersistentVolumeClaim (D3) and the Secret (D6). The first green run was the one
+  of pull request #14 (workflow run 44271309209, 2026-11-18); the job has been green on `main` since (run
+  44286645462 for the merge of #13, 9m14): the pods were ready, the responses above came back, the router rolled
+  when the composition changed and `down` removed the workloads. The restart behaviour (a rollout when the
+  configuration changes, a new pod, the old one terminating) is what the test asserts; how the router behaves when
+  its pod is killed is not tested.
+- **Cross-check against the official tool (done, and run by the CI `quality` job).** `router-crosscheck.test.ts` gives `wgc router compose`
   (wgc 0.133.12, pinned in `tools/wgc-crosscheck`, a standalone package with its own lockfile that is not a
   dependency of plugbricks) the same two subgraphs (the installed copies of the schemas of orders and shipping,
   the URLs of our runtime names) and compares its `router-config.json` with ours, field by field. Result: **equal,
@@ -636,7 +635,7 @@ end yet.
   installed (`npm run crosscheck:install`) and on Windows; the CI `quality` job installs it, the matrix jobs do not.
   The tool brings 565 packages, which is why it is not a root devDependency; its lockfile pins every package with its
   integrity hash.
-- **Not verified:** the cluster results above until the CI run; a real multi-node cluster (the CI cluster has one
+- **Not verified:** a real multi-node cluster (the CI cluster has one
   node, so scheduling, node-to-node networking and several router replicas are untested); macOS and Windows (the
   rendering is pure text, the router runs only in Linux containers, the end-to-end tests are skipped there);
   that the router keeps working after an upgrade of its image (the digest is pinned on purpose).
