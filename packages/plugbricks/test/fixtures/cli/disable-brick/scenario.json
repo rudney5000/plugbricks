@@ -1,0 +1,13 @@
+{
+  "description": "a disabled brick stays installed but is no longer rendered: its services and its subgraph leave, and its volume and secret stay declared",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["disable", "orders"], "stdout": "Disabled orders" },
+    { "run": ["status", "--json"], "stdout": "\"enabled\": false" },
+    { "run": ["generate"] },
+    { "run": ["generate", "--runtime", "k8s"] }
+  ],
+  "exists": [".generated/compose/compose.yaml", ".generated/k8s/resources.yaml"]
+}

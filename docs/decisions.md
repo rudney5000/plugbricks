@@ -798,6 +798,36 @@ end yet.
 
 ---
 
+## D14. `enabled` and `tags`: installed but not deployed, and labels for the admin
+
+- **Status:** implemented (step 5d, ahead of the admin): `enabled` in `platform.json`, `tags` in
+  `plugin.json`, the `enable`/`disable` commands, the plan filter and the live report. Tested by the
+  CLI scenarios `disable-brick`, `enable-brick`, `disable-provider-in-use`, `disable-extended-owner`,
+  and by a live-report test.
+- **Decision:**
+  - **A brick is enabled unless `platform.json` says otherwise.** `add` writes no flag; `disable
+    <name>` writes `enabled: false`; `enable <name>` removes it. A disabled brick is still installed:
+    its lock entry, volumes and secrets are kept, and its name stays reserved; `generate` and `up`
+    simply do not render it. Compose `--remove-orphans` and the Kubernetes cleanup remove its
+    workloads; its volumes (PVCs) and the secret file are kept.
+  - **Refusals keep the platform consistent:** disabling a provider that an enabled brick still
+    requires is `CAPABILITY_IN_USE`; disabling an owner whose entity an enabled brick extends is
+    `EXTENDS_IN_USE`; adding or enabling a consumer whose provider is disabled is `PROVIDER_DISABLED`
+    (enable the provider first). The federated schema is recomposed on every toggle, exactly as
+    `add`/`remove` do.
+  - **`status --runtime`** reports a disabled brick with `enabled: false`; its services are `stopped`
+    with the reason "disabled in platform.json" and `mismatch: null` (not "not-deployed"). It is never
+    counted as degraded: exit code 0 stays 0. `status` (text) marks the brick `disabled`.
+  - **`tags`** are optional labels in `plugin.json` (lowercase, dashed), sorted in the lock, and shown
+    in `status --json` and in the live report (`bricks[].tags`). They are for filtering in the admin;
+    they never affect rendering.
+- **Limits:** the `enabled` flag is not per service; a brick is enabled or not as a whole. Secrets of a
+  disabled brick are kept in `.secrets/` (and re-projected into the Kubernetes Secret when it is
+  enabled again). A hand-edited `platform.json` that disables a provider while a consumer stays enabled
+  is an inconsistent platform: `generate` refuses rather than guessing.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

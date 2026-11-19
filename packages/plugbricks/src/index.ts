@@ -15,6 +15,8 @@ export {
   readProject,
   removeBrick,
   brickIntegrity,
+  isBrickEnabled,
+  setBrickEnabled,
   normalizeLineEndings,
   isText,
   portableRelative,

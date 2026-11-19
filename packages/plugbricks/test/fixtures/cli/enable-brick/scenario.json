@@ -1,0 +1,12 @@
+{
+  "description": "enabling a brick again brings its services and subgraph back, and the lock returns to what it was",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["disable", "orders"] },
+    { "run": ["enable", "orders"], "stdout": "Enabled orders" },
+    { "run": ["generate"] }
+  ],
+  "exists": [".generated/compose/compose.yaml"]
+}

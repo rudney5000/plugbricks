@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "orders": {
+      "integrity": "sha256-7a2a9fdc5c16e818c5f79134b7178ea51e09035ea75320c42d8b778c7c167c45",
+      "provides": [],
+      "requires": {
+        "database": {
+          "provider": "postgres",
+          "timeoutSeconds": 120,
+          "wait": "healthy"
+        }
+      },
+      "source": "examples/orders",
+      "tags": [
+        "api",
+        "graphql"
+      ],
+      "version": "0.1.0",
+      "volumes": []
+    },
+    "postgres": {
+      "integrity": "sha256-002b90c0727d503bcc23e44953886fa2524ff6c3adf49b4d644800b56ca42fa3",
+      "provides": [
+        "database"
+      ],
+      "requires": {},
+      "source": "examples/postgres",
+      "tags": [
+        "database"
+      ],
+      "version": "1.0.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "retain",
+          "service": "db"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "database": "postgres"
+  },
+  "federation": {
+    "composer": {
+      "name": "@wundergraph/composition",
+      "version": "0.68.1"
+    },
+    "routerCompatibilityVersion": "1",
+    "schemaSha256": "ba3ab469b9a667add9ff8f8f646787ca2049e17c01a0749993a999cf31f9726b",
+    "subgraphs": [
+      "orders"
+    ]
+  },
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

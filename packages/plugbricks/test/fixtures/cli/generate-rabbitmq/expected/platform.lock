@@ -16,12 +16,15 @@
       "volumes": []
     },
     "rabbitmq": {
-      "integrity": "sha256-bb385f809459de6339e021cfd801c022957932a8392506616f42277d8f5996b0",
+      "integrity": "sha256-b0523f7c128ead954e39428e510be58a37e8290b15adb2f1f71d650624904dee",
       "provides": [
         "queue"
       ],
       "requires": {},
       "source": "examples/rabbitmq",
+      "tags": [
+        "queue"
+      ],
       "version": "0.1.0",
       "volumes": [
         {

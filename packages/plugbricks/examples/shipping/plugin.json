@@ -9,7 +9,11 @@
       "image": "plugbricks-example/shipping:0.1.0",
       "port": 4000,
       "healthcheck": {
-        "exec": ["wget", "-qO-", "http://localhost:4000/health"]
+        "exec": [
+          "wget",
+          "-qO-",
+          "http://localhost:4000/health"
+        ]
       }
     }
   ],
@@ -24,5 +28,16 @@
     "schema": "schema.graphql",
     "path": "/graphql"
   },
-  "extends": [{ "plugin": "orders", "entities": ["Order"] }]
+  "extends": [
+    {
+      "plugin": "orders",
+      "entities": [
+        "Order"
+      ]
+    }
+  ],
+  "tags": [
+    "api",
+    "graphql"
+  ]
 }

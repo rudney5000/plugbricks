@@ -1,0 +1,9 @@
+{
+  "description": "disabling a provider that an enabled brick still requires is refused",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["disable", "postgres"], "exit": 1, "codes": ["CAPABILITY_IN_USE"], "unchanged": true }
+  ]
+}

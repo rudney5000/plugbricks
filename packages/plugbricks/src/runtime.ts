@@ -26,8 +26,8 @@ import {
   parseComposePs,
   type LiveStatus,
 } from "./live.js";
-import { initContainerName, planProject, volumeName, type Plan } from "./plan.js";
-import { confirmPruned, PlugbricksError, readProject, volumesToPrune, type VolumeRef } from "./platform.js";
+import { initContainerName, loadInstalledBricks, planProject, serviceName, volumeName, type Plan } from "./plan.js";
+import { confirmPruned, isBrickEnabled, PlugbricksError, readProject, volumesToPrune, type VolumeRef } from "./platform.js";
 import { ensureSecrets, SECRETS_DIR, SECRETS_FILE, writePrivateFile, type RestrictOptions } from "./secrets.js";
 
 export const RUNTIMES = ["compose", "k8s"] as const;
@@ -467,6 +467,20 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
   const project = readProject(root);
   const plan = planProject(project);
   const dir = project.root;
+  // Labels per installed brick, for the report; the lock is the source of truth. A disabled brick is
+  // still reported, with its services from the installed copy.
+  const tags = new Map(Object.entries(project.lock.bricks).map(([brick, locked]) => [brick, locked.tags ?? []]));
+  const installed = loadInstalledBricks(project);
+  const disabled = Object.entries(project.lock.bricks)
+    .filter(([brick]) => !isBrickEnabled(project.platform, brick))
+    .map(([brick, locked]) => ({
+      name: brick,
+      tags: locked.tags ?? [],
+      services: (installed.get(brick)?.services ?? []).map((service) => ({
+        name: serviceName(brick, service.name),
+        service: service.name,
+      })),
+    }));
   // No progress lines: stdout may be a JSON document.
   const quiet: RuntimeDeps = { ...deps, log: undefined };
   const call = (cmd: string, args: string[]) => run(quiet, dir, cmd, args, STATUS_CALL_TIMEOUT_MS);
@@ -493,7 +507,15 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
       .split(/\r?\n/)
       .filter((l) => l.startsWith("{"))
       .join("\n");
-    return buildLiveStatus({ plan, runtime, context: null, problems, ...composeLiveInput(plan, listed.stdout, inspectText) });
+    return buildLiveStatus({
+      plan,
+      runtime,
+      context: null,
+      problems,
+      tags,
+      disabled,
+      ...composeLiveInput(plan, listed.stdout, inspectText),
+    });
   }
 
   const client = kubectl(quiet, dir, target, ["version", "--client"], STATUS_CALL_TIMEOUT_MS);
@@ -512,7 +534,15 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
   const listed = kubectl(quiet, dir, target, get, STATUS_CALL_TIMEOUT_MS);
   if (listed.error || listed.status !== 0) throw unavailable(runtime, callFailure("kubectl", [...target, ...get], listed));
   try {
-    return buildLiveStatus({ plan, runtime, context: deps.k8s?.context ?? null, problems, ...k8sLiveInput(plan, listed.stdout) });
+    return buildLiveStatus({
+      plan,
+      runtime,
+      context: deps.k8s?.context ?? null,
+      problems,
+      tags,
+      disabled,
+      ...k8sLiveInput(plan, listed.stdout),
+    });
   } catch (e) {
     if (e instanceof PlugbricksError) throw e;
     throw unavailable(runtime, `unexpected output from "${shown("kubectl", [...target, ...get])}"`);

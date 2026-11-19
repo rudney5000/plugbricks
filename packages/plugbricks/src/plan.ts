@@ -5,7 +5,16 @@ import { buildRouterConfigFile, type SubgraphInput } from "./federation.js";
 import { ROUTER_IMAGE, ROUTER_NAME } from "./drivers/common.js";
 import { issue, type Issue } from "./issues.js";
 import { validateManifest } from "./manifest.js";
-import { BRICKS_DIR, brickIntegrity, listBrickFiles, PlugbricksError, type Lock, type Project, type VolumeRef } from "./platform.js";
+import {
+  BRICKS_DIR,
+  brickIntegrity,
+  isBrickEnabled,
+  listBrickFiles,
+  PlugbricksError,
+  type Lock,
+  type Project,
+  type VolumeRef,
+} from "./platform.js";
 import { MANIFEST_DEFAULTS, PLATFORM_DEFAULTS } from "./schemas.js";
 import { parseTemplate, secretsIn, type Segment, type TemplateContext } from "./templates.js";
 
@@ -267,6 +276,8 @@ export function buildPlan(
   readScripts: (brick: string, dir: string) => { path: string; data: Buffer }[],
   /** With it, a platform that has a subgraph also gets its router: the port to publish, and a reader for each brick's SDL. */
   router?: { port: number; readSchema: (brick: string, file: string) => string },
+  /** Volumes of disabled bricks: their names stay theirs even though they are not rendered. */
+  reservedVolumes: VolumeRef[] = [],
 ): Plan {
   const names = new Names();
   const secrets = new Map<string, string>();
@@ -381,6 +392,9 @@ export function buildPlan(
   for (const v of [...lock.retainedVolumes, ...lock.pendingDeletion]) {
     names.add("volume", volumeName(v), `${v.brick}/${v.service}/${v.name}`, `kept volume ${v.name} of ${v.brick}/${v.service}`, false);
   }
+  for (const v of reservedVolumes) {
+    names.add("volume", volumeName(v), `${v.brick}/${v.service}/${v.name}`, `volume of disabled ${v.brick}`, false);
+  }
   const planRouter = router ? buildRouter(manifests, services, router, names) : undefined;
   if (names.issues.length) throw new PlugbricksError(names.issues);
 
@@ -433,7 +447,12 @@ function buildRouter(
 
 /** The plan of an initialised project, from its lock and installed copies. */
 export function planProject(project: Project): Plan {
-  const manifests = loadInstalledBricks(project);
+  const installed = loadInstalledBricks(project);
+  // A disabled brick is installed but not rendered; its volumes keep their names for when it returns.
+  const manifests = new Map([...installed].filter(([brick]) => isBrickEnabled(project.platform, brick)));
+  const reservedVolumes = Object.entries(project.lock.bricks)
+    .filter(([brick]) => !isBrickEnabled(project.platform, brick))
+    .flatMap(([brick, locked]) => locked.volumes.map((v) => ({ brick, service: v.service, name: v.name })));
   return buildPlan(
     project.platform.name,
     project.lock,
@@ -446,5 +465,6 @@ export function planProject(project: Project): Plan {
       port: project.platform.router?.port ?? PLATFORM_DEFAULTS.routerPort,
       readSchema: (brick, file) => readFileSync(join(project.root, BRICKS_DIR, brick, file), "utf8"),
     },
+    reservedVolumes,
   );
 }

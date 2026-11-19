@@ -7,23 +7,37 @@
   "additionalProperties": false,
   "required": ["lockfileVersion", "bricks", "capabilities", "retainedVolumes", "pendingDeletion"],
   "properties": {
-    "$schema": { "type": "string" },
-    "lockfileVersion": { "const": 1 },
+    "$schema": {
+      "type": "string"
+    },
+    "lockfileVersion": {
+      "const": 1
+    },
     "bricks": {
       "type": "object",
-      "propertyNames": { "$ref": "#/$defs/brickName" },
-      "additionalProperties": { "$ref": "#/$defs/brick" }
+      "propertyNames": {
+        "$ref": "#/$defs/brickName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/brick"
+      }
     },
     "capabilities": {
       "type": "object",
       "description": "Which installed brick provides each capability. One provider per capability.",
-      "propertyNames": { "$ref": "#/$defs/capabilityName" },
-      "additionalProperties": { "$ref": "#/$defs/brickName" }
+      "propertyNames": {
+        "$ref": "#/$defs/capabilityName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/brickName"
+      }
     },
     "retainedVolumes": {
       "type": "array",
       "description": "Volumes of removed bricks whose retention is retain. Drivers keep them; adding the brick again re-attaches them.",
-      "items": { "$ref": "#/$defs/volumeRef" }
+      "items": {
+        "$ref": "#/$defs/volumeRef"
+      }
     },
     "federation": {
       "type": "object",
@@ -36,37 +50,75 @@
           "additionalProperties": false,
           "required": ["name", "version"],
           "properties": {
-            "name": { "type": "string", "minLength": 1 },
-            "version": { "type": "string", "minLength": 1 }
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
-        "routerCompatibilityVersion": { "type": "string", "minLength": 1 },
+        "routerCompatibilityVersion": {
+          "type": "string",
+          "minLength": 1
+        },
         "subgraphs": {
           "type": "array",
           "description": "Names of the bricks that serve a subgraph, sorted.",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/brickName" }
+          "items": {
+            "$ref": "#/$defs/brickName"
+          }
         },
-        "schemaSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$", "description": "sha256 of the printed federated schema." }
+        "schemaSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "sha256 of the printed federated schema."
+        }
       }
     },
     "pendingDeletion": {
       "type": "array",
       "description": "Volumes of removed bricks whose retention is delete. The ONLY volumes a driver may delete, and only when run with --prune-volumes. A volume in neither list is never deleted. Adding the brick again removes its entries.",
-      "items": { "$ref": "#/$defs/volumeRef" }
+      "items": {
+        "$ref": "#/$defs/volumeRef"
+      }
     }
   },
   "$defs": {
-    "brickName": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$" },
-    "capabilityName": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "brickName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$"
+    },
+    "capabilityName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
     "brick": {
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "source", "integrity", "provides", "requires", "volumes"],
       "properties": {
-        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$" },
-        "source": { "type": "string", "minLength": 1 },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Labels of the manifest, sorted; absent when the brick declares none."
+        },
         "integrity": {
           "type": "string",
           "pattern": "^sha256-[a-f0-9]{64}$",
@@ -75,19 +127,31 @@
         "provides": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/capabilityName" }
+          "items": {
+            "$ref": "#/$defs/capabilityName"
+          }
         },
         "requires": {
           "type": "object",
-          "propertyNames": { "$ref": "#/$defs/capabilityName" },
+          "propertyNames": {
+            "$ref": "#/$defs/capabilityName"
+          },
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
             "required": ["provider", "wait", "timeoutSeconds"],
             "properties": {
-              "provider": { "$ref": "#/$defs/brickName" },
-              "wait": { "enum": ["healthy", "started"] },
-              "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 900 }
+              "provider": {
+                "$ref": "#/$defs/brickName"
+              },
+              "wait": {
+                "enum": ["healthy", "started"]
+              },
+              "timeoutSeconds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 900
+              }
             }
           }
         },
@@ -98,9 +162,17 @@
             "additionalProperties": false,
             "required": ["service", "name", "retention"],
             "properties": {
-              "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-              "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-              "retention": { "enum": ["retain", "delete"] }
+              "service": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "retention": {
+                "enum": ["retain", "delete"]
+              }
             }
           }
         }
@@ -111,9 +183,17 @@
       "additionalProperties": false,
       "required": ["brick", "service", "name"],
       "properties": {
-        "brick": { "$ref": "#/$defs/brickName" },
-        "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+        "brick": {
+          "$ref": "#/$defs/brickName"
+        },
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        }
       }
     }
   }

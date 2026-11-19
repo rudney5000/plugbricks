@@ -8,7 +8,12 @@
       "name": "broker",
       "image": "rabbitmq:4.1.4-management",
       "port": 5672,
-      "extraPorts": [{ "name": "management", "port": 15672 }],
+      "extraPorts": [
+        {
+          "name": "management",
+          "port": 15672
+        }
+      ],
       "volumes": [
         {
           "name": "data",
@@ -17,7 +22,11 @@
         }
       ],
       "healthcheck": {
-        "exec": ["rabbitmq-diagnostics", "-q", "ping"],
+        "exec": [
+          "rabbitmq-diagnostics",
+          "-q",
+          "ping"
+        ],
         "intervalSeconds": 10,
         "timeoutSeconds": 5,
         "retries": 10,
@@ -33,13 +42,23 @@
     "queue": {
       "service": "broker",
       "ready": {
-        "exec": ["nc", "-z", "-w", "2", "${provider.host}", "${provider.port}"],
+        "exec": [
+          "nc",
+          "-z",
+          "-w",
+          "2",
+          "${provider.host}",
+          "${provider.port}"
+        ],
         "image": "busybox:1.36",
         "intervalSeconds": 2
       },
       "provision": {
         "image": "curlimages/curl:8.11.1",
-        "command": ["/bin/sh", "/provision/create-vhost.sh"],
+        "command": [
+          "/bin/sh",
+          "/provision/create-vhost.sh"
+        ],
         "scripts": "provision",
         "env": {
           "MANAGEMENT_URL": "http://${provider.host}:15672",
@@ -55,5 +74,8 @@
         "QUEUE_NAME": "${consumer.name}"
       }
     }
-  }
+  },
+  "tags": [
+    "queue"
+  ]
 }

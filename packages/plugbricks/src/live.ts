@@ -58,6 +58,8 @@ export interface LiveService {
 export interface LiveBrick {
   name: string;
   enabled: boolean;
+  /** Labels of the manifest, from the lock (empty when it declares none). */
+  tags: string[];
   services: LiveService[];
 }
 
@@ -401,6 +403,10 @@ export interface LiveInput {
   routerAddress: string | null;
   /** Compose: a task-based reason for consumers that do not run. */
   taskReason?: (brick: string) => string | null;
+  /** Labels per installed brick (from the lock); absent means none. */
+  tags?: Map<string, string[]>;
+  /** Installed bricks that platform.json disables: still reported, never counted as degraded. */
+  disabled?: { name: string; tags: string[]; services: { name: string; service: string }[] }[];
   problems: Issue[];
 }
 
@@ -437,6 +443,30 @@ export function buildLiveStatus(input: LiveInput): LiveStatus {
     });
     bricks.set(s.brick, list);
   }
+  // A disabled brick is installed but not rendered: report it as stopped, with its own reason, and
+  // never let it make the platform degraded.
+  const disabledBricks = new Map((input.disabled ?? []).map((d) => [d.name, d]));
+  for (const d of input.disabled ?? []) {
+    if (bricks.has(d.name)) continue;
+    bricks.set(
+      d.name,
+      d.services.map((s) => {
+        const o = observed.get(s.name);
+        return {
+          name: s.name,
+          service: s.service,
+          enabled: false,
+          deployed: o !== undefined,
+          state: o?.state ?? ("stopped" as const),
+          reason: o?.reason ?? "disabled in platform.json",
+          restarts: o?.restarts ?? 0,
+          instances: o?.instances ?? [],
+          subgraph: false,
+          mismatch: null,
+        };
+      }),
+    );
+  }
 
   let router: LiveRouter | null = null;
   if (plan.router) {
@@ -460,7 +490,12 @@ export function buildLiveStatus(input: LiveInput): LiveStatus {
     };
   }
 
-  const known = new Set([...plan.services.map((s) => s.name), ...taskNames(plan), ...(plan.router ? [plan.router.name] : [])]);
+  const known = new Set([
+    ...plan.services.map((s) => s.name),
+    ...(input.disabled ?? []).flatMap((d) => d.services.map((s) => s.name)),
+    ...taskNames(plan),
+    ...(plan.router ? [plan.router.name] : []),
+  ]);
   const undeclared: LiveService[] = [...observed]
     .filter(([name]) => !known.has(name))
     .sort(([a], [b]) => a.localeCompare(b))
@@ -477,7 +512,7 @@ export function buildLiveStatus(input: LiveInput): LiveStatus {
       mismatch: "not-declared",
     }));
 
-  const enabled = [...[...bricks.values()].flat(), ...(router ? [router] : [])];
+  const enabled = [...[...bricks.values()].flat().filter((s) => s.enabled), ...(router ? [router] : [])];
   const degraded = enabled.some((s) => DEGRADED_STATES.includes(s.state));
   return {
     version: LIVE_STATUS_VERSION,
@@ -487,7 +522,12 @@ export function buildLiveStatus(input: LiveInput): LiveStatus {
     state: degraded ? "degraded" : "healthy",
     bricks: [...bricks]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, services]) => ({ name, enabled: true, services: services.sort((a, b) => a.name.localeCompare(b.name)) })),
+      .map(([name, services]) => ({
+        name,
+        enabled: !disabledBricks.has(name),
+        tags: input.tags?.get(name) ?? disabledBricks.get(name)?.tags ?? [],
+        services: services.sort((a, b) => a.name.localeCompare(b.name)),
+      })),
     router,
     undeclared,
     problems: input.problems.map((p) => ({ code: p.code, path: p.path, message: p.message, params: p.params })),

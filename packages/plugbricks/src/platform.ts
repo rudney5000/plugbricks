@@ -46,7 +46,20 @@ export interface Platform {
   name: string;
   /** Absent in files written before the router existed: the default port applies. */
   router?: { port?: number };
-  bricks: Record<string, { source: string }>;
+  bricks: Record<string, { source: string; enabled?: boolean }>;
+}
+
+/** A brick is deployed unless platform.json says otherwise; absent means enabled. Only an own key is read. */
+export function isBrickEnabled(platform: Platform, name: string): boolean {
+  return !Object.hasOwn(platform.bricks, name) || platform.bricks[name].enabled !== false;
+}
+
+/**
+ * The lock entry of an installed brick, only for an own key. A name such as "__proto__" (from the
+ * command line or a library call) must never reach Object.prototype through a plain index access.
+ */
+function installedBrick(lock: Lock, name: string): LockedBrick | undefined {
+  return Object.hasOwn(lock.bricks, name) ? lock.bricks[name] : undefined;
 }
 
 export interface VolumeRef {
@@ -58,6 +71,8 @@ export interface VolumeRef {
 export interface LockedBrick {
   version: string;
   source: string;
+  /** Labels of the manifest, sorted; absent when the brick declares none. */
+  tags?: string[];
   integrity: string;
   provides: string[];
   requires: Record<string, { provider: string; wait: "healthy" | "started"; timeoutSeconds: number }>;
@@ -235,6 +250,7 @@ export function brickIntegrity(dir: string, brick: string): string {
 interface Manifest {
   name: string;
   version: string;
+  tags?: string[];
   services: { name: string; port: number; volumes?: { name: string; retention?: "retain" | "delete" }[] }[];
   provides?: Record<string, { provision: { command: string[]; scripts?: string } }>;
   requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number }>;
@@ -409,12 +425,15 @@ function installedSubgraphs(
   project: Project,
   leaving?: string,
   joining?: SubgraphInput,
+  /** true for the checks that must also see disabled bricks (removal, disabling). */
+  includeDisabled = false,
 ): { inputs: SubgraphInput[]; manifests: Map<string, Manifest>; unreadable: Issue[] } {
   const inputs: SubgraphInput[] = [];
   const manifests = new Map<string, Manifest>();
   const unreadable: Issue[] = [];
   for (const brick of Object.keys(project.lock.bricks).sort()) {
     if (brick === leaving) continue;
+    if (!includeDisabled && !isBrickEnabled(project.platform, brick)) continue;
     const dir = join(project.root, BRICKS_DIR, brick);
     try {
       const m = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf8")) as Manifest;
@@ -539,9 +558,17 @@ export function addBrick(root: string, brickPath: string): AddResult {
     .map((cap) => issue("REQUIRED_CAPABILITY_MISSING", `/requires/${cap}`, { brick: m.name, capability: cap }));
   if (missing.length) throw new PlugbricksError(missing);
 
+  // A disabled provider is still installed, but its capability is not deployed: refuse rather than
+  // add a consumer that could never start. Enabling the provider is one command away.
+  const disabledProviders = Object.keys(m.requires ?? {})
+    .filter((cap) => !isBrickEnabled(platform, lock.capabilities[cap]))
+    .map((cap) => issue("PROVIDER_DISABLED", `/requires/${cap}`, { capability: cap, provider: lock.capabilities[cap] }));
+  if (disabledProviders.length) throw new PlugbricksError(disabledProviders);
+
   const entry: LockedBrick = {
     version: m.version,
     source,
+    ...(m.tags?.length ? { tags: [...m.tags].sort() } : {}),
     integrity,
     provides: Object.keys(m.provides ?? {}).sort(),
     requires: Object.fromEntries(
@@ -615,7 +642,7 @@ export interface RemoveResult {
 export function removeBrick(root: string, name: string): RemoveResult {
   const project = readProject(root);
   const { lock, platform } = project;
-  const brick = lock.bricks[name];
+  const brick = installedBrick(lock, name);
   if (!brick) fail("BRICK_NOT_INSTALLED", { name });
 
   const inUse = brick.provides.flatMap((cap) => {
@@ -627,8 +654,9 @@ export function removeBrick(root: string, name: string): RemoveResult {
   });
   if (inUse.length) throw new PlugbricksError(inUse);
 
-  // Entities of this brick that an installed brick extends, then composition of what stays.
-  const { manifests } = installedSubgraphs(project, name);
+  // Entities of this brick that an installed brick extends (disabled ones included: they would break
+  // when re-enabled), then composition of what stays.
+  const { manifests } = installedSubgraphs(project, name, undefined, true);
   const extenders = [...manifests]
     .filter(([, other]) => (other.extends ?? []).some((e) => e.plugin === name))
     .map(([other]) => `"${other}"`);
@@ -660,7 +688,7 @@ export function removeBrick(root: string, name: string): RemoveResult {
 
 export interface StatusResult {
   name: string;
-  bricks: (LockedBrick & { name: string })[];
+  bricks: (LockedBrick & { name: string; enabled: boolean })[];
   capabilities: Record<string, string>;
   retainedVolumes: VolumeRef[];
   pendingDeletion: VolumeRef[];
@@ -670,6 +698,51 @@ export interface StatusResult {
   router?: { port: number; image: string };
   /** Empty when everything matches the lock. */
   problems: Issue[];
+}
+
+/**
+ * Enables or disables an installed brick. A disabled brick stays installed (its volumes and secrets
+ * are kept) but generate and up no longer render it; enabling renders it again. Refused when it would
+ * break an enabled consumer: disabling a capability still required, or enabling a consumer whose
+ * provider is disabled. The federated schema is recomposed either way.
+ */
+export function setBrickEnabled(root: string, name: string, enabled: boolean): { name: string; enabled: boolean } {
+  const project = readProject(root);
+  const { lock, platform } = project;
+  const brick = installedBrick(lock, name);
+  if (!brick) fail("BRICK_NOT_INSTALLED", { name });
+  const entry = Object.hasOwn(platform.bricks, name) ? platform.bricks[name] : undefined;
+  if (!entry) fail("BRICK_NOT_INSTALLED", { name });
+  if (enabled === isBrickEnabled(platform, name)) return { name, enabled };
+
+  if (!enabled) {
+    const inUse = brick.provides.flatMap((cap) => {
+      const consumers = Object.entries(lock.bricks)
+        .filter(([other, b]) => other !== name && isBrickEnabled(platform, other) && b.requires[cap] !== undefined)
+        .map(([other]) => `"${other}"`)
+        .sort();
+      return consumers.length ? [issue("CAPABILITY_IN_USE", "", { brick: name, capability: cap, consumers: consumers.join(", ") })] : [];
+    });
+    if (inUse.length) throw new PlugbricksError(inUse);
+    // An enabled brick extending one of its entities would lose its owner.
+    const { manifests } = installedSubgraphs(project, undefined, undefined, true);
+    const extenders = [...manifests]
+      .filter(([other, m]) => other !== name && isBrickEnabled(platform, other) && (m.extends ?? []).some((e) => e.plugin === name))
+      .map(([other]) => `"${other}"`)
+      .sort();
+    if (extenders.length) throw new PlugbricksError([issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })]);
+  } else {
+    const blocked = Object.entries(brick.requires).flatMap(([cap, r]) =>
+      isBrickEnabled(platform, r.provider) ? [] : [issue("PROVIDER_DISABLED", "", { capability: cap, provider: r.provider })],
+    );
+    if (blocked.length) throw new PlugbricksError(blocked);
+  }
+
+  if (enabled) delete entry.enabled;
+  else entry.enabled = false;
+  setFederation(lock, checkFederation(project));
+  save(project);
+  return { name, enabled };
 }
 
 export function platformStatus(root: string): StatusResult {
@@ -689,7 +762,7 @@ export function platformStatus(root: string): StatusResult {
         if (e instanceof PlugbricksError) problems.push(...e.issues);
         else problems.push(issue("BRICK_UNREADABLE", "", { brick: name, detail: (e as Error).message }));
       }
-      return { name, ...lock.bricks[name] };
+      return { name, enabled: isBrickEnabled(platform, name), ...lock.bricks[name] };
     });
   const federation = federationStatus({ root: dir, platform, lock }, problems);
   return {
