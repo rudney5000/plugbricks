@@ -754,3 +754,109 @@ describe("the queue capability with a real consumer", () => {
     300_000,
   );
 });
+
+// ---------- the queue capability with NATS ----------
+// Core NATS: a NATS_URL and a SUBJECT for the consumer, and a real publish/subscribe through a pinned
+// nats-box client (no application to maintain for the test).
+
+describe("the queue capability with NATS", () => {
+  const name = "pbtest-nats";
+
+  it.skipIf(!ready)(
+    `publishes and receives a message through the broker${why}`,
+    () => {
+      const work = project(name, ["queue-a"]);
+      cpSync(join(pkg, "examples/nats"), join(work, "nats"), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "nats"],
+        ["add", "queue-a"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      // The consumer got the broker URL and its subject (no secret is involved in NATS core).
+      const env = spawnSync(
+        "docker",
+        [
+          "compose",
+          "--project-name",
+          name,
+          "exec",
+          "-T",
+          "queue-a-app",
+          "sh",
+          "-c",
+          '[ "$NATS_URL" = "nats://nats-broker:4222" ] && [ "$SUBJECT" = "queue-a" ] && echo ok',
+        ],
+        { encoding: "utf8" },
+      );
+      expect(env.status, env.stderr).toBe(0);
+      expect(env.stdout.trim()).toBe("ok");
+
+      // A pinned nats-box subscribes, another publishes; the subscriber's log shows the message.
+      const network = `${name}_default`;
+      const subscriber = `${name}-sub`;
+      spawnSync("docker", ["rm", "-f", subscriber], { encoding: "utf8" });
+      const sub = spawnSync(
+        "docker",
+        [
+          "run",
+          "-d",
+          "--name",
+          subscriber,
+          "--network",
+          network,
+          "natsio/nats-box:0.19.2",
+          "nats",
+          "--server",
+          "nats://nats-broker:4222",
+          "sub",
+          "hello",
+          "--count",
+          "1",
+        ],
+        { encoding: "utf8" },
+      );
+      expect(sub.status, sub.stderr).toBe(0);
+      try {
+        spawnSync("sleep", ["2"]);
+        const pub = spawnSync(
+          "docker",
+          [
+            "run",
+            "--rm",
+            "--network",
+            network,
+            "natsio/nats-box:0.19.2",
+            "nats",
+            "--server",
+            "nats://nats-broker:4222",
+            "pub",
+            "hello",
+            "world",
+          ],
+          { encoding: "utf8" },
+        );
+        expect(pub.status, pub.stderr).toBe(0);
+        const waited = spawnSync("docker", ["wait", subscriber], { encoding: "utf8" });
+        expect(waited.status, waited.stderr).toBe(0);
+        expect(waited.stdout.trim()).toBe("0");
+        const logs = spawnSync("docker", ["logs", subscriber], { encoding: "utf8" });
+        expect(logs.status, logs.stderr).toBe(0);
+        expect(`${logs.stdout}${logs.stderr}`).toContain("Received on");
+        expect(`${logs.stdout}${logs.stderr}`).toContain("world");
+      } finally {
+        spawnSync("docker", ["rm", "-f", subscriber], { encoding: "utf8" });
+      }
+
+      // Nothing is published on the host.
+      expect(containersOf(name, "--format", "{{.Ports}}")).not.toContain("->");
+
+      expect(cli(work, ["down"]).code).toBe(0);
+    },
+    300_000,
+  );
+});

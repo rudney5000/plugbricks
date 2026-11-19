@@ -701,4 +701,103 @@ describe("Kubernetes driver against a real k3d cluster", () => {
     },
     900_000,
   );
+
+  it.skipIf(!ready)(
+    `a real client publishes and receives a message through NATS${why}`,
+    async () => {
+      const ns = "pbtest-k8s-nats";
+      const work = project(ns, ["queue-a"]);
+      cpSync(join(pkg, "examples/nats"), join(work, "nats"), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "nats"],
+        ["add", "queue-a"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const pods = podsOf(ns);
+      expect(pods.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual(["nats-broker", "queue-a-app"]);
+      for (const p of pods) {
+        expect(p.status.phase, p.metadata.name).toBe("Running");
+        expect(
+          p.status.containerStatuses?.every((c) => c.ready),
+          `${p.metadata.name} is ready`,
+        ).toBe(true);
+      }
+
+      // The consumer got the broker URL and its subject.
+      const env = kc([
+        "--namespace",
+        ns,
+        "exec",
+        "deployment/queue-a-app",
+        "--",
+        "sh",
+        "-c",
+        '[ "$NATS_URL" = "nats://nats-broker:4222" ] && [ "$SUBJECT" = "queue-a" ] && echo ok',
+      ]);
+      expect(env.status, env.stderr).toBe(0);
+      expect(env.stdout.trim()).toBe("ok");
+
+      // A pinned nats-box pod subscribes; publish from inside it; its log shows the message.
+      const sub = kc([
+        "--namespace",
+        ns,
+        "run",
+        "nats-sub",
+        "--image=natsio/nats-box:0.19.2",
+        "--restart=Never",
+        "--command",
+        "--",
+        "nats",
+        "--server",
+        "nats://nats-broker:4222",
+        "sub",
+        "hello",
+        "--count",
+        "1",
+      ]);
+      expect(sub.status, sub.stderr).toBe(0);
+      try {
+        const ready = kc(["--namespace", ns, "wait", "--for=condition=Ready", "pod/nats-sub", "--timeout=120s"]);
+        expect(ready.status, ready.stderr).toBe(0);
+        const pub = kc([
+          "--namespace",
+          ns,
+          "exec",
+          "nats-sub",
+          "--",
+          "nats",
+          "--server",
+          "nats://nats-broker:4222",
+          "pub",
+          "hello",
+          "world",
+        ]);
+        expect(pub.status, pub.stderr).toBe(0);
+        await until(
+          "the NATS subscriber to receive the message",
+          async () => {
+            const pod = JSON.parse(kc(["--namespace", ns, "get", "pod", "nats-sub", "--output", "json"]).stdout) as {
+              status?: { phase?: string };
+            };
+            return pod.status?.phase === "Succeeded";
+          },
+          60_000,
+        );
+        const logs = kc(["--namespace", ns, "logs", "nats-sub"]);
+        expect(logs.status, logs.stderr).toBe(0);
+        expect(logs.stdout).toContain("Received on");
+        expect(logs.stdout).toContain("world");
+      } finally {
+        kc(["--namespace", ns, "delete", "pod", "nats-sub", "--ignore-not-found"]);
+      }
+
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(names(ns, "deployment")).toEqual([]);
+    },
+    900_000,
+  );
 });
