@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
 import {
@@ -7,12 +8,14 @@ import {
   initPlatform,
   PlugbricksError,
   platformStatus,
+  readProject,
   removeBrick,
   setBrickEnabled,
   type StatusResult,
   type VolumeRef,
 } from "./platform.js";
 import { liveStatusText } from "./live.js";
+import { startAdmin } from "./admin/server.js";
 import {
   down,
   generate,
@@ -48,6 +51,8 @@ Commands:
   generate               Write the runtime files to .generated/<runtime>/ and create missing secrets
   up [--prune-volumes]   Generate, then start or update the platform
   down                   Stop the platform; volumes and secrets are kept
+  admin [--port <port>] [--dev]
+                         Serve the read-only admin on 127.0.0.1 (default 4100); OIDC unless --dev
 
 Options:
   --runtime <name>       compose (Docker Compose, default) or k8s (Kubernetes)
@@ -121,6 +126,11 @@ export function main(argv: string[], io: Io): number {
           kubeconfig: { type: "string" },
           "allow-context": { type: "string" },
           "prune-volumes": { type: "boolean" },
+          port: { type: "string" },
+          dev: { type: "boolean" },
+          issuer: { type: "string" },
+          "client-id": { type: "string" },
+          "ui-dir": { type: "string" },
           help: { type: "boolean", short: "h" },
           version: { type: "boolean", short: "v" },
         },
@@ -151,7 +161,10 @@ export function main(argv: string[], io: Io): number {
     };
     if (values.name !== undefined) optionFor("name", "init");
     if (values.json !== undefined) optionFor("json", "status");
-    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status");
+    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin");
+    for (const opt of ["port", "dev", "issuer", "client-id", "ui-dir"] as const) {
+      if (values[opt] !== undefined) optionFor(opt, "admin");
+    }
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
@@ -159,7 +172,7 @@ export function main(argv: string[], io: Io): number {
     }
     for (const opt of ["context", "kubeconfig", "allow-context"] as const) {
       if (values[opt] === undefined) continue;
-      optionFor(opt, "up", "down", "status");
+      optionFor(opt, "up", "down", "status", "admin");
       if (runtime !== "k8s") throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies with --runtime k8s` });
     }
     if (values["allow-context"] !== undefined && values["allow-context"] !== values.context) {
@@ -206,6 +219,44 @@ export function main(argv: string[], io: Io): number {
         const enabled = command === "enable";
         const r = setBrickEnabled(root, args[0], enabled);
         io.stdout(`${enabled ? "Enabled" : "Disabled"} ${r.name}`);
+        return 0;
+      }
+      case "admin": {
+        only(0, "");
+        const port = values.port === undefined ? 4100 : Number(values.port);
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw usage("USAGE_INVALID_OPTION", "", { detail: `--port must be an integer between 1 and 65535 (got "${values.port}")` });
+        }
+        const dev = values.dev === true;
+        const clientSecret = process.env.PLUGBRICKS_OIDC_CLIENT_SECRET;
+        if (!dev && (!values.issuer || !values["client-id"] || !clientSecret)) {
+          throw new PlugbricksError([issue("ADMIN_OIDC_NOT_CONFIGURED", "")]);
+        }
+        const uiDir =
+          values["ui-dir"] === undefined
+            ? join(dirname(fileURLToPath(import.meta.url)), "../../admin/dist")
+            : resolve(io.cwd, values["ui-dir"]);
+        if (!existsSync(join(uiDir, "index.html"))) throw new PlugbricksError([issue("ADMIN_UI_MISSING", "", { dir: uiDir })]);
+        // Read-only: statusRuntime is bounded and never mutates; the server only serves the project.
+        readProject(root);
+        const s = startAdmin({
+          root,
+          runtime,
+          port,
+          dev,
+          uiDir,
+          k8s,
+          runtimeDeps: io.runtime,
+          issuer: values.issuer,
+          clientId: values["client-id"],
+          clientSecret,
+          log: (line) => io.stdout(line),
+        });
+        s.ready.catch((e: unknown) => {
+          io.stderr(`error ADMIN_START_FAILED: ${(e as Error).message}`);
+          process.exitCode = 1;
+          s.close();
+        });
         return 0;
       }
       case "status": {

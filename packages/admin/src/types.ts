@@ -1,0 +1,60 @@
+export type LiveState = "healthy" | "starting" | "unhealthy" | "stopped" | "not deployed" | "unknown";
+export type Role = "admin" | "viewer";
+
+export interface AdminBrick {
+  name: string;
+  version: string;
+  tags: string[];
+  enabled: boolean;
+  deployed: boolean;
+  state: LiveState;
+  reason: string | null;
+  restarts: number;
+  port: number | null;
+  subgraph: boolean;
+  extends: string;
+  provides: string[];
+  requires: string;
+}
+
+export interface RouterView {
+  state: LiveState;
+  address: string | null;
+  image: string;
+  digest: string | null;
+  subgraphs: { brick: string; name: string; state: LiveState }[];
+}
+
+export interface Problem {
+  code: string;
+  path: string;
+  message: string;
+}
+
+export interface BricksResponse {
+  platform: string;
+  runtime: string;
+  router: RouterView | null;
+  summary: { total: number; healthy: number; down: number; stopped: number };
+  bricks: AdminBrick[];
+  problems: Problem[];
+}
+
+export interface Session {
+  authenticated: boolean;
+  dev: boolean;
+  role: Role | null;
+  name: string;
+  project: string;
+  runtime: string;
+}
+
+export interface AuditEntry {
+  time: string;
+  user: string;
+  role: string;
+  action: string;
+  brick: string;
+  result: "Success" | "Refused" | "Failed";
+  details: string;
+}

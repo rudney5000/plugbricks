@@ -166,6 +166,9 @@ jobs:
       # Prettier, ESLint, typecheck and the tests: the same command as on a developer machine.
       - run: npm run quality
 
+      # The admin UI is not a test dependency, but its Vite/Tailwind build must stay green.
+      - run: npm run build -w plugbricks-admin
+
       # Known vulnerabilities in what ships (dev dependencies are not audited here: the test runner
       # has open advisories whose fix is a major upgrade, tracked separately).
       - name: Audit production dependencies
