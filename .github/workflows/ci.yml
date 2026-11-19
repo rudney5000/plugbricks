@@ -42,6 +42,7 @@ jobs:
             package-lock.json
             apis/orders/package-lock.json
             apis/shipping/package-lock.json
+            apis/queue-consumer/package-lock.json
 
       - run: node --version
 
@@ -63,6 +64,13 @@ jobs:
 
       - name: Example API shipping
         working-directory: apis/shipping
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - name: Example API queue-consumer
+        working-directory: apis/queue-consumer
         run: |
           npm ci
           npm run typecheck
@@ -91,6 +99,7 @@ jobs:
             package-lock.json
             apis/orders/package-lock.json
             apis/shipping/package-lock.json
+            apis/queue-consumer/package-lock.json
 
       - run: npm ci
 
@@ -144,6 +153,7 @@ jobs:
             package-lock.json
             apis/orders/package-lock.json
             apis/shipping/package-lock.json
+            apis/queue-consumer/package-lock.json
             tools/wgc-crosscheck/package-lock.json
 
       - run: npm ci

@@ -769,7 +769,9 @@ end yet.
 - **Tests:** the golden scenario `generate-rabbitmq` (management port, provision script, one secret per
   consumer); the Compose e2e checks `rabbitmqctl list_vhosts`, `list_users`, `list_permissions` and that
   `AMQP_URL` uses the consumer's own user and vhost without printing it; the k3d e2e checks the
-  Service ports and the vhosts.
+  Service ports and the vhosts. A real consumer (`examples/queue-consumer`, source
+  `apis/queue-consumer`) publishes one message and consumes it, and its `/health` only answers 200
+  after that round-trip: the Compose and k3d e2e both start it against the broker.
 
 ---
 

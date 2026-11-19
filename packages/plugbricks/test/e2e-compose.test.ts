@@ -252,6 +252,22 @@ function buildExampleApis(): void {
   apisBuilt = true;
 }
 
+let queueConsumerBuilt = false;
+/** Builds the consumer image once: its /health describes a real publish/consume through the broker. */
+function buildQueueConsumer(): void {
+  if (queueConsumerBuilt) return;
+  const repo = fileURLToPath(new URL("../../../", import.meta.url));
+  const build = spawnSync(
+    "docker",
+    ["build", "--quiet", "--tag", "plugbricks-example/queue-consumer:0.1.0", join(repo, "apis/queue-consumer")],
+    {
+      encoding: "utf8",
+    },
+  );
+  expect(build.status, build.stderr).toBe(0);
+  queueConsumerBuilt = true;
+}
+
 describe("the router in front of orders and shipping", () => {
   const name = "pbtest-router";
   const port = 14103;
@@ -666,6 +682,74 @@ describe("the queue capability with RabbitMQ", () => {
       expect(cli(work, ["down"]).code).toBe(0);
       const vols = spawnSync("docker", ["volume", "ls", "--quiet", "--filter", `name=${name}_`], { encoding: "utf8" });
       expect(vols.stdout.trim().split("\n")).toEqual([`${name}_rabbitmq-broker-data`]);
+    },
+    300_000,
+  );
+});
+
+// ---------- the queue capability, with a real consumer ----------
+// `examples/queue-consumer` declares its queue, publishes one message and consumes it; its /health is
+// 200 only after that round-trip, with the consumer's own vhost and user.
+
+describe("the queue capability with a real consumer", () => {
+  const name = "pbtest-queue-flow";
+
+  it.skipIf(!ready)(
+    `publishes and consumes a message through the broker${why}`,
+    () => {
+      buildQueueConsumer();
+      const work = project(name, []);
+      for (const brick of ["rabbitmq", "queue-consumer"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "rabbitmq"],
+        ["add", "queue-consumer"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      // The healthcheck of the brick is this endpoint: `up` only returns once it answers 200, i.e. once a
+      // message went through the broker and came back.
+      const health = spawnSync(
+        "docker",
+        ["compose", "--project-name", name, "exec", "-T", "queue-consumer-app", "wget", "-qO-", "http://localhost:4000/health"],
+        { encoding: "utf8" },
+      );
+      expect(health.status, health.stderr).toBe(0);
+      expect(JSON.parse(health.stdout)).toMatchObject({ ok: true, connected: true, delivered: true, queue: "queue-consumer" });
+
+      // Its own user and vhost (the shell prints only "ok": the URL holds the generated password).
+      const env = spawnSync(
+        "docker",
+        [
+          "compose",
+          "--project-name",
+          name,
+          "exec",
+          "-T",
+          "queue-consumer-app",
+          "sh",
+          "-c",
+          'case "$AMQP_URL" in amqp://queue-consumer:*) ;; *) echo "wrong user"; exit 1;; esac;' +
+            'case "$AMQP_URL" in */queue-consumer) ;; *) echo "wrong vhost"; exit 1;; esac; echo ok',
+        ],
+        { encoding: "utf8" },
+      );
+      expect(env.status, env.stderr).toBe(0);
+      expect(env.stdout.trim()).toBe("ok");
+
+      // The queue exists on the broker, in the consumer's vhost.
+      const queues = spawnSync(
+        "docker",
+        ["compose", "--project-name", name, "exec", "-T", "rabbitmq-broker", "rabbitmqctl", "list_queues", "-p", "queue-consumer", "name"],
+        { encoding: "utf8" },
+      );
+      expect(queues.status, queues.stderr).toBe(0);
+      expect(queues.stdout).toContain("queue-consumer");
+
+      expect(cli(work, ["down"]).code).toBe(0);
     },
     300_000,
   );

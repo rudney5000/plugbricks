@@ -122,6 +122,8 @@ npx plugbricks add services/orders    # requires "queue": receives AMQP_URL
 
 Each consumer gets its **own vhost, user and password**: `AMQP_URL=amqp://<brick>:<its secret>@rabbitmq-broker:5672/<brick>` and `QUEUE_NAME=<its brick name>` (D11, D12). A service declares and uses its own queue on the shared broker; the broker's administrator password is only used by the provision task, never injected into a consumer. The broker is never published, its data volume is kept by `down` and by `remove`, and its management port 15672 is an extra port of its Service (ClusterIP, never on the host).
 
+The example `examples/queue-consumer` shows the whole path: it declares its queue, publishes one message, consumes it, and its `/health` answers 200 only once that round-trip succeeded. The end-to-end tests use it, on Docker Compose and on k3d.
+
 ## Layout
 
 An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `typecheck` in every package.
@@ -133,6 +135,7 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `examples/postgres/` — a base brick that provides the `database` capability; `provision/create-database.sh` creates one role and one database per consumer (idempotent).
   - `examples/orders/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
   - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting its own vhost, user and `QUEUE_NAME` (D11, D12); its provision script creates them through the management API.
+  - `examples/queue-consumer/` — an API that requires `queue`: it declares its queue, publishes one message, consumes it, and exposes the round-trip on `/health` (`apis/queue-consumer`).
   - `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned images, referenced services exist). Every issue has a stable `code`, a JSON Pointer `path`, a `message` and its `params`.
   - `src/messages.ts` — the error code catalog. Tools match on `code`, never on the message text.
   - `src/platform.ts` — `initPlatform`, `addBrick`, `removeBrick`, `platformStatus`: the CLI logic, with no console output.
@@ -150,6 +153,7 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `test/` — Vitest suite, including `dist.test.ts`, which packs the package with `npm pack` and runs the built CLI, and `e2e-compose.test.ts`, which runs `up`/`down` against a real Docker engine (skipped, with the reason, where no Linux engine answers).
 - `apis/orders/` — the source of the `orders` example API (Node 22, GraphQL Yoga, `@apollo/subgraph`, `pg`): a federation v2 subgraph with its own migrations and `/health`. Built as the image `plugbricks-example/orders:0.1.0` (`docker build -t plugbricks-example/orders:0.1.0 apis/orders`), which `examples/orders/plugin.json` runs. A standalone package with its own lockfile: the brick folder holds only the manifest and the SDL, so `add` never copies `node_modules`. Its tests check that its SDL is the brick's. The image is built locally and is not published to a registry yet: build it before `up`, and load it into a Kubernetes cluster (for example `k3d image import`) before `up --runtime k8s`.
 - `apis/shipping/` — the source of the `shipping` example API, same shape as `apis/orders` (its own lockfile, migrations, `/health`, image `plugbricks-example/shipping:0.1.0`, built with `docker build -t plugbricks-example/shipping:0.1.0 apis/shipping`). Its subgraph extends the `Order` entity of the orders API with a `shipment` field (`examples/shipping/plugin.json` declares `extends: [{ plugin: "orders", entities: ["Order"] }]`) and keeps its data in its own database, which the orders API cannot reach. Its tests check that its SDL is the brick's, and a test composes all the example bricks together.
+- `apis/queue-consumer/` — the source of the queue consumer example (Node 22, `amqplib`, `/health`), same shape as `apis/orders`: a standalone package with its own lockfile, image `plugbricks-example/queue-consumer:0.1.0`, built with `docker build -t plugbricks-example/queue-consumer:0.1.0 apis/queue-consumer`. It connects with its own `AMQP_URL`, declares `QUEUE_NAME`, publishes one message and consumes it; `/health` answers 200 only after that round-trip. Its tests check the health state machine.
 - `packages/create-plugbricks/` — `npm create plugbricks <name>`: copies `template/`, writes `package.json`, and calls `initPlatform` from `plugbricks`.
 - `docs/decisions.md` — design decisions taken ahead of their implementation, with their evidence.
 - `docs/architecture.md` — how the pieces fit together, from the manifest to the running containers, with what is built and what is planned.
@@ -225,4 +229,5 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
 5. **Message queue**
    - Done (5b): `examples/rabbitmq` provides `queue`: one broker, any number of consumers, each with its own vhost, user and `QUEUE_NAME`; golden scenario, end to end on Docker Compose, and the same scenario in the k3d job (D11).
    - Done (5b-bis): `services[].extraPorts` and one RabbitMQ account per consumer, through the management API (D12).
+   - Done (5b-ter): a real consumer (`examples/queue-consumer`, source `apis/queue-consumer`) publishes and consumes a message through the broker, on Docker Compose and k3d.
    - Deferred: Kafka and NATS. NATS core would need no extra port, but accounts/JetStream need a configuration file or command line the manifest cannot express today.

@@ -12,7 +12,8 @@ import { portForward, stopAllForwards } from "./helpers/port-forward.js";
 
 // Runs the Kubernetes driver against a real, throwaway k3d cluster: up with postgres and orders, a
 // GraphQL call, down, remove + up --prune-volumes; the router in front of orders and shipping, with real requests
-// through it, a rollout when the composition changes, and down; and WAIT_TIMEOUT.
+// through it, a rollout when the composition changes, and down; WAIT_TIMEOUT; a RabbitMQ broker with two consumers
+// and a real publish/consume; and recovery after the database pod is killed.
 //
 // It runs only when PLUGBRICKS_K8S_CONTEXT starts with "k3d-pbtest-" and PLUGBRICKS_K8S_KUBECONFIG
 // is set (see test/helpers/k8s-guard.ts); otherwise it is skipped, with the reason in the title.
@@ -554,6 +555,148 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(cli(work, ["down"]).code).toBe(0);
       expect(names(ns, "deployment")).toEqual([]);
       expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/rabbitmq-broker-data"]);
+      expect(names(ns, "secret")).toContain("secret/plugbricks-secrets");
+    },
+    900_000,
+  );
+
+  it.skipIf(!ready)(
+    `a real consumer publishes and consumes a message through the broker${why}`,
+    () => {
+      loadImage("queue-consumer");
+      const ns = "pbtest-k8s-queue-flow";
+      const work = project(ns, []);
+      for (const brick of ["rabbitmq", "queue-consumer"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "rabbitmq"],
+        ["add", "queue-consumer"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const pods = podsOf(ns);
+      expect(pods.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual([
+        "queue-consumer-app",
+        "rabbitmq-broker",
+      ]);
+      for (const p of pods) {
+        expect(p.status.phase, p.metadata.name).toBe("Running");
+        expect(
+          p.status.containerStatuses?.every((c) => c.ready),
+          `${p.metadata.name} is ready`,
+        ).toBe(true);
+      }
+
+      // /health is 200 only after the consumer declared its queue, published a message and consumed it,
+      // with its own vhost and user; the JSON says what happened.
+      const health = kc(["--namespace", ns, "exec", "deployment/queue-consumer-app", "--", "wget", "-qO-", "http://localhost:4000/health"]);
+      expect(health.status, health.stderr).toBe(0);
+      expect(JSON.parse(health.stdout)).toMatchObject({ ok: true, connected: true, delivered: true, queue: "queue-consumer" });
+
+      // The queue exists on the broker, in the consumer's vhost.
+      const queues = kc([
+        "--namespace",
+        ns,
+        "exec",
+        "deployment/rabbitmq-broker",
+        "--",
+        "rabbitmqctl",
+        "list_queues",
+        "-p",
+        "queue-consumer",
+        "name",
+      ]);
+      expect(queues.status, queues.stderr).toBe(0);
+      expect(queues.stdout).toContain("queue-consumer");
+
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/rabbitmq-broker-data"]);
+    },
+    900_000,
+  );
+
+  // The "later pass" of milestone 3: the database pod is killed, `up` runs again, and the platform
+  // recovers with its data (the PersistentVolumeClaim is reattached to the new pod).
+  it.skipIf(!ready)(
+    `recovers after the database pod is killed, and keeps the data${why}`,
+    async () => {
+      loadImage("orders");
+      const ns = "pbtest-k8s-recovery";
+      const work = project(ns, []);
+      cpSync(join(pkg, "examples/orders"), join(work, "orders"), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "postgres"],
+        ["add", "orders"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      // A GraphQL call inside the orders pod (localhost), with the connection race retried.
+      const gql = (query: string) => {
+        let last = kc(["version", "--client"]);
+        for (let attempt = 1; attempt <= 6; attempt++) {
+          last = kc([
+            "--namespace",
+            ns,
+            "exec",
+            "deployment/orders-app",
+            "--",
+            "wget",
+            "-qO-",
+            "-T",
+            "10",
+            "--header",
+            "content-type: application/json",
+            "--post-data",
+            JSON.stringify({ query }),
+            "http://localhost:4000/graphql",
+          ]);
+          if (last.status === 0) return JSON.parse(last.stdout);
+          if (!/can't connect|timed out|bad address/i.test(last.stderr)) break;
+          console.log(`gql attempt ${attempt} failed (${last.stderr.trim().split("\n").pop()}); trying again in 5 s`);
+          spawnSync("sleep", ["5"]);
+        }
+        expect(last.status, last.stderr).toBe(0);
+        return JSON.parse(last.stdout);
+      };
+
+      const created = gql("mutation { createOrder(total: 42.5) { id total status } }");
+      const id = created.data.createOrder.id;
+      expect(created.data.createOrder).toEqual({ id, total: 42.5, status: "pending" });
+
+      // Kill the database pod; the Deployment recreates it on the same PersistentVolumeClaim.
+      const before = podsOf(ns).find((p) => p.metadata.name.startsWith("postgres-db-"))!.metadata.name;
+      const deleted = kc(["--namespace", ns, "delete", "pod", before, "--wait=false"]);
+      expect(deleted.status, deleted.stderr).toBe(0);
+      const rolled = kc(["--namespace", ns, "rollout", "status", "deployment/postgres-db", "--timeout=180s"]);
+      expect(rolled.status, rolled.stderr).toBe(0);
+      const after = podsOf(ns).find((p) => p.metadata.name.startsWith("postgres-db-") && p.metadata.name !== before)?.metadata.name;
+      expect(after, "a new postgres pod replaced the killed one").toBeDefined();
+
+      // up again: the platform is applied and every rollout is waited for.
+      const again = cli(work, ["up"]);
+      expect(again.code, `${again.out}\n${again.err}`).toBe(0);
+
+      // The orders API recovers its database connection, and the order is still there.
+      await until(
+        "the orders API to answer /health again",
+        async () => {
+          const r = kc(["--namespace", ns, "exec", "deployment/orders-app", "--", "wget", "-qO-", "http://localhost:4000/health"]);
+          return r.status === 0;
+        },
+        120_000,
+      );
+      const read = gql(`query { order(id: "${id}") { id total status } }`);
+      expect(read.data.order).toEqual({ id, total: 42.5, status: "pending" });
+
+      // down keeps the data and the secret.
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/postgres-db-data"]);
       expect(names(ns, "secret")).toContain("secret/plugbricks-secrets");
     },
     900_000,
