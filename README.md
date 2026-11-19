@@ -2,7 +2,7 @@
 
 Add plugins and infrastructure bricks (PostgreSQL, a message queue, …) to a federated GraphQL project, on Docker Compose or Kubernetes, from a single `platform.json`.
 
-Status: **milestone 4 done, step 5a done; next is milestone 5 (message queue, NATS)** — the `orders` API and the `shipping` API that extends it (GraphQL subgraphs, each with its own database), composition checked when a brick is added, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17; the router and shipping scenario runs there since 2026-11-18). The Cosmo router is rendered for both runtimes (its configuration, its pinned image, loopback-only on Compose, a ClusterIP Service on Kubernetes). On Docker Compose and on Kubernetes, real requests through it reach the real `orders` and `shipping` APIs and their databases (end-to-end tests). `plugbricks status --runtime` reports what the runtime really runs, read-only, with a versioned JSON report (D10).
+Status: **milestone 4 done, step 5a done, milestone 5 started (RabbitMQ `queue` done; Kafka and NATS deferred)** — the `orders` API and the `shipping` API that extends it (GraphQL subgraphs, each with its own database), composition checked when a brick is added, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17; the router and shipping scenario runs there since 2026-11-18). The Cosmo router is rendered for both runtimes (its configuration, its pinned image, loopback-only on Compose, a ClusterIP Service on Kubernetes). On Docker Compose and on Kubernetes, real requests through it reach the real `orders` and `shipping` APIs and their databases (end-to-end tests). `plugbricks status --runtime` reports what the runtime really runs, read-only, with a versioned JSON report (D10).
 
 ## Use
 
@@ -11,6 +11,7 @@ npm create plugbricks mon-saas      # a new project; its README explains every f
 cd mon-saas
 npx plugbricks add path/to/postgres # a brick that provides "database"
 npx plugbricks add services/orders  # requires "database"
+npx plugbricks add path/to/rabbitmq # a brick that provides "queue" (D11)
 npx plugbricks status               # add --json for machine-readable output
 npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
 npx plugbricks up                    # Docker Compose
@@ -110,6 +111,19 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
 
 This report is meant to feed an admin web page later; that page does not exist.
 
+### `queue`: one message broker for every service that needs it
+
+`examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:
+
+```bash
+npx plugbricks add path/to/rabbitmq   # provides "queue"
+npx plugbricks add services/orders    # requires "queue": receives AMQP_URL
+```
+
+Each consumer gets `AMQP_URL` (with the broker's generated password) and `QUEUE_NAME=<its brick name>`, so a service declares and uses its own queue on the shared broker. The broker is never published, and its data volume is kept by `down` and by `remove`.
+
+The account is **shared** for now: the default RabbitMQ user is an administrator, and every consumer receives its password (D11). That is acceptable for the local, loopback-only development this tool targets; per-consumer vhosts and users need the management port 15672, which a brick cannot expose yet (a later step). Each consumer owns its queue; the credentials are shared.
+
 ## Layout
 
 An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `typecheck` in every package.
@@ -120,6 +134,7 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `schemas/status-runtime.schema.json` — the report of `status --runtime --json`, version 1 (D10).
   - `examples/postgres/` — a base brick that provides the `database` capability; `provision/create-database.sh` creates one role and one database per consumer (idempotent).
   - `examples/orders/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
+  - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting `AMQP_URL` and its own `QUEUE_NAME` (D11).
   - `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned images, referenced services exist). Every issue has a stable `code`, a JSON Pointer `path`, a `message` and its `params`.
   - `src/messages.ts` — the error code catalog. Tools match on `code`, never on the message text.
   - `src/platform.ts` — `initPlatform`, `addBrick`, `removeBrick`, `platformStatus`: the CLI logic, with no console output.
@@ -209,4 +224,6 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (4b-5): the cross-check of our router configuration against `wgc router compose` (wgc 0.133.12, pinned in `tools/wgc-crosscheck`): equal except an empty `featureFlagConfigs` (D9). The end-to-end test of the router and shipping on k3d, with requests through the router, a rollout when the composition changes and `down`, runs green in the `kubernetes (k3d)` job since 2026-11-18 (PR #14, and on `main`).
    - Done (5a): `status --runtime compose|k8s [--json]`: what the runtime really runs next to what is declared, read-only (D10), with a versioned JSON report (`schemas/status-runtime.schema.json`) and its own exit codes (3 degraded, 4 `RUNTIME_UNAVAILABLE`). Tested with recorded Compose output and hand-written Kubernetes Lists, end to end on Docker Compose, and on k3d in CI.
    - Before the first publication: check the licences of what we ship (`docs/pre-publication-checklist.md`) and the package names (the npm names are not checked and the packages are `private` today); decide the first version number (everything is 0.0.1 and `UNLICENSED`); verify the signature of the tool checksums (`tools.json` checks a sha256 taken from the same release as the binary, not a signature); and settle the development-dependency vulnerabilities of the vitest 2 chain (D7: a major upgrade).
-5. **Message queue** (NATS)
+5. **Message queue**
+   - Done (5b): `examples/rabbitmq` provides `queue`: one broker, any number of consumers, each with `AMQP_URL` and its own `QUEUE_NAME`; golden scenario, end to end on Docker Compose, and the same scenario in the k3d job (D11). The account is shared for now; per-consumer vhost/user needs `extraPorts` (5b-bis).
+   - Deferred: Kafka and NATS. NATS core would need no extra port, but accounts/JetStream need a configuration file or command line the manifest cannot express today.

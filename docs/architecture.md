@@ -145,6 +145,11 @@ Secret scope (D6): a secret the provider's own services use belongs to the provi
 (`PB_POSTGRES__SUPERUSER_PASSWORD`); any other secret in `provision` or `inject` is generated per
 consumer (`PB_POSTGRES__ORDERS__CONSUMER_PASSWORD`).
 
+The same wiring carries `queue` (D11). `examples/rabbitmq` provides one broker; `ready` is a TCP check,
+`provision` is a no-op, and each consumer gets `AMQP_URL` (one shared account) and
+`QUEUE_NAME=<its brick name>`, then declares its own queue. Per-consumer vhosts and users would need
+the management port, which a brick cannot expose yet.
+
 ## 6. GraphQL Federation v2 (built)
 
 Each API brick serves a **subgraph**. Both examples declare Federation 2.5:
