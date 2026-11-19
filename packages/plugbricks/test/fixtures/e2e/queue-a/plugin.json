@@ -1,0 +1,16 @@
+{
+  "name": "queue-a",
+  "version": "0.1.0",
+  "description": "End-to-end test consumer of the queue capability: a long-running service that only receives AMQP_URL and its QUEUE_NAME. The test runs a shell inside it to check both without printing them.",
+  "services": [
+    {
+      "name": "app",
+      "image": "redis:7.4.1-alpine",
+      "port": 6379,
+      "healthcheck": { "exec": ["redis-cli", "ping"] }
+    }
+  ],
+  "requires": {
+    "queue": { "wait": "healthy", "timeoutSeconds": 120 }
+  }
+}

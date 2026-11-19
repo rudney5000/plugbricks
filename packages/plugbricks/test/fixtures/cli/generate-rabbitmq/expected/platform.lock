@@ -1,0 +1,41 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "consumer": {
+      "integrity": "sha256-b920abe98d2ee4507c562ad32b68717f306662014a03e7ad06170f6d26f497d7",
+      "provides": [],
+      "requires": {
+        "queue": {
+          "provider": "rabbitmq",
+          "timeoutSeconds": 60,
+          "wait": "healthy"
+        }
+      },
+      "source": "bricks/consumer",
+      "version": "0.1.0",
+      "volumes": []
+    },
+    "rabbitmq": {
+      "integrity": "sha256-387c05528091fd3417e993e0626ad51643ba8a06a17618fa32eb9f6a6a8e9b5f",
+      "provides": [
+        "queue"
+      ],
+      "requires": {},
+      "source": "examples/rabbitmq",
+      "version": "0.1.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "retain",
+          "service": "broker"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "queue": "rabbitmq"
+  },
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

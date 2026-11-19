@@ -1,0 +1,16 @@
+{
+  "name": "queue-b",
+  "version": "0.1.0",
+  "description": "Second end-to-end test consumer of the queue capability, to prove that one RabbitMQ broker serves several services, each with its own QUEUE_NAME.",
+  "services": [
+    {
+      "name": "app",
+      "image": "redis:7.4.1-alpine",
+      "port": 6379,
+      "healthcheck": { "exec": ["redis-cli", "ping"] }
+    }
+  ],
+  "requires": {
+    "queue": { "wait": "healthy", "timeoutSeconds": 120 }
+  }
+}

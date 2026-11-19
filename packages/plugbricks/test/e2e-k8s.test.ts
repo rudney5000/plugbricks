@@ -478,4 +478,69 @@ describe("Kubernetes driver against a real k3d cluster", () => {
     },
     900_000,
   );
+
+  it.skipIf(!ready)(
+    `one RabbitMQ broker serves two queue consumers, each with its own AMQP_URL and QUEUE_NAME${why}`,
+    () => {
+      const ns = "pbtest-k8s-queue";
+      const work = project(ns, ["queue-a", "queue-b"]);
+      cpSync(join(pkg, "examples/rabbitmq"), join(work, "rabbitmq"), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "rabbitmq"],
+        ["add", "queue-a"],
+        ["add", "queue-b"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const pods = podsOf(ns);
+      expect(pods.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual([
+        "queue-a-app",
+        "queue-b-app",
+        "rabbitmq-broker",
+      ]);
+      for (const p of pods) {
+        expect(p.status.phase, p.metadata.name).toBe("Running");
+        expect(
+          p.status.containerStatuses?.every((c) => c.ready),
+          `${p.metadata.name} is ready`,
+        ).toBe(true);
+      }
+
+      // The injected values reached each consumer; the shell prints only "ok", never AMQP_URL (D6, D11).
+      for (const [deploy, queue] of [
+        ["queue-a-app", "queue-a"],
+        ["queue-b-app", "queue-b"],
+      ] as const) {
+        const r = kc([
+          "--namespace",
+          ns,
+          "exec",
+          `deployment/${deploy}`,
+          "--",
+          "sh",
+          "-c",
+          `[ -n "$AMQP_URL" ] && [ "$QUEUE_NAME" = "${queue}" ] && echo ok`,
+        ]);
+        expect(r.status, r.stderr).toBe(0);
+        expect(r.stdout.trim()).toBe("ok");
+      }
+
+      // The broker answers on the cluster and listens on AMQP.
+      const ping = kc(["--namespace", ns, "exec", "deployment/rabbitmq-broker", "--", "rabbitmq-diagnostics", "-q", "ping"]);
+      expect(ping.status, ping.stderr).toBe(0);
+      const listeners = kc(["--namespace", ns, "exec", "deployment/rabbitmq-broker", "--", "rabbitmq-diagnostics", "-q", "listeners"]);
+      expect(listeners.status, listeners.stderr).toBe(0);
+      expect(listeners.stdout).toContain("5672");
+
+      // down keeps the broker's PersistentVolumeClaim and the Secret.
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(names(ns, "deployment")).toEqual([]);
+      expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/rabbitmq-broker-data"]);
+      expect(names(ns, "secret")).toContain("secret/plugbricks-secrets");
+    },
+    900_000,
+  );
 });
