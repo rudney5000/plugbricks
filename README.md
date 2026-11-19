@@ -18,6 +18,8 @@ npx plugbricks up                    # Docker Compose
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept
 npx plugbricks remove orders
+npx plugbricks disable shipping      # installed but no longer deployed; volumes and secrets are kept
+npx plugbricks enable shipping       # deploy it again
 npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendingDeletion
 ```
 
@@ -71,6 +73,7 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
     {
       "name": "shipping",
       "enabled": true,
+      "tags": ["api", "graphql"],
       "services": [
         {
           "name": "shipping-app",
@@ -110,6 +113,12 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
 ```
 
 This report is meant to feed an admin web page later; that page does not exist.
+
+### `enabled` and `tags`
+
+A brick can be **disabled without being removed**: `plugbricks disable <name>` writes `enabled: false` in `platform.json`; its services stop (the next `up` removes them), while its volumes and secrets stay. `enable` brings it back, and the federated schema is recomposed either way (D14). `status` marks it `disabled`, and `status --runtime` reports it `stopped` with `enabled: false`, without making the platform degraded.
+
+A brick may also declare `tags` (`api`, `graphql`, `database`, `queue`, …) in its `plugin.json`; they are kept in `platform.lock` and shown in the JSON reports, for filtering in the admin.
 
 ### `queue`: one message broker for every service that needs it
 
