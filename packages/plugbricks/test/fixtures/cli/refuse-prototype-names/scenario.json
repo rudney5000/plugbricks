@@ -1,0 +1,10 @@
+{
+  "description": "names inherited from Object (__proto__, constructor, prototype) are not installed bricks: refused, and no file changes",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["disable", "__proto__"], "exit": 1, "codes": ["BRICK_NOT_INSTALLED"], "unchanged": true },
+    { "run": ["remove", "constructor"], "exit": 1, "codes": ["BRICK_NOT_INSTALLED"], "unchanged": true },
+    { "run": ["enable", "prototype"], "exit": 1, "codes": ["BRICK_NOT_INSTALLED"], "unchanged": true }
+  ]
+}

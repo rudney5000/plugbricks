@@ -49,9 +49,17 @@ export interface Platform {
   bricks: Record<string, { source: string; enabled?: boolean }>;
 }
 
-/** A brick is deployed unless platform.json says otherwise; absent means enabled. */
+/** A brick is deployed unless platform.json says otherwise; absent means enabled. Only an own key is read. */
 export function isBrickEnabled(platform: Platform, name: string): boolean {
-  return platform.bricks[name]?.enabled !== false;
+  return !Object.hasOwn(platform.bricks, name) || platform.bricks[name].enabled !== false;
+}
+
+/**
+ * The lock entry of an installed brick, only for an own key. A name such as "__proto__" (from the
+ * command line or a library call) must never reach Object.prototype through a plain index access.
+ */
+function installedBrick(lock: Lock, name: string): LockedBrick | undefined {
+  return Object.hasOwn(lock.bricks, name) ? lock.bricks[name] : undefined;
 }
 
 export interface VolumeRef {
@@ -634,7 +642,7 @@ export interface RemoveResult {
 export function removeBrick(root: string, name: string): RemoveResult {
   const project = readProject(root);
   const { lock, platform } = project;
-  const brick = lock.bricks[name];
+  const brick = installedBrick(lock, name);
   if (!brick) fail("BRICK_NOT_INSTALLED", { name });
 
   const inUse = brick.provides.flatMap((cap) => {
@@ -701,8 +709,10 @@ export interface StatusResult {
 export function setBrickEnabled(root: string, name: string, enabled: boolean): { name: string; enabled: boolean } {
   const project = readProject(root);
   const { lock, platform } = project;
-  const brick = lock.bricks[name];
+  const brick = installedBrick(lock, name);
   if (!brick) fail("BRICK_NOT_INSTALLED", { name });
+  const entry = Object.hasOwn(platform.bricks, name) ? platform.bricks[name] : undefined;
+  if (!entry) fail("BRICK_NOT_INSTALLED", { name });
   if (enabled === isBrickEnabled(platform, name)) return { name, enabled };
 
   if (!enabled) {
@@ -728,8 +738,8 @@ export function setBrickEnabled(root: string, name: string, enabled: boolean): {
     if (blocked.length) throw new PlugbricksError(blocked);
   }
 
-  if (enabled) delete platform.bricks[name].enabled;
-  else platform.bricks[name].enabled = false;
+  if (enabled) delete entry.enabled;
+  else entry.enabled = false;
   setFederation(lock, checkFederation(project));
   save(project);
   return { name, enabled };
