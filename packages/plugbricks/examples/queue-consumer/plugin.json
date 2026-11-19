@@ -1,0 +1,19 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "queue-consumer",
+  "version": "0.1.0",
+  "description": "Example API: a queue consumer that declares its own queue on the broker, publishes and consumes one message, and reports the round-trip on /health. Its source is apis/queue-consumer; build the image with: docker build -t plugbricks-example/queue-consumer:0.1.0 apis/queue-consumer",
+  "services": [
+    {
+      "name": "app",
+      "image": "plugbricks-example/queue-consumer:0.1.0",
+      "port": 4000,
+      "healthcheck": {
+        "exec": ["wget", "-qO-", "http://localhost:4000/health"]
+      }
+    }
+  ],
+  "requires": {
+    "queue": { "wait": "healthy", "timeoutSeconds": 120 }
+  }
+}

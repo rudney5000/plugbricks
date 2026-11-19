@@ -1,0 +1,25 @@
+{
+  "name": "plugbricks-example-queue-consumer",
+  "version": "0.1.0",
+  "description": "Example queue consumer for plugbricks: declares its queue on the RabbitMQ broker, publishes and consumes one message, and reports it on /health. Built as the image plugbricks-example/queue-consumer:0.1.0.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "amqplib": "2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "2.1.9"
+  }
+}
