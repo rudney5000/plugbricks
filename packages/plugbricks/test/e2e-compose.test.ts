@@ -601,8 +601,8 @@ describe("the queue capability with RabbitMQ", () => {
       const running = containersOf(name, "--filter", "status=running", "--format", "{{.Names}}").trim().split("\n").sort();
       expect(running).toEqual([`${name}-queue-a-app-1`, `${name}-queue-b-app-1`, `${name}-rabbitmq-broker-1`]);
 
-      // Each consumer got the connection URL and its own queue name. The shell prints only "ok":
-      // AMQP_URL holds the generated password, so it is never printed (D6, D11).
+      // Each consumer got its own vhost and user in AMQP_URL, and its own queue name. The shell prints
+      // only "ok": AMQP_URL holds the generated password, so it is never printed (D6, D11, D12).
       const env = (service: string, queue: string) =>
         spawnSync(
           "docker",
@@ -615,7 +615,9 @@ describe("the queue capability with RabbitMQ", () => {
             service,
             "sh",
             "-c",
-            `[ -n "$AMQP_URL" ] && [ "$QUEUE_NAME" = "${queue}" ] && echo ok`,
+            `case "$AMQP_URL" in amqp://${queue}:*) ;; *) echo "AMQP_URL does not use the ${queue} user"; exit 1;; esac;` +
+              `case "$AMQP_URL" in */${queue}) ;; *) echo "AMQP_URL does not use the ${queue} vhost"; exit 1;; esac;` +
+              `[ "$QUEUE_NAME" = "${queue}" ] && echo ok`,
           ],
           { encoding: "utf8" },
         );
@@ -628,28 +630,37 @@ describe("the queue capability with RabbitMQ", () => {
         expect(r.stdout.trim()).toBe("ok");
       }
 
-      // The broker answers and listens on AMQP; the management port stays inside the container.
-      const ping = spawnSync(
-        "docker",
-        ["compose", "--project-name", name, "exec", "-T", "rabbitmq-broker", "rabbitmq-diagnostics", "-q", "ping"],
-        {
-          encoding: "utf8",
-        },
-      );
+      // The provision task created one vhost, one user and its permissions per consumer.
+      const rabbit = (...args: string[]) =>
+        spawnSync("docker", ["compose", "--project-name", name, "exec", "-T", "rabbitmq-broker", ...args], { encoding: "utf8" });
+      const vhosts = rabbit("rabbitmqctl", "list_vhosts", "name");
+      expect(vhosts.status, vhosts.stderr).toBe(0);
+      expect(vhosts.stdout).toContain("queue-a");
+      expect(vhosts.stdout).toContain("queue-b");
+      const users = rabbit("rabbitmqctl", "list_users");
+      expect(users.status, users.stderr).toBe(0);
+      expect(users.stdout).toContain("queue-a");
+      expect(users.stdout).toContain("queue-b");
+      const permissions = rabbit("rabbitmqctl", "list_permissions", "-p", "queue-a");
+      expect(permissions.status, permissions.stderr).toBe(0);
+      expect(permissions.stdout).toContain("queue-a");
+
+      // The broker answers and listens on AMQP; the management port is inside the platform network only.
+      const ping = rabbit("rabbitmq-diagnostics", "-q", "ping");
       expect(ping.status, ping.stderr).toBe(0);
-      const listeners = spawnSync(
-        "docker",
-        ["compose", "--project-name", name, "exec", "-T", "rabbitmq-broker", "rabbitmq-diagnostics", "-q", "listeners"],
-        { encoding: "utf8" },
-      );
+      const listeners = rabbit("rabbitmq-diagnostics", "-q", "listeners");
       expect(listeners.status, listeners.stderr).toBe(0);
       expect(listeners.stdout).toContain("5672");
+      expect(containersOf(name, "--format", "{{.Ports}}")).not.toContain("->");
 
-      // The generated file references the secret variable, never its value.
+      // The generated file references the secret variables, never their values (the admin's and each consumer's).
       const compose = readFileSync(join(work, ".generated/compose/compose.yaml"), "utf8");
-      const secret = /^PB_RABBITMQ__DEFAULT_PASSWORD=(.+)$/m.exec(readFileSync(join(work, ".secrets/secrets.env"), "utf8"))?.[1];
-      expect(secret).toBeDefined();
-      expect(compose).not.toContain(secret);
+      const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8")
+        .split("\n")
+        .filter((l) => /^PB_\w+=/.test(l))
+        .map((l) => l.split("=")[1]);
+      expect(secrets).toHaveLength(3);
+      for (const secret of secrets) expect(compose).not.toContain(secret);
 
       // down keeps the broker's data volume (retention: retain).
       expect(cli(work, ["down"]).code).toBe(0);

@@ -120,9 +120,7 @@ npx plugbricks add path/to/rabbitmq   # provides "queue"
 npx plugbricks add services/orders    # requires "queue": receives AMQP_URL
 ```
 
-Each consumer gets `AMQP_URL` (with the broker's generated password) and `QUEUE_NAME=<its brick name>`, so a service declares and uses its own queue on the shared broker. The broker is never published, and its data volume is kept by `down` and by `remove`.
-
-The account is **shared** for now: the default RabbitMQ user is an administrator, and every consumer receives its password (D11). That is acceptable for the local, loopback-only development this tool targets; per-consumer vhosts and users need the management port 15672, which a brick cannot expose yet (a later step). Each consumer owns its queue; the credentials are shared.
+Each consumer gets its **own vhost, user and password**: `AMQP_URL=amqp://<brick>:<its secret>@rabbitmq-broker:5672/<brick>` and `QUEUE_NAME=<its brick name>` (D11, D12). A service declares and uses its own queue on the shared broker; the broker's administrator password is only used by the provision task, never injected into a consumer. The broker is never published, its data volume is kept by `down` and by `remove`, and its management port 15672 is an extra port of its Service (ClusterIP, never on the host).
 
 ## Layout
 
@@ -134,7 +132,7 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `schemas/status-runtime.schema.json` — the report of `status --runtime --json`, version 1 (D10).
   - `examples/postgres/` — a base brick that provides the `database` capability; `provision/create-database.sh` creates one role and one database per consumer (idempotent).
   - `examples/orders/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
-  - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting `AMQP_URL` and its own `QUEUE_NAME` (D11).
+  - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting its own vhost, user and `QUEUE_NAME` (D11, D12); its provision script creates them through the management API.
   - `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned images, referenced services exist). Every issue has a stable `code`, a JSON Pointer `path`, a `message` and its `params`.
   - `src/messages.ts` — the error code catalog. Tools match on `code`, never on the message text.
   - `src/platform.ts` — `initPlatform`, `addBrick`, `removeBrick`, `platformStatus`: the CLI logic, with no console output.
@@ -225,5 +223,6 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (5a): `status --runtime compose|k8s [--json]`: what the runtime really runs next to what is declared, read-only (D10), with a versioned JSON report (`schemas/status-runtime.schema.json`) and its own exit codes (3 degraded, 4 `RUNTIME_UNAVAILABLE`). Tested with recorded Compose output and hand-written Kubernetes Lists, end to end on Docker Compose, and on k3d in CI.
    - Before the first publication: check the licences of what we ship (`docs/pre-publication-checklist.md`) and the package names (the npm names are not checked and the packages are `private` today); decide the first version number (everything is 0.0.1 and `UNLICENSED`); verify the signature of the tool checksums (`tools.json` checks a sha256 taken from the same release as the binary, not a signature); and settle the development-dependency vulnerabilities of the vitest 2 chain (D7: a major upgrade).
 5. **Message queue**
-   - Done (5b): `examples/rabbitmq` provides `queue`: one broker, any number of consumers, each with `AMQP_URL` and its own `QUEUE_NAME`; golden scenario, end to end on Docker Compose, and the same scenario in the k3d job (D11). The account is shared for now; per-consumer vhost/user needs `extraPorts` (5b-bis).
+   - Done (5b): `examples/rabbitmq` provides `queue`: one broker, any number of consumers, each with its own vhost, user and `QUEUE_NAME`; golden scenario, end to end on Docker Compose, and the same scenario in the k3d job (D11).
+   - Done (5b-bis): `services[].extraPorts` and one RabbitMQ account per consumer, through the management API (D12).
    - Deferred: Kafka and NATS. NATS core would need no extra port, but accounts/JetStream need a configuration file or command line the manifest cannot express today.

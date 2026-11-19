@@ -1,0 +1,16 @@
+{
+  "$schema": "../../../schemas/plugin-manifest.schema.json",
+  "name": "app",
+  "version": "0.1.0",
+  "services": [
+    {
+      "name": "api",
+      "image": "ghcr.io/example/app:1.2.3",
+      "port": 8080,
+      "extraPorts": [
+        { "name": "admin", "port": 8081 },
+        { "name": "admin", "port": 8082 }
+      ]
+    }
+  ]
+}

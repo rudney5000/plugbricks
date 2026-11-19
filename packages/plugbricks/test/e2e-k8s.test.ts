@@ -509,7 +509,8 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         ).toBe(true);
       }
 
-      // The injected values reached each consumer; the shell prints only "ok", never AMQP_URL (D6, D11).
+      // Each consumer got its own vhost and user in AMQP_URL, and its own queue name. The shell prints
+      // only "ok": AMQP_URL holds the generated password, so it is never printed (D6, D11, D12).
       for (const [deploy, queue] of [
         ["queue-a-app", "queue-a"],
         ["queue-b-app", "queue-b"],
@@ -522,11 +523,25 @@ describe("Kubernetes driver against a real k3d cluster", () => {
           "--",
           "sh",
           "-c",
-          `[ -n "$AMQP_URL" ] && [ "$QUEUE_NAME" = "${queue}" ] && echo ok`,
+          `case "$AMQP_URL" in amqp://${queue}:*) ;; *) echo "AMQP_URL does not use the ${queue} user"; exit 1;; esac;` +
+            `case "$AMQP_URL" in */${queue}) ;; *) echo "AMQP_URL does not use the ${queue} vhost"; exit 1;; esac;` +
+            `[ "$QUEUE_NAME" = "${queue}" ] && echo ok`,
         ]);
         expect(r.status, r.stderr).toBe(0);
         expect(r.stdout.trim()).toBe("ok");
       }
+
+      // The Service exposes the management port, so the provision task could reach it (D12).
+      const service = JSON.parse(kc(["--namespace", ns, "get", "service", "rabbitmq-broker", "--output", "json"]).stdout);
+      expect(service.spec.ports.map((p: { name: string; port: number }) => [p.name, p.port])).toEqual([
+        ["main", 5672],
+        ["management", 15672],
+      ]);
+      // One vhost per consumer, created by the provision task.
+      const vhosts = kc(["--namespace", ns, "exec", "deployment/rabbitmq-broker", "--", "rabbitmqctl", "list_vhosts", "name"]);
+      expect(vhosts.status, vhosts.stderr).toBe(0);
+      expect(vhosts.stdout).toContain("queue-a");
+      expect(vhosts.stdout).toContain("queue-b");
 
       // The broker answers on the cluster and listens on AMQP.
       const ping = kc(["--namespace", ns, "exec", "deployment/rabbitmq-broker", "--", "rabbitmq-diagnostics", "-q", "ping"]);

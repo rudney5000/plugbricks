@@ -56,13 +56,15 @@ describe("example manifests (milestone 1 criterion)", () => {
     expect(m.services[0].volumes[0].retention).toBe("retain");
   });
 
-  it("rabbitmq shares one broker with every consumer and keeps its data", () => {
+  it("rabbitmq shares one broker and gives every consumer its own vhost and user", () => {
     const m = load("examples/rabbitmq/plugin.json");
     expect(m.provides.queue.service).toBe("broker");
     expect(m.provides.queue.inject).toEqual({
-      AMQP_URL: "amqp://plugbricks:${secrets.default_password}@${provider.host}:${provider.port}/",
+      AMQP_URL: "amqp://${consumer.name}:${secrets.consumer_password}@${provider.host}:${provider.port}/${consumer.name}",
       QUEUE_NAME: "${consumer.name}",
     });
+    expect(m.provides.queue.provision.scripts).toBe("provision");
+    expect(m.services[0].extraPorts).toEqual([{ name: "management", port: 15672 }]);
     expect(m.services[0].volumes[0]).toMatchObject({ mountPath: "/var/lib/rabbitmq", retention: "retain" });
   });
 });

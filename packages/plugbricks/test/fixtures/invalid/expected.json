@@ -128,5 +128,20 @@
     "code": "TEMPLATE_UNKNOWN",
     "path": "/services/0/env/POSTGRES_PASSWORD",
     "why": "secret names are lowercase words joined by single underscores"
+  },
+  "extra-port-duplicate-name.json": {
+    "code": "PORT_CONFLICT",
+    "path": "/services/0/extraPorts/1/name",
+    "why": "two extra ports of one service share a name"
+  },
+  "extra-port-main-name.json": {
+    "code": "PORT_CONFLICT",
+    "path": "/services/0/extraPorts/0/name",
+    "why": "\"main\" is reserved for the primary port"
+  },
+  "extra-port-same-number.json": {
+    "code": "PORT_CONFLICT",
+    "path": "/services/0/extraPorts/0/port",
+    "why": "an extra port reuses the primary port number"
   }
 }

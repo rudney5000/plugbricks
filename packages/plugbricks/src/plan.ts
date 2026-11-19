@@ -33,6 +33,8 @@ export interface BrickManifest {
     name: string;
     image: string;
     port: number;
+    /** Additional ports of the Service (Kubernetes), e.g. a management API (D12). */
+    extraPorts?: { name: string; port: number }[];
     volumes?: { name: string; mountPath: string; retention?: "retain" | "delete" }[];
     healthcheck?: Partial<Healthcheck> & { exec: string[] };
     env?: Record<string, string>;
@@ -64,6 +66,8 @@ export interface PlanService {
   service: string;
   image: string;
   port: number;
+  /** Extra ports of the runtime Service, beyond the primary one (D12). */
+  extraPorts: { name: string; port: number }[];
   env: Record<string, Value>;
   volumes: { volume: string; mountPath: string }[];
   healthcheck?: Healthcheck;
@@ -365,6 +369,7 @@ export function buildPlan(
         service: s.name,
         image: s.image,
         port: s.port,
+        extraPorts: (s.extraPorts ?? []).map((p) => ({ name: p.name, port: p.port })),
         env: sortedRecord(env),
         volumes: vols,
         ...(s.healthcheck ? { healthcheck: { ...MANIFEST_DEFAULTS.healthcheck, ...s.healthcheck } } : {}),

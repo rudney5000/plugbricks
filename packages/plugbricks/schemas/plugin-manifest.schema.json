@@ -83,6 +83,24 @@
           "description": "Image reference. Pin a version; a floating tag such as :latest is rejected by the resolver."
         },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "extraPorts": {
+          "type": "array",
+          "description": "Additional ports the service listens on. Kubernetes: extra ports of its Service, so that a provision task or an operator in the platform can reach them; Compose needs nothing (containers of the platform network reach any port). Never published on the host (D9). Use it for a management or metrics API, not for a second service.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "port"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$",
+                "maxLength": 15,
+                "description": "Kubernetes Service port name: lowercase letters, digits and dashes, at most 15 characters. \"main\" is reserved for the primary port; names and port numbers must be unique within the service."
+              },
+              "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        },
         "volumes": {
           "type": "array",
           "items": {

@@ -16,7 +16,7 @@
       "volumes": []
     },
     "rabbitmq": {
-      "integrity": "sha256-387c05528091fd3417e993e0626ad51643ba8a06a17618fa32eb9f6a6a8e9b5f",
+      "integrity": "sha256-bb385f809459de6339e021cfd801c022957932a8392506616f42277d8f5996b0",
       "provides": [
         "queue"
       ],

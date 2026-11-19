@@ -188,7 +188,7 @@ function deployment(s: PlanService, plan: Plan): Yaml {
             {
               name: s.service,
               image: s.image,
-              ports: [{ containerPort: s.port }],
+              ports: [{ containerPort: s.port }, ...s.extraPorts.map((p) => ({ containerPort: p.port }))],
               env: envList(s.env),
               // Readiness only, never liveness: a slow dependency must not get the pod killed.
               readinessProbe: s.healthcheck ? probe(s, false) : undefined,
@@ -295,7 +295,13 @@ export function renderK8s(plan: Plan): Record<string, string> {
       apiVersion: "v1",
       kind: "Service",
       metadata: meta(plan, s.name, s.brick),
-      spec: { selector: { [SERVICE_LABEL]: s.name }, ports: [{ name: "main", port: s.port, targetPort: s.port }] },
+      spec: {
+        selector: { [SERVICE_LABEL]: s.name },
+        ports: [
+          { name: "main", port: s.port, targetPort: s.port },
+          ...s.extraPorts.map((p) => ({ name: p.name, port: p.port, targetPort: p.port })),
+        ],
+      },
     })),
     ...plan.services.map((s) => deployment(s, plan)),
     ...(plan.router ? routerDocs(plan.router, plan) : []),

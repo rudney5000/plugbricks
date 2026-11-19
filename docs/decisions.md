@@ -699,7 +699,8 @@ end yet.
 - **Status:** implemented (step 5b): `examples/rabbitmq/plugin.json`, capability `queue`; tested by the
   CLI golden scenario `generate-rabbitmq` and end to end on Docker Compose, with the same scenario
   written for the k3d job (CI is its reference run). Kafka and NATS are deferred; NATS (and its
-  JetStream/accounts) will be re-examined after this.
+  JetStream/accounts) will be re-examined after this. **The shared-account and single-port parts of
+  D11 are superseded by D12** (one vhost and user per consumer, through `extraPorts`).
 - **Decision:**
   - **One capability, one provider.** `queue` follows `database`: a platform has at most one queue
     provider (the lock maps the capability to one brick; a second provider is refused with
@@ -707,32 +708,68 @@ end yet.
     provider's `inject`.
   - **One broker shared by every consumer.** `examples/rabbitmq` runs one RabbitMQ broker
     (`rabbitmq:4.1.4-management`, data volume `retain`); its `ready` is a TCP check (`nc -z`, from
-    `busybox:1.36`), its `provision` is a no-op, and each consumer gets `AMQP_URL` (with the broker's
-    generated password) and `QUEUE_NAME=<consumer.name>`. The consumer declares its own queue: the
-    topology belongs to the application, not to the brick.
-  - **The account is shared, deliberately, for now.** The image's default user (`plugbricks`) is an
-    administrator, and every consumer receives its password through `AMQP_URL`. Each consumer has its
-    own queue name, but all share the vhost `/` and the account: one consumer could read, declare or
-    purge another's queues.
-- **Why the account is not per consumer yet:** creating a vhost and a user is an administrative
-  operation that AMQP (5672) does not carry. RabbitMQ exposes it only through the management HTTP API
-  (15672) or `rabbitmqctl` over the Erlang distribution (4369, 25672), and a brick declares a single
-  port per service: the Kubernetes driver renders a Service with that one port, so the provision task
-  (a different pod) cannot reach 15672 on k3d. Compose would allow it (one Docker network), Kubernetes
-  would not: plugbricks does not give a runtime-dependent behaviour. The fix is a separate feature,
-  `extraPorts` on a service (schema, plan, k8s Service, golden files), planned as 5b-bis if
-  per-consumer accounts are wanted.
+    `busybox:1.36`), and its `provision` task gives each consumer its own vhost and user (D12). Each
+    consumer gets `AMQP_URL` (its own credentials) and `QUEUE_NAME=<consumer.name>`. The consumer
+    declares its own queue: the topology belongs to the application, not to the brick.
+  - **The account was shared at first (superseded by D12).** The image's default user (`plugbricks`)
+    is an administrator; D11 first injected its password into every consumer, with a per-consumer
+    `QUEUE_NAME` only. D12 replaced that by a vhost and user per consumer.
+- **Why it was not per consumer at first (resolved by D12):** creating a vhost and a user is an
+  administrative operation that AMQP (5672) does not carry. RabbitMQ exposes it only through the
+  management HTTP API (15672) or `rabbitmqctl` over the Erlang distribution (4369, 25672), and a brick
+  declared a single port per service: the Kubernetes driver rendered a Service with that one port, so
+  the provision task (a different pod) could not reach 15672 on k3d. Compose would have allowed it (one
+  Docker network), Kubernetes would not: plugbricks does not give a runtime-dependent behaviour. D12
+  adds `extraPorts` on a service, which is what made per-consumer accounts possible.
 - **Consequences and limits:**
-  - The management port 15672 is **not** published and **not** in the Service; on Compose it is
-    reachable from any container of the platform network, and the account there is an administrator.
-  - Security: acceptable for the local, loopback-only development this tool targets (D9), documented
-    here; not suitable for a shared or multi-tenant cluster until per-consumer accounts exist.
-  - Secrets: one generated secret, `PB_RABBITMQ__DEFAULT_PASSWORD`, used by the broker and injected
-    into every consumer. The end-to-end tests check the generated file never contains its value and
-    that the shell checks print no environment value.
-  - Kafka and NATS would follow the same capability; NATS core needs no extra port, but accounts and
-    JetStream would need a configuration file or command line the manifest cannot express today (a
-    service has no `command`/config field), so it is deferred with the same `extraPorts` reasoning.
+  - The management port 15672 is never published on the host. Since D12 it is an extra port of the
+    Service (ClusterIP); only the provision task holds the administrator password.
+  - Security: each consumer has its own vhost and user (D12); the shared account described above was
+    the first step and is gone. The administrator credential lives in the broker's own environment and
+    in the provision task, never in a consumer.
+  - Secrets: the broker's administrator secret (`PB_RABBITMQ__DEFAULT_PASSWORD`) is used by the broker
+    and the provision task; each consumer gets its own `...__CONSUMER_PASSWORD`, never printed by the
+    end-to-end tests.
+  - Kafka can create its topics and ACLs over its own protocol (9092), so it will not need
+    `extraPorts`; NATS core needs no extra port either, but accounts and JetStream need a
+    configuration file or command line the manifest cannot express today (a service has no
+    `command`/config field), so NATS stays deferred.
+
+---
+
+## D12. extraPorts, and one RabbitMQ account per consumer
+
+- **Status:** implemented (step 5b-bis): `services[].extraPorts` in the manifest schema, the plan and
+  the Kubernetes driver; `PORT_CONFLICT` for names and numbers; the RabbitMQ provision task creates a
+  vhost and a user per consumer. Supersedes the shared-account and single-port parts of D11.
+- **Decision:**
+  - **`extraPorts`.** A service may declare additional ports (`name`, `port`): they become extra
+    ports of its Kubernetes Service, so that a provision task or an operator inside the platform can
+    reach a management API. Compose renders nothing extra: containers of the platform network already
+    reach any port. Nothing new is ever published on the host (D9).
+  - **Names follow Kubernetes.** A port name is at most 15 characters, lowercase letters, digits and
+    dashes; `main` is reserved for the primary port; a name or a number may appear once per service.
+    Violations are refused with `PORT_CONFLICT` (tests: three invalid manifests).
+  - **One account per consumer.** `examples/rabbitmq` exposes its management API as the `management`
+    port (15672), and its provision task (image `curlimages/curl:8.11.1`, script
+    `provision/create-vhost.sh`) creates, through that API, the consumer's vhost, user and permissions.
+    The broker's administrator password is only in the broker and in the provision task's environment;
+    each consumer gets `AMQP_URL=amqp://<consumer>:<its secret>@<broker>:5672/<consumer>` and
+    `QUEUE_NAME=<consumer>`.
+- **Consequences:**
+  - The management port is in the Service (ClusterIP) but never published. Without a NetworkPolicy,
+    any pod of the namespace could reach it, but only the provision task holds the administrator
+    password; consumer users have no management tag and are limited to their vhost.
+  - Per-consumer secrets are back (D6): revoking one consumer means deleting/rotating its user without
+    touching the others.
+  - The provision script retries until the management API answers (it can start a moment after AMQP);
+    a consumer's start waits for its provision task, as for postgres.
+  - Kafka can provision topics/ACLs over 9092 and will not need this feature; NATS accounts and
+    JetStream still need a configuration file or command line the manifest cannot express.
+- **Tests:** the golden scenario `generate-rabbitmq` (management port, provision script, one secret per
+  consumer); the Compose e2e checks `rabbitmqctl list_vhosts`, `list_users`, `list_permissions` and that
+  `AMQP_URL` uses the consumer's own user and vhost without printing it; the k3d e2e checks the
+  Service ports and the vhosts.
 
 ---
 
