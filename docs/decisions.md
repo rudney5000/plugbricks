@@ -694,6 +694,48 @@ end yet.
 
 ---
 
+## D11. The queue capability: one broker shared by every consumer, RabbitMQ first
+
+- **Status:** implemented (step 5b): `examples/rabbitmq/plugin.json`, capability `queue`; tested by the
+  CLI golden scenario `generate-rabbitmq` and end to end on Docker Compose, with the same scenario
+  written for the k3d job (CI is its reference run). Kafka and NATS are deferred; NATS (and its
+  JetStream/accounts) will be re-examined after this.
+- **Decision:**
+  - **One capability, one provider.** `queue` follows `database`: a platform has at most one queue
+    provider (the lock maps the capability to one brick; a second provider is refused with
+    `CAPABILITY_ALREADY_PROVIDED`). Any number of bricks may `requires.queue`; each receives the
+    provider's `inject`.
+  - **One broker shared by every consumer.** `examples/rabbitmq` runs one RabbitMQ broker
+    (`rabbitmq:4.1.4-management`, data volume `retain`); its `ready` is a TCP check (`nc -z`, from
+    `busybox:1.36`), its `provision` is a no-op, and each consumer gets `AMQP_URL` (with the broker's
+    generated password) and `QUEUE_NAME=<consumer.name>`. The consumer declares its own queue: the
+    topology belongs to the application, not to the brick.
+  - **The account is shared, deliberately, for now.** The image's default user (`plugbricks`) is an
+    administrator, and every consumer receives its password through `AMQP_URL`. Each consumer has its
+    own queue name, but all share the vhost `/` and the account: one consumer could read, declare or
+    purge another's queues.
+- **Why the account is not per consumer yet:** creating a vhost and a user is an administrative
+  operation that AMQP (5672) does not carry. RabbitMQ exposes it only through the management HTTP API
+  (15672) or `rabbitmqctl` over the Erlang distribution (4369, 25672), and a brick declares a single
+  port per service: the Kubernetes driver renders a Service with that one port, so the provision task
+  (a different pod) cannot reach 15672 on k3d. Compose would allow it (one Docker network), Kubernetes
+  would not: plugbricks does not give a runtime-dependent behaviour. The fix is a separate feature,
+  `extraPorts` on a service (schema, plan, k8s Service, golden files), planned as 5b-bis if
+  per-consumer accounts are wanted.
+- **Consequences and limits:**
+  - The management port 15672 is **not** published and **not** in the Service; on Compose it is
+    reachable from any container of the platform network, and the account there is an administrator.
+  - Security: acceptable for the local, loopback-only development this tool targets (D9), documented
+    here; not suitable for a shared or multi-tenant cluster until per-consumer accounts exist.
+  - Secrets: one generated secret, `PB_RABBITMQ__DEFAULT_PASSWORD`, used by the broker and injected
+    into every consumer. The end-to-end tests check the generated file never contains its value and
+    that the shell checks print no environment value.
+  - Kafka and NATS would follow the same capability; NATS core needs no extra port, but accounts and
+    JetStream would need a configuration file or command line the manifest cannot express today (a
+    service has no `command`/config field), so it is deferred with the same `extraPorts` reasoning.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

@@ -1,0 +1,28 @@
+{
+  "description": "a RabbitMQ broker provides queue to a consumer: AMQP_URL and QUEUE_NAME in its environment, the broker's data volume kept, one shared secret",
+  "steps": [
+    {
+      "run": ["init", "--name", "queue-demo"]
+    },
+    {
+      "run": ["add", "examples/rabbitmq"],
+      "stdout": "Added rabbitmq 0.1.0"
+    },
+    {
+      "run": ["add", "bricks/consumer"],
+      "stdout": "Added consumer 0.1.0"
+    },
+    {
+      "run": ["generate"],
+      "stdout": "Created 1 secret(s) in .secrets/: PB_RABBITMQ__DEFAULT_PASSWORD"
+    },
+    {
+      "run": ["generate", "--runtime", "k8s"]
+    }
+  ],
+  "exists": [
+    ".generated/compose/compose.yaml",
+    ".generated/k8s/resources.yaml",
+    ".secrets/secrets.env"
+  ]
+}

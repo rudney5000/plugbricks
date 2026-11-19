@@ -575,3 +575,87 @@ describe("status --runtime against a running platform", () => {
     900_000,
   );
 });
+
+// ---------- the queue capability, on a real Docker engine ----------
+// One RabbitMQ brick provides `queue`; two consumer bricks share the same broker, each with its own
+// AMQP_URL and QUEUE_NAME. The broker is never published, and the password is never printed.
+
+describe("the queue capability with RabbitMQ", () => {
+  const name = "pbtest-queue";
+
+  it.skipIf(!ready)(
+    `one broker serves two consumers, each with its own AMQP_URL and QUEUE_NAME${why}`,
+    () => {
+      const work = project(name, ["queue-a", "queue-b"]);
+      cpSync(join(pkg, "examples/rabbitmq"), join(work, "rabbitmq"), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "rabbitmq"],
+        ["add", "queue-a"],
+        ["add", "queue-b"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const running = containersOf(name, "--filter", "status=running", "--format", "{{.Names}}").trim().split("\n").sort();
+      expect(running).toEqual([`${name}-queue-a-app-1`, `${name}-queue-b-app-1`, `${name}-rabbitmq-broker-1`]);
+
+      // Each consumer got the connection URL and its own queue name. The shell prints only "ok":
+      // AMQP_URL holds the generated password, so it is never printed (D6, D11).
+      const env = (service: string, queue: string) =>
+        spawnSync(
+          "docker",
+          [
+            "compose",
+            "--project-name",
+            name,
+            "exec",
+            "-T",
+            service,
+            "sh",
+            "-c",
+            `[ -n "$AMQP_URL" ] && [ "$QUEUE_NAME" = "${queue}" ] && echo ok`,
+          ],
+          { encoding: "utf8" },
+        );
+      for (const [service, queue] of [
+        ["queue-a-app", "queue-a"],
+        ["queue-b-app", "queue-b"],
+      ] as const) {
+        const r = env(service, queue);
+        expect(r.status, r.stderr).toBe(0);
+        expect(r.stdout.trim()).toBe("ok");
+      }
+
+      // The broker answers and listens on AMQP; the management port stays inside the container.
+      const ping = spawnSync(
+        "docker",
+        ["compose", "--project-name", name, "exec", "-T", "rabbitmq-broker", "rabbitmq-diagnostics", "-q", "ping"],
+        {
+          encoding: "utf8",
+        },
+      );
+      expect(ping.status, ping.stderr).toBe(0);
+      const listeners = spawnSync(
+        "docker",
+        ["compose", "--project-name", name, "exec", "-T", "rabbitmq-broker", "rabbitmq-diagnostics", "-q", "listeners"],
+        { encoding: "utf8" },
+      );
+      expect(listeners.status, listeners.stderr).toBe(0);
+      expect(listeners.stdout).toContain("5672");
+
+      // The generated file references the secret variable, never its value.
+      const compose = readFileSync(join(work, ".generated/compose/compose.yaml"), "utf8");
+      const secret = /^PB_RABBITMQ__DEFAULT_PASSWORD=(.+)$/m.exec(readFileSync(join(work, ".secrets/secrets.env"), "utf8"))?.[1];
+      expect(secret).toBeDefined();
+      expect(compose).not.toContain(secret);
+
+      // down keeps the broker's data volume (retention: retain).
+      expect(cli(work, ["down"]).code).toBe(0);
+      const vols = spawnSync("docker", ["volume", "ls", "--quiet", "--filter", `name=${name}_`], { encoding: "utf8" });
+      expect(vols.stdout.trim().split("\n")).toEqual([`${name}_rabbitmq-broker-data`]);
+    },
+    300_000,
+  );
+});

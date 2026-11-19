@@ -10,7 +10,7 @@ const root = new URL("../", import.meta.url);
 const read = (p: string) => readFileSync(new URL(p, root), "utf8");
 const load = (p: string) => JSON.parse(read(p));
 
-const EXAMPLES = ["postgres", "orders", "shipping"];
+const EXAMPLES = ["postgres", "orders", "shipping", "rabbitmq"];
 
 /**
  * Windows has no executable bit in the file system (mode & 0o111 is always 0), so there the mode
@@ -54,6 +54,16 @@ describe("example manifests (milestone 1 criterion)", () => {
   it("postgres keeps its data volume when removed", () => {
     const m = load("examples/postgres/plugin.json");
     expect(m.services[0].volumes[0].retention).toBe("retain");
+  });
+
+  it("rabbitmq shares one broker with every consumer and keeps its data", () => {
+    const m = load("examples/rabbitmq/plugin.json");
+    expect(m.provides.queue.service).toBe("broker");
+    expect(m.provides.queue.inject).toEqual({
+      AMQP_URL: "amqp://plugbricks:${secrets.default_password}@${provider.host}:${provider.port}/",
+      QUEUE_NAME: "${consumer.name}",
+    });
+    expect(m.services[0].volumes[0]).toMatchObject({ mountPath: "/var/lib/rabbitmq", retention: "retain" });
   });
 });
 

@@ -1,0 +1,16 @@
+{
+  "name": "consumer",
+  "version": "0.1.0",
+  "description": "Scenario brick: a consumer of the queue capability, rendered by generate.",
+  "services": [
+    {
+      "name": "app",
+      "image": "redis:7.4.1-alpine",
+      "port": 6379,
+      "healthcheck": { "exec": ["redis-cli", "ping"] }
+    }
+  ],
+  "requires": {
+    "queue": { "wait": "healthy", "timeoutSeconds": 60 }
+  }
+}
