@@ -298,6 +298,8 @@ export function initPlatform(root: string, name?: string): { name: string; creat
   if (!NAME.test(platformName)) fail("PLATFORM_INVALID_NAME", { name: platformName });
 
   mkdirSync(join(dir, BRICKS_DIR), { recursive: true });
+  // .platform/lock (D16) exists only while a command runs, and is never committed.
+  writeFileAtomic(join(dir, ".platform/.gitignore"), "# Written by plugbricks: the lock exists only while a command runs.\n/lock\n");
   const platform: Platform = {
     $schema: PLATFORM_SCHEMA_ID,
     name: platformName,

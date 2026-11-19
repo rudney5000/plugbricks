@@ -85,6 +85,8 @@ export const MESSAGES = {
   BRICK_NAME_CONFLICT: 'a different brick named "{name}" is already installed (from {source}); remove it before adding this one',
   CAPABILITY_ALREADY_PROVIDED: 'brick "{brick}" provides "{capability}", which "{provider}" already provides',
   PROVIDER_DISABLED: 'capability "{capability}" is provided by "{provider}", which is disabled; enable it first',
+  PLATFORM_BUSY:
+    'another plugbricks command is changing this platform: "{command}" (process {pid}, since {since}); wait for it to end ({file} is removed then)',
   ADMIN_UI_MISSING: 'the admin UI is not built at "{dir}"; run "npm run build -w plugbricks-admin"',
   ADMIN_OIDC_ISSUER_INVALID: 'the OIDC issuer "{issuer}" must be an https URL (http is accepted only on 127.0.0.1, localhost or [::1])',
   ADMIN_OIDC_NOT_CONFIGURED: "the admin needs --issuer and --client-id, and PLUGBRICKS_OIDC_CLIENT_SECRET, or --dev for local use",

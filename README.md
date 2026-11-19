@@ -121,6 +121,8 @@ and set `PLUGBRICKS_OIDC_CLIENT_SECRET`; the account needs `plugbricks-viewer` o
 
 A brick can be **disabled without being removed**: `plugbricks disable <name>` writes `enabled: false` in `platform.json`; its services stop (the next `up` removes them), while its volumes and secrets stay. `enable` brings it back, and the federated schema is recomposed either way (D14). `status` marks it `disabled`, and `status --runtime` reports it `stopped` with `enabled: false`, without making the platform degraded.
 
+Commands that change the platform (`add`, `remove`, `enable`, `disable`, `generate`, `up`, `down`) run **one at a time**: each holds `.platform/lock` while it runs, and another one meanwhile is refused with `PLATFORM_BUSY`, whether it comes from a terminal or from the admin. A lock left by a process that died is taken over (D16).
+
 A brick may also declare `tags` (`api`, `graphql`, `database`, `queue`, …) in its `plugin.json`; they are kept in `platform.lock` and shown in the JSON reports, for filtering in the admin.
 
 ### `queue`: one message broker for every service that needs it

@@ -16,6 +16,7 @@ import {
 } from "./platform.js";
 import { liveStatusText } from "./live.js";
 import { startAdmin } from "./admin/server.js";
+import { withPlatformLock } from "./lock.js";
 import {
   down,
   generate,
@@ -108,6 +109,9 @@ function version(): string {
   return JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 }
 
+/** The commands that write platform.json, platform.lock, .generated/, .secrets/ or the runtime. */
+const CHANGING_COMMANDS = new Set(["add", "remove", "enable", "disable", "generate", "up", "down"]);
+
 /** Runs one CLI invocation and returns the exit code. Never calls process.exit, so tests can run it in-process. */
 export function main(argv: string[], io: Io): number {
   try {
@@ -186,128 +190,135 @@ export function main(argv: string[], io: Io): number {
     };
     const deps: RuntimeDeps = { ...io.runtime, k8s, log: (l) => io.stdout(l) };
 
-    switch (command) {
-      case "init": {
-        only(0, "");
-        const r = initPlatform(root, values.name);
-        io.stdout(`Initialised platform "${r.name}": ${r.created.join(", ")}`);
-        return 0;
-      }
-      case "add": {
-        only(1, "a brick path");
-        // A relative path is relative to where the user typed the command, not to --dir.
-        const r = addBrick(root, resolve(io.cwd, args[0]));
-        if (r.status === "unchanged") io.stdout(`${r.name} ${r.version} is already installed; nothing changed`);
-        else io.stdout(`Added ${r.name} ${r.version}`);
-        for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);
-        for (const v of r.cancelledDeletions) io.stdout(`  cancelled the pending deletion of volume ${vol(v)}`);
-        return 0;
-      }
-      case "remove": {
-        only(1, "a brick name");
-        const r = removeBrick(root, args[0]);
-        io.stdout(`Removed ${r.name}`);
-        for (const v of r.retainedVolumes) io.stdout(`  volume ${vol(v)} kept (retention: retain)`);
-        for (const v of r.pendingDeletion) {
-          io.stdout(`  volume ${vol(v)} marked for deletion (retention: delete); only "up --prune-volumes" deletes it`);
+    // Commands that change the platform run one at a time, from a terminal or from the admin (D16).
+    if (CHANGING_COMMANDS.has(command)) return withPlatformLock(root, [command, ...args].join(" "), () => run(command));
+    return run(command);
+
+    function run(command: string): number {
+      switch (command) {
+        case "init": {
+          only(0, "");
+          const r = initPlatform(root, values.name);
+          io.stdout(`Initialised platform "${r.name}": ${r.created.join(", ")}`);
+          return 0;
         }
-        return 0;
-      }
-      case "enable":
-      case "disable": {
-        only(1, "a brick name");
-        const enabled = command === "enable";
-        const r = setBrickEnabled(root, args[0], enabled);
-        io.stdout(`${enabled ? "Enabled" : "Disabled"} ${r.name}`);
-        return 0;
-      }
-      case "admin": {
-        only(0, "");
-        const port = values.port === undefined ? 4100 : Number(values.port);
-        if (!Number.isInteger(port) || port < 1 || port > 65535) {
-          throw usage("USAGE_INVALID_OPTION", "", { detail: `--port must be an integer between 1 and 65535 (got "${values.port}")` });
+        case "add": {
+          only(1, "a brick path");
+          // A relative path is relative to where the user typed the command, not to --dir.
+          const r = addBrick(root, resolve(io.cwd, args[0]));
+          if (r.status === "unchanged") io.stdout(`${r.name} ${r.version} is already installed; nothing changed`);
+          else io.stdout(`Added ${r.name} ${r.version}`);
+          for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);
+          for (const v of r.cancelledDeletions) io.stdout(`  cancelled the pending deletion of volume ${vol(v)}`);
+          return 0;
         }
-        const dev = values.dev === true;
-        const clientSecret = process.env.PLUGBRICKS_OIDC_CLIENT_SECRET;
-        if (!dev && (!values.issuer || !values["client-id"] || !clientSecret)) {
-          throw new PlugbricksError([issue("ADMIN_OIDC_NOT_CONFIGURED", "")]);
-        }
-        const uiDir =
-          values["ui-dir"] === undefined
-            ? join(dirname(fileURLToPath(import.meta.url)), "../../admin/dist")
-            : resolve(io.cwd, values["ui-dir"]);
-        if (!existsSync(join(uiDir, "index.html"))) throw new PlugbricksError([issue("ADMIN_UI_MISSING", "", { dir: uiDir })]);
-        // Read-only: statusRuntime is bounded and never mutates; the server only serves the project.
-        readProject(root);
-        const s = startAdmin({
-          root,
-          runtime,
-          port,
-          dev,
-          uiDir,
-          k8s,
-          runtimeDeps: io.runtime,
-          issuer: values.issuer,
-          clientId: values["client-id"],
-          clientSecret,
-          log: (line) => io.stdout(line),
-        });
-        s.ready.catch((e: unknown) => {
-          io.stderr(`error ADMIN_START_FAILED: ${(e as Error).message}`);
-          process.exitCode = 1;
-          s.close();
-        });
-        return 0;
-      }
-      case "status": {
-        only(0, "");
-        const s = platformStatus(root);
-        if (values.runtime !== undefined) {
-          // Read-only: what the runtime runs, next to what is declared (D10). Its own deps: no progress lines.
-          const live = statusRuntime(root, runtime, s.problems, { ...io.runtime, k8s });
-          if (values.json) io.stdout(JSON.stringify(live, null, 2));
-          else {
-            printDeclared(io, s);
-            for (const line of liveStatusText(live)) io.stdout(line);
+        case "remove": {
+          only(1, "a brick name");
+          const r = removeBrick(root, args[0]);
+          io.stdout(`Removed ${r.name}`);
+          for (const v of r.retainedVolumes) io.stdout(`  volume ${vol(v)} kept (retention: retain)`);
+          for (const v of r.pendingDeletion) {
+            io.stdout(`  volume ${vol(v)} marked for deletion (retention: delete); only "up --prune-volumes" deletes it`);
           }
+          return 0;
+        }
+        case "enable":
+        case "disable": {
+          only(1, "a brick name");
+          const enabled = command === "enable";
+          const r = setBrickEnabled(root, args[0], enabled);
+          io.stdout(`${enabled ? "Enabled" : "Disabled"} ${r.name}`);
+          return 0;
+        }
+        case "admin": {
+          only(0, "");
+          const port = values.port === undefined ? 4100 : Number(values.port);
+          if (!Number.isInteger(port) || port < 1 || port > 65535) {
+            throw usage("USAGE_INVALID_OPTION", "", { detail: `--port must be an integer between 1 and 65535 (got "${values.port}")` });
+          }
+          const dev = values.dev === true;
+          const clientSecret = process.env.PLUGBRICKS_OIDC_CLIENT_SECRET;
+          if (!dev && (!values.issuer || !values["client-id"] || !clientSecret)) {
+            throw new PlugbricksError([issue("ADMIN_OIDC_NOT_CONFIGURED", "")]);
+          }
+          const uiDir =
+            values["ui-dir"] === undefined
+              ? join(dirname(fileURLToPath(import.meta.url)), "../../admin/dist")
+              : resolve(io.cwd, values["ui-dir"]);
+          if (!existsSync(join(uiDir, "index.html"))) throw new PlugbricksError([issue("ADMIN_UI_MISSING", "", { dir: uiDir })]);
+          // Read-only: statusRuntime is bounded and never mutates; the server only serves the project.
+          readProject(root);
+          const s = startAdmin({
+            root,
+            runtime,
+            port,
+            dev,
+            uiDir,
+            k8s,
+            runtimeDeps: io.runtime,
+            issuer: values.issuer,
+            clientId: values["client-id"],
+            clientSecret,
+            log: (line) => io.stdout(line),
+          });
+          s.ready.catch((e: unknown) => {
+            io.stderr(`error ADMIN_START_FAILED: ${(e as Error).message}`);
+            process.exitCode = 1;
+            s.close();
+          });
+          return 0;
+        }
+        case "status": {
+          only(0, "");
+          const s = platformStatus(root);
+          if (values.runtime !== undefined) {
+            // Read-only: what the runtime runs, next to what is declared (D10). Its own deps: no progress lines.
+            const live = statusRuntime(root, runtime, s.problems, { ...io.runtime, k8s });
+            if (values.json) io.stdout(JSON.stringify(live, null, 2));
+            else {
+              printDeclared(io, s);
+              for (const line of liveStatusText(live)) io.stdout(line);
+            }
+            printIssues(io, s.problems);
+            if (s.problems.length) return 1;
+            return live.state === "degraded" ? STATUS_DEGRADED_EXIT : 0;
+          }
+          if (values.json) {
+            io.stdout(JSON.stringify(s, null, 2));
+          } else printDeclared(io, s);
           printIssues(io, s.problems);
-          if (s.problems.length) return 1;
-          return live.state === "degraded" ? STATUS_DEGRADED_EXIT : 0;
+          return s.problems.length ? 1 : 0;
         }
-        if (values.json) {
-          io.stdout(JSON.stringify(s, null, 2));
-        } else printDeclared(io, s);
-        printIssues(io, s.problems);
-        return s.problems.length ? 1 : 0;
-      }
-      case "generate": {
-        only(0, "");
-        const g = generate(root, runtime, deps);
-        io.stdout(`Generated ${runtime} files for ${g.plan.platform}:`);
-        for (const f of g.files) io.stdout(`  ${f}`);
-        if (g.secretsCreated.length) io.stdout(`Created ${g.secretsCreated.length} secret(s) in .secrets/: ${g.secretsCreated.join(", ")}`);
-        return 0;
-      }
-      case "up": {
-        only(0, "");
-        const r = up(root, runtime, { pruneVolumes: values["prune-volumes"] }, deps);
-        if (r.generated.secretsCreated.length) io.stdout(`Created ${r.generated.secretsCreated.length} secret(s) in .secrets/`);
-        io.stdout(`Platform ${r.generated.plan.platform} is up (${runtime}): ${r.generated.plan.services.length} service(s)`);
-        for (const v of r.pruned) io.stdout(`  deleted volume ${vol(v)}`);
-        if (r.pending.length && !values["prune-volumes"]) {
-          io.stdout(`Pending deletion, kept until "plugbricks up --prune-volumes": ${r.pending.map(vol).join(", ")}`);
+        case "generate": {
+          only(0, "");
+          const g = generate(root, runtime, deps);
+          io.stdout(`Generated ${runtime} files for ${g.plan.platform}:`);
+          for (const f of g.files) io.stdout(`  ${f}`);
+          if (g.secretsCreated.length)
+            io.stdout(`Created ${g.secretsCreated.length} secret(s) in .secrets/: ${g.secretsCreated.join(", ")}`);
+          return 0;
         }
-        printIssues(io, r.problems);
-        return r.problems.length ? 1 : 0;
+        case "up": {
+          only(0, "");
+          const r = up(root, runtime, { pruneVolumes: values["prune-volumes"] }, deps);
+          if (r.generated.secretsCreated.length) io.stdout(`Created ${r.generated.secretsCreated.length} secret(s) in .secrets/`);
+          io.stdout(`Platform ${r.generated.plan.platform} is up (${runtime}): ${r.generated.plan.services.length} service(s)`);
+          for (const v of r.pruned) io.stdout(`  deleted volume ${vol(v)}`);
+          if (r.pending.length && !values["prune-volumes"]) {
+            io.stdout(`Pending deletion, kept until "plugbricks up --prune-volumes": ${r.pending.map(vol).join(", ")}`);
+          }
+          printIssues(io, r.problems);
+          return r.problems.length ? 1 : 0;
+        }
+        case "down": {
+          only(0, "");
+          down(root, runtime, deps);
+          io.stdout(`Platform stopped (${runtime}); volumes and secrets are kept`);
+          return 0;
+        }
+        default:
+          throw usage("USAGE_UNKNOWN_COMMAND", "", { command });
       }
-      case "down": {
-        only(0, "");
-        down(root, runtime, deps);
-        io.stdout(`Platform stopped (${runtime}); volumes and secrets are kept`);
-        return 0;
-      }
-      default:
-        throw usage("USAGE_UNKNOWN_COMMAND", "", { command });
     }
   } catch (e) {
     if (e instanceof UsageError) {
