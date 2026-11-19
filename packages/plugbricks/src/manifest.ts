@@ -38,7 +38,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
   if (schemaProblems.length) return { ok: false, issues: schemaProblems };
 
   const m = manifest as {
-    services: { name: string; image: string; env?: Record<string, string> }[];
+    services: { name: string; image: string; port: number; extraPorts?: { name: string; port: number }[]; env?: Record<string, string> }[];
     provides?: Record<
       string,
       {
@@ -60,6 +60,30 @@ export function validateManifest(manifest: unknown): ValidationResult {
     names.add(s.name);
     checkImage(s.image, `/services/${i}/image`, issues);
     checkTemplates(s.env, `/services/${i}/env`, "serviceEnv", issues);
+    // Extra ports: a Kubernetes Service cannot have two ports with the same name or number, and
+    // "main" is the name of the primary port.
+    const portNames = new Set(["main"]);
+    const portNumbers = new Set([s.port]);
+    (s.extraPorts ?? []).forEach((p, j) => {
+      if (portNames.has(p.name)) {
+        issues.push(
+          issue("PORT_CONFLICT", `/services/${i}/extraPorts/${j}/name`, {
+            service: s.name,
+            detail: `the name "${p.name}" is already used by another port`,
+          }),
+        );
+      }
+      if (portNumbers.has(p.port)) {
+        issues.push(
+          issue("PORT_CONFLICT", `/services/${i}/extraPorts/${j}/port`, {
+            service: s.name,
+            detail: `port ${p.port} is already used by another port`,
+          }),
+        );
+      }
+      portNames.add(p.name);
+      portNumbers.add(p.port);
+    });
   });
 
   for (const [cap, p] of Object.entries(m.provides ?? {})) {

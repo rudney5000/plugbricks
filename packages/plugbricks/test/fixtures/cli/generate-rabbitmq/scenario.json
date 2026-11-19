@@ -1,5 +1,5 @@
 {
-  "description": "a RabbitMQ broker provides queue to a consumer: AMQP_URL and QUEUE_NAME in its environment, the broker's data volume kept, one shared secret",
+  "description": "a RabbitMQ broker provides queue to a consumer: its own vhost, user and password in AMQP_URL, QUEUE_NAME, the broker's data volume kept, the management port in its Service",
   "steps": [
     {
       "run": ["init", "--name", "queue-demo"]
@@ -14,7 +14,7 @@
     },
     {
       "run": ["generate"],
-      "stdout": "Created 1 secret(s) in .secrets/: PB_RABBITMQ__DEFAULT_PASSWORD"
+      "stdout": "Created 2 secret(s) in .secrets/: PB_RABBITMQ__CONSUMER__CONSUMER_PASSWORD, PB_RABBITMQ__DEFAULT_PASSWORD"
     },
     {
       "run": ["generate", "--runtime", "k8s"]

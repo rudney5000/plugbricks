@@ -4,7 +4,7 @@ services:
   consumer-app:
     image: redis:7.4.1-alpine
     environment:
-      AMQP_URL: "amqp://plugbricks:${PB_RABBITMQ__DEFAULT_PASSWORD:?missing secret; run plugbricks generate}@rabbitmq-broker:5672/"
+      AMQP_URL: "amqp://consumer:${PB_RABBITMQ__CONSUMER__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@rabbitmq-broker:5672/consumer"
       QUEUE_NAME: consumer
     healthcheck:
       test:
@@ -20,9 +20,22 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
   consumer-provision-queue:
-    image: busybox:1.36
+    image: curlimages/curl:8.11.1
     entrypoint:
-      - "true"
+      - /bin/sh
+      - /provision/create-vhost.sh
+    environment:
+      ADMIN_PASSWORD: "${PB_RABBITMQ__DEFAULT_PASSWORD:?missing secret; run plugbricks generate}"
+      ADMIN_USER: plugbricks
+      APP_PASSWORD: "${PB_RABBITMQ__CONSUMER__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}"
+      APP_USER: consumer
+      APP_VHOST: consumer
+      MANAGEMENT_URL: http://rabbitmq-broker:15672
+    volumes:
+      - type: bind
+        source: "../../.platform/bricks/rabbitmq/provision"
+        target: /provision
+        read_only: true
     depends_on:
       consumer-wait-queue:
         condition: service_completed_successfully

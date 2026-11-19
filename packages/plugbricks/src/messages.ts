@@ -25,6 +25,7 @@ export const MESSAGES = {
   READY_NOT_TARGETING_PROVIDER:
     'ready command of capability "{capability}" must target ${provider.host}, otherwise it probes the waiting container itself',
   TEMPLATE_UNKNOWN: '"{template}" is not a template this field accepts; allowed here: {allowed}',
+  PORT_CONFLICT: 'the ports of service "{service}" conflict: {detail}',
 
   // Runtime (generate, up, down).
   WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
