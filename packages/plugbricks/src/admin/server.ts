@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import type { Configuration } from "openid-client";
+import { ActionRunner, validateAction } from "./actions.js";
 import { issue } from "../issues.js";
 import { SEVERITY } from "../live.js";
 import { platformStatus, PlugbricksError, readProject } from "../platform.js";
@@ -20,6 +21,10 @@ export interface AdminOptions {
   k8s?: K8sTarget;
   /** Tests inject the runtime tools; the admin itself reads only. */
   runtimeDeps?: Omit<RuntimeDeps, "log"> & { execAsync?: AsyncExec };
+  /** Tests run a fake CLI; the real one is the built bin run by this node. */
+  cli?: { cmd: string; args: string[] };
+  /** How long an action may run before SIGKILL; tests may shorten it. */
+  actionTimeoutMs?: number;
   issuer?: string;
   clientId?: string;
   clientSecret?: string;
@@ -144,6 +149,15 @@ export function startAdmin(o: AdminOptions): AdminServer {
   const insecureIssuer = !o.dev && o.issuer !== undefined ? checkIssuer(o.issuer) : false;
   const sessions = new Map<string, Session>();
   const pending = new Map<string, Pending>();
+  const actions = new ActionRunner({
+    root: o.root,
+    runtime: o.runtime,
+    k8s: o.k8s,
+    cli: o.cli,
+    timeoutMs: o.actionTimeoutMs,
+    log: o.log,
+    now: () => new Date(now()),
+  });
   let boundPort = o.port;
   // Loaded only when OIDC is actually used: `plugbricks status` must not pay for it.
   let oidcModule: typeof import("openid-client") | undefined;
@@ -303,6 +317,40 @@ export function startAdmin(o: AdminOptions): AdminServer {
       });
     }
 
+    if (path === "/api/actions" || path.startsWith("/api/actions/")) {
+      const s = requireSession(req, res);
+      if (!s) return;
+      if (path === "/api/actions") {
+        if (req.method === "GET") return send(res, 200, { actions: actions.list() });
+        if (req.method !== "POST") return sendText(res, 405, "method not allowed");
+        if (s.role !== "admin") return send(res, 403, { error: "FORBIDDEN" });
+        const type = (req.headers["content-type"] ?? "").toLowerCase();
+        if (!type.startsWith("application/json")) return send(res, 400, { error: "CONTENT_TYPE" });
+        const body = await readBody(req, 16 * 1024);
+        if (body === null) return send(res, 400, { error: "BODY_TOO_LARGE" });
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          return send(res, 400, { error: "INVALID_JSON" });
+        }
+        const valid = validateAction(parsed);
+        if (!valid.ok) return send(res, 400, { error: valid.code });
+        const started = actions.start({ name: s.name, sub: s.sub, role: s.role }, valid.input);
+        if (!started.ok) return send(res, 409, { error: "BUSY", running: started.running });
+        return send(res, 202, { id: started.id });
+      }
+      if (req.method !== "GET") return sendText(res, 405, "method not allowed");
+      let id: string;
+      try {
+        id = decodeURIComponent(path.slice("/api/actions/".length));
+      } catch {
+        return send(res, 404, { error: "NOT_FOUND" });
+      }
+      const action = actions.get(id);
+      return action ? send(res, 200, action) : send(res, 404, { error: "NOT_FOUND" });
+    }
+
     if (path === "/api/bricks" || path === "/api/audit") {
       if (req.method !== "GET") return sendText(res, 405, "method not allowed");
       if (!requireSession(req, res)) return;
@@ -363,6 +411,34 @@ export function startAdmin(o: AdminOptions): AdminServer {
     .then((port) => o.log?.(`plugbricks admin on http://127.0.0.1:${port}${o.dev ? " (dev mode: authentication is off)" : ""}`))
     .catch(() => {});
   return { server, ready, close: () => server.close() };
+}
+
+/** Reads a request body, or null when it grows past the limit; the caller answers 400, never 413. */
+function readBody(req: IncomingMessage, limit: number): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > limit) {
+      req.resume();
+      resolve(null);
+      return;
+    }
+    let size = 0;
+    let body = "";
+    let tooLarge = false;
+    req.setEncoding("utf8");
+    req.on("data", (text: string) => {
+      if (tooLarge) return;
+      size += Buffer.byteLength(text);
+      if (size > limit) {
+        tooLarge = true;
+        body = "";
+        return;
+      }
+      body += text;
+    });
+    req.on("end", () => resolve(tooLarge ? null : body));
+    req.on("error", reject);
+  });
 }
 
 function readAudit(root: string): unknown[] {

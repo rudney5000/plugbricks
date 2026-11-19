@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBricks } from "../api.js";
 import { allTags, filterByTag, summary, tone } from "../lib.js";
-import type { AdminBrick, BricksResponse } from "../types.js";
+import { useAction } from "../useAction.js";
+import type { AdminBrick, BricksResponse, Session } from "../types.js";
 
-function Switch({ on }: { on: boolean }) {
+function Switch({ on, disabled, onToggle, label }: { on: boolean; disabled: boolean; onToggle: () => void; label: string }) {
   return (
-    <span
+    <button
+      type="button"
       role="switch"
       aria-checked={on}
-      aria-readonly="true"
-      className={`inline-flex h-5 w-9 items-center rounded-full px-0.5 ${on ? "bg-blue-600" : "bg-slate-300"}`}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`inline-flex h-5 w-9 items-center rounded-full px-0.5 transition-colors ${on ? "bg-blue-600" : "bg-slate-300"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
     >
       <span className={`h-4 w-4 rounded-full bg-white transition-transform ${on ? "translate-x-4" : ""}`} />
-    </span>
+    </button>
   );
 }
 
@@ -41,11 +46,14 @@ function StatusCell({ brick }: { brick: AdminBrick }) {
   );
 }
 
-export function Bricks() {
+export function Bricks({ session }: { session: Session }) {
+  const canAdmin = session.role === "admin";
   const [data, setData] = useState<BricksResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tag, setTag] = useState("all");
   const [updated, setUpdated] = useState<string>("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [source, setSource] = useState("");
 
   const load = useCallback(() => {
     getBricks()
@@ -59,9 +67,18 @@ export function Bricks() {
 
   useEffect(load, [load]);
 
+  const { run, action, error: actionError, busy } = useAction(load);
   const tags = useMemo(() => (data ? allTags(data.bricks) : []), [data]);
   const rows = useMemo(() => (data ? filterByTag(data.bricks, tag) : []), [data, tag]);
   const counts = useMemo(() => (data ? summary(data.bricks) : { total: 0, healthy: 0, down: 0, stopped: 0 }), [data]);
+  const disabled = !canAdmin || busy;
+
+  const add = () => {
+    if (!source.trim()) return;
+    void run({ action: "add", source: source.trim() });
+    setSource("");
+    setShowAdd(false);
+  };
 
   return (
     <div>
@@ -88,14 +105,29 @@ export function Bricks() {
       )}
 
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {!canAdmin && (
+        <div className="mb-4 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          Read-only: your role is <strong>viewer</strong>. Enabling, adding, removing or deploying a brick needs{" "}
+          <strong>plugbricks-admin</strong>.
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
-          disabled
-          title="Actions arrive in the next step"
-          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white opacity-50"
+          onClick={() => setShowAdd((v) => !v)}
+          disabled={disabled}
+          title={canAdmin ? "Add a brick from a path relative to the platform" : "Your role is viewer"}
+          className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           + Add brick
+        </button>
+        <button
+          onClick={() => void run({ action: "up" })}
+          disabled={disabled}
+          title={canAdmin ? "Run plugbricks up with this admin's runtime" : "Your role is viewer"}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Deploy
         </button>
         <button
           onClick={load}
@@ -104,6 +136,7 @@ export function Bricks() {
           Refresh
         </button>
         {updated && <span className="text-xs text-slate-500">Updated {updated}</span>}
+        {busy && <span className="text-xs text-amber-700">an action is running…</span>}
         <span className="ml-auto text-xs text-slate-500">Filter by tag</span>
         <div className="flex flex-wrap gap-1">
           {["all", ...tags].map((t) => (
@@ -118,11 +151,80 @@ export function Bricks() {
         </div>
       </div>
 
+      {showAdd && canAdmin && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            add();
+          }}
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3"
+        >
+          <label className="text-sm text-slate-700" htmlFor="source">
+            Source
+          </label>
+          <input
+            id="source"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder="relative to the platform root, e.g. examples/postgres"
+            className="min-w-80 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            disabled={busy}
+          />
+          <button
+            type="submit"
+            disabled={busy || !source.trim()}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAdd(false)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700"
+          >
+            Cancel
+          </button>
+        </form>
+      )}
+
+      {(action || actionError || busy) && (
+        <section className="mb-4 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <span className="font-medium text-slate-900">
+              {action ? `${action.action}${action.brick ? ` ${action.brick}` : action.source ? ` ${action.source}` : ""}` : "Action"}
+            </span>
+            {action && (
+              <span
+                className={`rounded px-2 py-0.5 text-xs ${
+                  action.state === "succeeded"
+                    ? "bg-emerald-50 text-emerald-700"
+                    : action.state === "failed"
+                      ? "bg-red-50 text-red-700"
+                      : "bg-amber-50 text-amber-700"
+                }`}
+              >
+                {action.state}
+              </span>
+            )}
+            {action?.exitCode !== null && action && <span className="text-xs text-slate-500">exit {action.exitCode}</span>}
+            {action && <span className="text-xs text-slate-500">{action.user}</span>}
+            {!action && busy && <span className="text-xs text-amber-700">starting…</span>}
+          </div>
+          {actionError && <p className="mt-2 text-sm text-red-700">{actionError}</p>}
+          {action && action.issues.length > 0 && <p className="mt-2 text-xs text-amber-700">codes: {action.issues.join(", ")}</p>}
+          {action && (
+            <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">
+              {action.output.join("\n") || "No output."}
+            </pre>
+          )}
+        </section>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              {["Name", "Version", "Tags", "Port", "Subgraph", "Extends", "Enabled", "Deployed", "Status"].map((h) => (
+              {["Name", "Version", "Tags", "Port", "Subgraph", "Extends", "Enabled", "Deployed", "Status", "Actions"].map((h) => (
                 <th key={h} className="px-4 py-3 font-medium">
                   {h}
                 </th>
@@ -149,17 +251,40 @@ export function Bricks() {
                 <td className="px-4 py-4 text-slate-700">{b.subgraph ? "Yes" : "—"}</td>
                 <td className="px-4 py-4 text-slate-700">{b.extends || "—"}</td>
                 <td className="px-4 py-4">
-                  <Switch on={b.enabled} />
+                  <Switch
+                    on={b.enabled}
+                    disabled={disabled}
+                    label={b.enabled ? `Disable ${b.name}` : `Enable ${b.name}`}
+                    onToggle={() => void run({ action: b.enabled ? "disable" : "enable", brick: b.name })}
+                  />
                 </td>
                 <td className="px-4 py-4 text-slate-700">{b.deployed ? "Yes" : "No"}</td>
                 <td className="px-4 py-4">
                   <StatusCell brick={b} />
                 </td>
+                <td className="px-4 py-4">
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Remove brick "${b.name}"? Its volumes and secrets may be kept or marked for deletion; this cannot be undone from the admin.`,
+                        )
+                      ) {
+                        void run({ action: "remove", brick: b.name });
+                      }
+                    }}
+                    disabled={disabled}
+                    title={canAdmin ? `Remove ${b.name}` : "Your role is viewer"}
+                    className="rounded-md border border-red-200 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">
                   No brick installed.
                 </td>
               </tr>
@@ -169,8 +294,8 @@ export function Bricks() {
       </div>
 
       <p className="mt-4 text-xs text-slate-500">
-        Enabled is what <code>platform.json</code> asks for. Deployed is what the runtime reports. A viewer can read everything above and
-        change nothing.
+        Enabled is what <code>platform.json</code> asks for. Deployed is what the runtime reports. Actions run the same CLI as a terminal,
+        one at a time; each attempt is written to the audit log.
       </p>
     </div>
   );

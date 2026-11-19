@@ -832,8 +832,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D15. The admin: a local React/Vite server, OIDC, read-only first
 
-- **Status:** first slice implemented (step 6): `plugbricks admin`, `packages/admin`, OIDC and dev
-  authentication, `/api/session`, `/api/bricks`, `/api/audit`, and the Bricks, Router and Audit pages.
+- **Status:** implemented (step 6, the actions in 6c): `plugbricks admin`, `packages/admin`, OIDC and
+  dev authentication, `/api/session`, `/api/bricks`, `/api/actions`, `/api/audit`, the Bricks, Router
+  and Audit pages, and their actions.
 - **Decision:**
   - **A local command, not a brick:** `plugbricks admin` serves the UI on `127.0.0.1:4100` and exits
     only when killed. The CLI stays synchronous: the listening server keeps the process alive. Flags:
@@ -868,16 +869,43 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     asynchronous child process (no shell, 15 s timeout). Concurrent page loads share one read. The
     brick state is its worst service in the order of `status --runtime`, with the restarts of all of
     them.
-  - **Audit:** `/api/audit` reads `.admin/audit.log` (one JSON object per line) when it exists; the
-    writer, the actions and the role checks for them are the next step.
+  - **Actions, as the CLI itself:** `POST /api/actions` accepts `add` (a `source` path relative to
+    the platform root), `enable`/`disable`/`remove` (a `brick` name) and `up` (no field). The request
+    must be `application/json` and at most 16 KiB; the admin role is required (a viewer gets 403, no
+    session 401). Names are checked against the schema's pattern and paths against `-`, `/`, `\`, a
+    drive letter, a `..` segment and NUL before anything runs. `202 {id}` is answered at once; the
+    action runs in a child process of the built CLI, never with a shell, from the platform root, with
+    `--runtime` and, for `up` on Kubernetes, `--context`, `--kubeconfig` and `--allow-context` exactly
+    as the admin received them. The OIDC client secret is removed from the child's environment. No
+    `--prune-volumes`: deleting data stays a terminal decision, and the admin cannot turn a misclick
+    into data loss. One action at a time in this server: a second is 409 `BUSY` while one runs; the
+    platform lock (D16) still refuses a terminal command meanwhile, and the CLI's `PLATFORM_BUSY` is
+    reported as the action's result. The last 50 actions are kept in memory, with the last 2000
+    output lines, and SIGKILL after 30 minutes.
+  - **Reading an action:** `GET /api/actions` and `GET /api/actions/:id` (any signed-in role) give the
+    state (`running`/`succeeded`/`failed`), exit code, output lines, the issue codes parsed from
+    `error <CODE>` lines, the user and the times. The UI polls every second, shows the output, and
+    refreshes the Bricks table when the action ends.
+  - **Audit:** every action writes two lines to `.admin/audit.log` (JSONL): one when accepted
+    (`result: "Accepted"`: the request was accepted) and one when it ends (`Success`, `Refused` for
+    exit 1/2 with issue codes, `Failed` otherwise), with the action id and duration in `details`. The
+    user is the session name and subject, the role is the session role. No output and no secret is
+    ever written. `.admin/` is created 0700 and `audit.log` 0600 (POSIX), with a `.gitignore` holding
+    `*`.
 - **Tested:** `test/admin.test.ts` against a local OIDC provider (discovery, keys, token endpoint, RS256
   ID tokens; no network): admin and viewer roles, no role (403, no session), a callback without or
   with another state cookie, a state used twice, expiry after 8 hours, discovery retried, the `Host` and
   `Origin` checks, the headers, path traversal, a slow runtime that does not block other requests, and
-  `RUNTIME_UNAVAILABLE` (503). Not tested: a real Keycloak or any other real provider.
-- **Limits:** no action yet (Add/Enable/Disable/Deploy/Remove), so the audit file stays empty; the
-  Router page shows the live router and its subgraphs but not yet the configuration hash, its size or
-  the composed SDL; the monorepo serves `packages/admin/dist`, and the published package will copy the
+  `RUNTIME_UNAVAILABLE` (503). The actions are tested: roles (401/403/202, and dev), every validation
+  refusal, the exact argv (with the k8s flags, and only for `up`), the stripped secret, 409 and a
+  non-blocking `/api/session` while an action runs, the issue codes and the audit results, two audit
+  lines per action with the POSIX modes, a cross-site POST refused, and enable/disable through the
+  real built CLI. Not tested: a real Keycloak or any other real provider, a browser, macOS/Windows
+  (the audit modes are POSIX-only), and Kubernetes actions on a cluster.
+- **Limits:** actions live in the admin's memory (a restart forgets them, the audit log stays); the
+  UI polls instead of streaming the output; there is no `--prune-volumes` from the admin; the Router
+  page shows the live router and its subgraphs but not yet the configuration hash, its size or the
+  composed SDL; the monorepo serves `packages/admin/dist`, and the published package will copy the
   build at `prepack` (next step).
 
 ---
