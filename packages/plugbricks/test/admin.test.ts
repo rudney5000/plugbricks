@@ -1,10 +1,11 @@
 import { createHash, createSign, generateKeyPairSync } from "node:crypto";
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, request, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import type { ActionRecord } from "../src/admin/actions.js";
 import { SESSION_TTL_MS, startAdmin, type AdminOptions, type AdminServer } from "../src/admin/server.js";
 import { main } from "../src/cli.js";
 import type { AsyncExec } from "../src/runtime.js";
@@ -13,6 +14,10 @@ const pkg = fileURLToPath(new URL("..", import.meta.url));
 const root = join(pkg, ".test-work/admin");
 const io = { cwd: root, stdout: () => {}, stderr: () => {} };
 const opened: { close: () => void }[] = [];
+const fakeCli = join(root, "fake-cli.mjs");
+const fakeLog = join(root, "fake-cli.log");
+const cliOptions = { cli: { cmd: process.execPath, args: [fakeCli] } };
+const TEST_SECRET = "oidc-client-secret-for-the-test";
 
 /** The admin only reads the runtime: a compose ps that lists nothing is enough for these tests. */
 const emptyRuntime = { exec: () => ({ status: 0, stdout: "[]", stderr: "" }) };
@@ -24,6 +29,34 @@ beforeAll(() => {
   cpSync(join(pkg, "examples/postgres"), join(root, "postgres"), { recursive: true });
   expect(main(["init", "--name", "demo"], io)).toBe(0);
   expect(main(["add", "postgres"], io)).toBe(0);
+  process.env.PLUGBRICKS_OIDC_CLIENT_SECRET = TEST_SECRET;
+  process.env.PB_FAKE_LOG = fakeLog;
+  writeFileSync(
+    fakeCli,
+    `import { appendFileSync } from "node:fs";
+const log = process.env.PB_FAKE_LOG;
+if (log) appendFileSync(log, JSON.stringify({ argv: process.argv.slice(2), env: process.env }) + String.fromCharCode(10));
+console.log("fake cli started");
+const mode = process.env.PB_FAKE_MODE ?? "ok";
+if (mode === "slow") {
+  setTimeout(() => process.exit(0), 700);
+} else if (mode === "busy") {
+  console.error("error PLATFORM_BUSY: another command is changing the platform");
+  process.exit(1);
+} else if (mode === "refused") {
+  console.error("error CAPABILITY_IN_USE: postgres is required by orders");
+  process.exit(1);
+} else if (mode === "failed") {
+  console.error("something broke");
+  process.exit(3);
+} else if (mode === "usage") {
+  console.error("error USAGE_MISSING_ARGUMENT: nope");
+  process.exit(2);
+} else {
+  process.exit(0);
+}
+`,
+  );
 });
 
 afterEach(() => {
@@ -50,8 +83,49 @@ interface Raw {
   body: string;
 }
 
+function clearFake(): void {
+  rmSync(fakeLog, { force: true });
+}
+
+function fakeRuns(): { argv: string[]; env: Record<string, string> }[] {
+  if (!existsSync(fakeLog)) return [];
+  return readFileSync(fakeLog, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { argv: string[]; env: Record<string, string> });
+}
+
+function auditLines(): { time: string; user: string; role: string; action: string; brick: string; result: string; details: string }[] {
+  const file = join(root, ".admin", "audit.log");
+  if (!existsSync(file)) return [];
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as ReturnType<typeof auditLines>[number]);
+}
+
+function postAction(base: string, body: unknown, headers: Record<string, string> = {}): Promise<Raw> {
+  return raw(base, "/api/actions", {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+async function waitAction(base: string, id: string, cookie?: string, ms = 5000): Promise<ActionRecord> {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const r = await raw(base, `/api/actions/${encodeURIComponent(id)}`, cookie ? { headers: { cookie } } : {});
+    if (r.status !== 200) throw new Error(`GET /api/actions/${id}: ${r.status} ${r.body}`);
+    const a = JSON.parse(r.body) as ActionRecord;
+    if (a.state !== "running") return a;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`action ${id} did not finish in ${ms}ms`);
+}
+
 /** One request with full control of the headers (fetch does not let a test set Host). */
-function raw(base: string, path: string, opts: { method?: string; headers?: Record<string, string> } = {}): Promise<Raw> {
+function raw(base: string, path: string, opts: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<Raw> {
   return new Promise((done, fail) => {
     const req = request(`${base}${path}`, { method: opts.method ?? "GET", headers: opts.headers }, (res) => {
       let body = "";
@@ -59,6 +133,7 @@ function raw(base: string, path: string, opts: { method?: string; headers?: Reco
       res.on("end", () => done({ status: res.statusCode ?? 0, headers: res.headers, body }));
     });
     req.on("error", fail);
+    if (opts.body !== undefined) req.write(opts.body);
     req.end();
   });
 }
@@ -363,5 +438,221 @@ describe("the admin sign-in (OIDC, against a local provider)", () => {
         }),
       ).toThrow(expect.objectContaining({ issues: [expect.objectContaining({ code: "ADMIN_OIDC_ISSUER_INVALID" })] }));
     }
+  });
+});
+
+describe("the admin actions", () => {
+  it("needs an admin: 401 without a session, 403 for a viewer, 202 for an admin and in dev", async () => {
+    const anon = await start({ dev: false, ...cliOptions });
+    expect((await postAction(anon.base, { action: "up" })).status).toBe(401);
+
+    const idp = await fakeIdp();
+    const oidc = await startOidc(idp, cliOptions);
+    const viewer = await signIn(oidc.base, idp, { roles: ["plugbricks-viewer"] });
+    clearFake();
+    const denied = await postAction(oidc.base, { action: "up" }, { cookie: viewer.session! });
+    expect(denied.status).toBe(403);
+    expect(JSON.parse(denied.body).error).toBe("FORBIDDEN");
+    expect(fakeRuns()).toEqual([]);
+    expect((await raw(oidc.base, "/api/actions", { headers: { cookie: viewer.session! } })).status).toBe(200);
+
+    const admin = await signIn(oidc.base, idp, { roles: ["plugbricks-admin"] });
+    const allowed = await postAction(oidc.base, { action: "up" }, { cookie: admin.session! });
+    expect(allowed.status).toBe(202);
+    await waitAction(oidc.base, JSON.parse(allowed.body).id, admin.session!);
+
+    const dev = await start(cliOptions);
+    const devAllowed = await postAction(dev.base, { action: "up" });
+    expect(devAllowed.status).toBe(202);
+    await waitAction(dev.base, JSON.parse(devAllowed.body).id);
+  });
+
+  it("validates the request before starting the CLI", async () => {
+    const { base } = await start(cliOptions);
+    clearFake();
+    const cases: [unknown, string][] = [
+      [{}, "INVALID_ACTION"],
+      [{ action: "explode" }, "INVALID_ACTION"],
+      [{ action: "enable" }, "INVALID_BRICK"],
+      [{ action: "enable", brick: "../postgres" }, "INVALID_BRICK"],
+      [{ action: "disable", brick: "Postgres" }, "INVALID_BRICK"],
+      [{ action: "remove", brick: "-postgres" }, "INVALID_BRICK"],
+      [{ action: "remove", brick: "postgres/1" }, "INVALID_BRICK"],
+      [{ action: "add" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "-x" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "/abs" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "\\abs" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "../x" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "a/../b" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "a\\..\\b" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "C:\\x" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "a\0b" }, "INVALID_SOURCE"],
+      [{ action: "add", source: "x", brick: "postgres" }, "UNEXPECTED_FIELD"],
+      [{ action: "enable", brick: "postgres", source: "x" }, "UNEXPECTED_FIELD"],
+      [{ action: "up", brick: "postgres" }, "UNEXPECTED_FIELD"],
+      [{ action: "up", source: "x" }, "UNEXPECTED_FIELD"],
+      [{ action: "up", extra: true }, "UNEXPECTED_FIELD"],
+    ];
+    for (const [body, code] of cases) {
+      const r = await postAction(base, body);
+      expect(r.status, JSON.stringify(body)).toBe(400);
+      expect(JSON.parse(r.body).error, JSON.stringify(body)).toBe(code);
+    }
+
+    const wrongType = await raw(base, "/api/actions", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ action: "up" }),
+    });
+    expect(wrongType.status).toBe(400);
+    expect(JSON.parse(wrongType.body).error).toBe("CONTENT_TYPE");
+
+    const badJson = await raw(base, "/api/actions", { method: "POST", headers: { "content-type": "application/json" }, body: "{" });
+    expect(badJson.status).toBe(400);
+    expect(JSON.parse(badJson.body).error).toBe("INVALID_JSON");
+
+    const huge = await raw(base, "/api/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "a".repeat(17 * 1024),
+    });
+    expect(huge.status).toBe(400);
+    expect(JSON.parse(huge.body).error).toBe("BODY_TOO_LARGE");
+    expect(fakeRuns()).toEqual([]);
+  });
+
+  it("runs the CLI with exactly the right argv, and without the OIDC secret", async () => {
+    const { base } = await start(cliOptions);
+    clearFake();
+    const run = async (body: unknown) => {
+      const r = await postAction(base, body);
+      expect(r.status).toBe(202);
+      const a = await waitAction(base, JSON.parse(r.body).id);
+      expect(a.state).toBe("succeeded");
+      return a;
+    };
+    await run({ action: "add", source: "examples/postgres" });
+    const enabled = await run({ action: "enable", brick: "postgres" });
+    expect(enabled.output).toContain("fake cli started");
+    await run({ action: "disable", brick: "postgres" });
+    await run({ action: "remove", brick: "postgres" });
+    await run({ action: "up" });
+
+    expect(fakeRuns().map((r) => r.argv)).toEqual([
+      ["add", "examples/postgres"],
+      ["enable", "postgres"],
+      ["disable", "postgres"],
+      ["remove", "postgres"],
+      ["up", "--runtime", "compose"],
+    ]);
+    for (const r of fakeRuns()) expect("PLUGBRICKS_OIDC_CLIENT_SECRET" in r.env).toBe(false);
+    expect((await raw(base, "/api/actions")).status).toBe(200);
+  });
+
+  it("passes the runtime and the k8s flags to up, and only to up", async () => {
+    const { base } = await start({
+      ...cliOptions,
+      runtime: "k8s",
+      k8s: { context: "k3d-pbtest-admin", kubeconfig: "/tmp/kubeconfig", allowContext: "k3d-pbtest-admin" },
+    });
+    clearFake();
+    const up = await postAction(base, { action: "up" });
+    expect(up.status).toBe(202);
+    await waitAction(base, JSON.parse(up.body).id);
+    const enable = await postAction(base, { action: "enable", brick: "postgres" });
+    await waitAction(base, JSON.parse(enable.body).id);
+    expect(fakeRuns().map((r) => r.argv)).toEqual([
+      ["up", "--runtime", "k8s", "--context", "k3d-pbtest-admin", "--kubeconfig", "/tmp/kubeconfig", "--allow-context", "k3d-pbtest-admin"],
+      ["enable", "postgres"],
+    ]);
+  });
+
+  it("answers 409 while one runs, and stays responsive", async () => {
+    const { base } = await start(cliOptions);
+    clearFake();
+    process.env.PB_FAKE_MODE = "slow";
+    try {
+      const first = await postAction(base, { action: "up" });
+      expect(first.status).toBe(202);
+      const id = JSON.parse(first.body).id;
+      const second = await postAction(base, { action: "enable", brick: "postgres" });
+      expect(second.status).toBe(409);
+      expect(JSON.parse(second.body)).toMatchObject({ error: "BUSY", running: id });
+      const started = Date.now();
+      expect((await fetch(`${base}/api/session`)).status).toBe(200);
+      expect(Date.now() - started).toBeLessThan(500);
+      expect((await waitAction(base, id)).state).toBe("succeeded");
+    } finally {
+      delete process.env.PB_FAKE_MODE;
+    }
+  });
+
+  it("reports the child's issue codes, and writes two audit lines per action", async () => {
+    const { base } = await start(cliOptions);
+    rmSync(join(root, ".admin"), { recursive: true, force: true });
+    const modes: [string, string, string[]][] = [
+      ["busy", "Refused", ["PLATFORM_BUSY"]],
+      ["refused", "Refused", ["CAPABILITY_IN_USE"]],
+      ["failed", "Failed", []],
+      ["usage", "Refused", ["USAGE_MISSING_ARGUMENT"]],
+    ];
+    for (const [mode, result, issues] of modes) {
+      clearFake();
+      process.env.PB_FAKE_MODE = mode;
+      try {
+        const r = await postAction(base, { action: "enable", brick: "postgres" });
+        expect(r.status).toBe(202);
+        const id = JSON.parse(r.body).id;
+        const action = await waitAction(base, id);
+        expect(action.state).toBe("failed");
+        expect(action.issues).toEqual(issues);
+        const lines = auditLines().filter((l) => l.details.includes(id));
+        expect(lines, mode).toHaveLength(2);
+        expect(lines[0].result).toBe("Accepted");
+        expect(lines[1].result).toBe(result);
+        expect(lines[0].details).toContain(id);
+        expect(lines[1].details).toContain(id);
+        expect(JSON.stringify(lines)).not.toContain("fake cli started");
+        expect(JSON.stringify(lines)).not.toContain(TEST_SECRET);
+      } finally {
+        delete process.env.PB_FAKE_MODE;
+      }
+    }
+    if (process.platform !== "win32") {
+      expect(statSync(join(root, ".admin")).mode & 0o777).toBe(0o700);
+      expect(statSync(join(root, ".admin", "audit.log")).mode & 0o777).toBe(0o600);
+      expect(readFileSync(join(root, ".admin", ".gitignore"), "utf8").trim()).toBe("*");
+    }
+  });
+
+  it("lists the actions and 404s an unknown one", async () => {
+    const { base } = await start(cliOptions);
+    clearFake();
+    const r = await postAction(base, { action: "enable", brick: "postgres" });
+    const id = JSON.parse(r.body).id;
+    await waitAction(base, id);
+    const list = (await (await fetch(`${base}/api/actions`)).json()) as { actions: ActionRecord[] };
+    expect(list.actions[0].id).toBe(id);
+    expect((await raw(base, "/api/actions/nope")).status).toBe(404);
+  });
+
+  it("refuses a cross-site POST before anything runs", async () => {
+    const { base } = await start(cliOptions);
+    clearFake();
+    const port = new URL(base).port;
+    const wrongHost = await raw(base, "/api/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json", host: `evil.example:${port}` },
+      body: JSON.stringify({ action: "up" }),
+    });
+    expect(wrongHost.status).toBe(403);
+    const wrongOrigin = await raw(base, "/api/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://evil.example" },
+      body: JSON.stringify({ action: "up" }),
+    });
+    expect(wrongOrigin.status).toBe(403);
+    expect(fakeRuns()).toEqual([]);
   });
 });

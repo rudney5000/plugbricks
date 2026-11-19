@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { extractTgz, linkDir, npmPack } from "./helpers/pack.js";
 
@@ -70,6 +70,71 @@ describe("published package", () => {
     const bin = readFileSync(join(unpacked, "dist/bin.js"), "utf8");
     expect(bin.split("\n")[0]).toBe("#!/usr/bin/env node");
     expect(bin.includes("\r"), "compiled files use LF on every OS (tsconfig newLine)").toBe(false);
+  });
+
+  it("runs an admin action through its own built CLI, and audits it", async () => {
+    const project = join(work, "admin-project");
+    mkdirSync(project);
+    cpSync(join(pkgDir, "examples/postgres"), join(project, "examples", "postgres"), { recursive: true });
+    const cli = (...args: string[]) =>
+      spawnSync(process.execPath, [join(unpacked, "dist/bin.js"), ...args], { cwd: project, encoding: "utf8" });
+    expect(cli("init", "--name", "demo").status).toBe(0);
+    expect(cli("add", "examples/postgres").status).toBe(0);
+
+    const ui = join(work, "admin-ui");
+    mkdirSync(ui);
+    writeFileSync(join(ui, "index.html"), "<!doctype html><title>admin ui</title>");
+    // The admin comes from the packed package, not from src/: its own default CLI path is under test.
+    const { startAdmin } = (await import(
+      pathToFileURL(join(unpacked, "dist", "admin", "server.js")).href
+    )) as typeof import("../src/admin/server.js");
+    const admin = startAdmin({ root: project, runtime: "compose", port: 0, dev: true, uiDir: ui });
+    try {
+      const base = `http://127.0.0.1:${await admin.ready}`;
+      const post = async (action: string, brick: string) => {
+        const res = await fetch(`${base}/api/actions`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action, brick }),
+        });
+        const text = await res.text();
+        expect(res.status, text).toBe(202);
+        return JSON.parse(text) as { id: string };
+      };
+      const wait = async (id: string) => {
+        for (let i = 0; i < 250; i++) {
+          const res = await fetch(`${base}/api/actions/${id}`);
+          expect(res.status).toBe(200);
+          const a = (await res.json()) as { state: string; exitCode: number | null };
+          if (a.state !== "running") return a;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        throw new Error("the admin action did not finish");
+      };
+      const platform = () =>
+        JSON.parse(readFileSync(join(project, "platform.json"), "utf8")) as { bricks: Record<string, { enabled?: boolean }> };
+
+      const disabled = await post("disable", "postgres");
+      expect(await wait(disabled.id)).toMatchObject({ state: "succeeded", exitCode: 0 });
+      expect(platform().bricks.postgres.enabled).toBe(false);
+
+      const enabled = await post("enable", "postgres");
+      expect(await wait(enabled.id)).toMatchObject({ state: "succeeded", exitCode: 0 });
+      expect(platform().bricks.postgres.enabled).toBeUndefined();
+
+      const audit = readFileSync(join(project, ".admin", "audit.log"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { result: string; details: string });
+      for (const id of [disabled.id, enabled.id]) {
+        const lines = audit.filter((l) => l.details.includes(id));
+        expect(lines, id).toHaveLength(2);
+        expect(lines[0].result).toBe("Accepted");
+        expect(lines[1].result).toBe("Success");
+      }
+    } finally {
+      admin.close();
+    }
   });
 
   it("runs init, add, status and remove from the built CLI", () => {
