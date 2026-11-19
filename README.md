@@ -112,7 +112,10 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
 }
 ```
 
-This report is meant to feed an admin web page later; that page does not exist.
+This report feeds the **admin** (D15): `plugbricks admin --dev` serves a read-only UI on
+`http://127.0.0.1:4100` (Bricks, Router, Audit). Without `--dev`, pass `--issuer` and `--client-id`
+and set `PLUGBRICKS_OIDC_CLIENT_SECRET`; the account needs `plugbricks-viewer` or
+`plugbricks-admin`. Actions, the audit writer and the composed schema are the next step.
 
 ### `enabled` and `tags`
 

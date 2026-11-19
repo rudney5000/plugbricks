@@ -828,6 +828,58 @@ end yet.
 
 ---
 
+## D15. The admin: a local React/Vite server, OIDC, read-only first
+
+- **Status:** first slice implemented (step 6): `plugbricks admin`, `packages/admin`, OIDC and dev
+  authentication, `/api/session`, `/api/bricks`, `/api/audit`, and the Bricks, Router and Audit pages.
+- **Decision:**
+  - **A local command, not a brick:** `plugbricks admin` serves the UI on `127.0.0.1:4100` and exits
+    only when killed. The CLI stays synchronous: the listening server keeps the process alive. Flags:
+    `--port`, `--runtime`, `--context`, `--kubeconfig`, `--allow-context`, `--dev`, `--issuer`,
+    `--client-id`; the Kubernetes target follows the same rules as `status --runtime`.
+  - **The UI and the server are separate:** React 19 + Vite + Tailwind in `packages/admin` (built to
+    `packages/admin/dist`); the HTTP server lives in the core (`src/admin/server.ts`) and serves the
+    built assets. The admin API is read-only and returns the same data as the CLI: `platformStatus`,
+    `statusRuntime`, plus the installed manifests for port, subgraph and `extends`.
+  - **OIDC, or an explicit dev mode:** authorization code + PKCE against any issuer, roles
+    `plugbricks-viewer` (read) and `plugbricks-admin` (actions). The client secret is read from
+    `PLUGBRICKS_OIDC_CLIENT_SECRET`, never a flag. `--dev` turns authentication off, for local use
+    only; without a session `/api/*` answers 401 and the SPA shows the sign-in page.
+  - **OIDC details:** the issuer must be `https`; plain `http` is accepted only on `127.0.0.1`,
+    `localhost` or `[::1]` (`ADMIN_OIDC_ISSUER_INVALID` otherwise). The roles are read from the **ID
+    token** (`realm_access.roles` or `roles`): with Keycloak, the realm roles mapper must have "Add to ID
+    token" on. The sign-in `state` is also set in a short HttpOnly cookie (`pb_oidc_state`, 10 minutes,
+    path `/auth/callback`) and must match at the callback, so a callback link from someone else's
+    sign-in is refused (login CSRF). A discovery that fails is not cached: the next sign-in tries again.
+  - **Sessions** are in memory (a restart signs everyone out), carried by an HttpOnly, SameSite=Lax
+    cookie, and end on the **server** after 8 hours whatever the cookie says; expired sessions and
+    sign-ins are pruned. Sign-out is a `POST`. No secret is read by the admin or sent to the UI; the
+    API is `no-store`; internal errors go to the terminal, never to the browser.
+  - **Loopback only, and addressed to it:** the server listens on `127.0.0.1` and answers only requests
+    whose `Host` is `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`, and whose `Origin`, when
+    sent, is one of those. Listening on the loopback interface does not stop DNS rebinding (a hostile
+    page whose name resolves to 127.0.0.1); this check does, including in `--dev`. Every response has
+    `nosniff`, `X-Frame-Options: DENY` and `no-referrer`; the page has a CSP that allows only its own
+    scripts, styles and API. The Vite dev proxy presents itself as `127.0.0.1:4100`.
+  - **The runtime is read without blocking:** `/api/bricks` uses `statusRuntimeAsync`, the same steps
+    and the same report as `status --runtime` (one generator, two drivers), with each call run as an
+    asynchronous child process (no shell, 15 s timeout). Concurrent page loads share one read. The
+    brick state is its worst service in the order of `status --runtime`, with the restarts of all of
+    them.
+  - **Audit:** `/api/audit` reads `.admin/audit.log` (one JSON object per line) when it exists; the
+    writer, the actions and the role checks for them are the next step.
+- **Tested:** `test/admin.test.ts` against a local OIDC provider (discovery, keys, token endpoint, RS256
+  ID tokens; no network): admin and viewer roles, no role (403, no session), a callback without or
+  with another state cookie, a state used twice, expiry after 8 hours, discovery retried, the `Host` and
+  `Origin` checks, the headers, path traversal, a slow runtime that does not block other requests, and
+  `RUNTIME_UNAVAILABLE` (503). Not tested: a real Keycloak or any other real provider.
+- **Limits:** no action yet (Add/Enable/Disable/Deploy/Remove), so the audit file stays empty; the
+  Router page shows the live router and its subgraphs but not yet the configuration hash, its size or
+  the composed SDL; the monorepo serves `packages/admin/dist`, and the published package will copy the
+  build at `prepack` (next step).
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
