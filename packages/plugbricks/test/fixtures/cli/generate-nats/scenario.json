@@ -1,0 +1,26 @@
+{
+  "description": "a NATS server provides queue to a consumer: NATS_URL and SUBJECT in its environment, no provision task payload, the broker reachable on 4222",
+  "steps": [
+    {
+      "run": ["init", "--name", "queue-demo"]
+    },
+    {
+      "run": ["add", "examples/nats"],
+      "stdout": "Added nats 0.1.0"
+    },
+    {
+      "run": ["add", "bricks/consumer"],
+      "stdout": "Added consumer 0.1.0"
+    },
+    {
+      "run": ["generate"]
+    },
+    {
+      "run": ["generate", "--runtime", "k8s"]
+    }
+  ],
+  "exists": [
+    ".generated/compose/compose.yaml",
+    ".generated/k8s/resources.yaml"
+  ]
+}

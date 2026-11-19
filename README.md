@@ -124,6 +124,8 @@ Each consumer gets its **own vhost, user and password**: `AMQP_URL=amqp://<brick
 
 The example `examples/queue-consumer` shows the whole path: it declares its queue, publishes one message, consumes it, and its `/health` answers 200 only once that round-trip succeeded. The end-to-end tests use it, on Docker Compose and on k3d.
 
+`examples/nats` is a **second `queue` provider** (D13): core NATS only, with `NATS_URL` and `SUBJECT` per consumer, no accounts and no JetStream. Like RabbitMQ, it is an alternative — a platform has one queue provider at a time.
+
 ## Layout
 
 An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `typecheck` in every package.
@@ -135,6 +137,7 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `examples/postgres/` — a base brick that provides the `database` capability; `provision/create-database.sh` creates one role and one database per consumer (idempotent).
   - `examples/orders/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
   - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting its own vhost, user and `QUEUE_NAME` (D11, D12); its provision script creates them through the management API.
+  - `examples/nats/` — a second `queue` provider: a NATS server (core publish/subscribe), `NATS_URL` and `SUBJECT` per consumer, no accounts or JetStream (D13).
   - `examples/queue-consumer/` — an API that requires `queue`: it declares its queue, publishes one message, consumes it, and exposes the round-trip on `/health` (`apis/queue-consumer`).
   - `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned images, referenced services exist). Every issue has a stable `code`, a JSON Pointer `path`, a `message` and its `params`.
   - `src/messages.ts` — the error code catalog. Tools match on `code`, never on the message text.
@@ -230,4 +233,5 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (5b): `examples/rabbitmq` provides `queue`: one broker, any number of consumers, each with its own vhost, user and `QUEUE_NAME`; golden scenario, end to end on Docker Compose, and the same scenario in the k3d job (D11).
    - Done (5b-bis): `services[].extraPorts` and one RabbitMQ account per consumer, through the management API (D12).
    - Done (5b-ter): a real consumer (`examples/queue-consumer`, source `apis/queue-consumer`) publishes and consumes a message through the broker, on Docker Compose and k3d.
+   - Done (5c): `examples/nats` provides `queue` with core NATS (`NATS_URL`, `SUBJECT`), tested with a pinned `nats-box` client on Docker Compose and k3d (D13). Kafka stays deferred.
    - Deferred: Kafka and NATS. NATS core would need no extra port, but accounts/JetStream need a configuration file or command line the manifest cannot express today.

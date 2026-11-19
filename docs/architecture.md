@@ -148,7 +148,9 @@ consumer (`PB_POSTGRES__ORDERS__CONSUMER_PASSWORD`).
 The same wiring carries `queue` (D11, D12). `examples/rabbitmq` provides one broker; `ready` is a TCP
 check, and the provision task creates the consumer's vhost, user and permissions through the management
 API (an `extraPorts` port of the Service). Each consumer gets `AMQP_URL` with its own credentials and
-`QUEUE_NAME=<its brick name>`, then declares its own queue.
+`QUEUE_NAME=<its brick name>`, then declares its own queue. `examples/nats` (D13) is a second provider
+of the same capability, with core NATS only: `NATS_URL` and `SUBJECT=<its brick name>`, no accounts and
+no JetStream.
 
 ## 6. GraphQL Federation v2 (built)
 

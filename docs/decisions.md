@@ -775,6 +775,29 @@ end yet.
 
 ---
 
+## D13. NATS core: a second queue provider, without accounts or JetStream
+
+- **Status:** implemented (step 5c): `examples/nats/plugin.json`, capability `queue`; golden scenario
+  `generate-nats`, and end-to-end tests on Docker Compose and k3d with a pinned `nats-box` client.
+- **Decision:** `nats:2.11.6-alpine` on port 4222, no volume, no healthcheck (the image exposes no
+  monitoring listener without a command, and the manifest cannot pass one); `ready` is a TCP check
+  (`nc -z`, from `busybox:1.36`), `provision` is a no-op, and each consumer gets
+  `NATS_URL=nats://<broker>:4222` and `SUBJECT=<consumer.name>`. Core NATS only: publish/subscribe.
+- **Why not JetStream or accounts:** both need a configuration file or a command line (`-js`, `-m`,
+  account/user definitions) that a service manifest cannot express today. They are deferred with the
+  same reasoning as D11/D12; when the manifest grows a `command`/config field, a NATS brick can offer
+  JetStream and per-consumer accounts.
+- **Alternatives, not complements:** `queue` has one provider per platform, as `database` does. NATS
+  and RabbitMQ are two implementations of that capability; a platform installs one.
+- **Tests:** `natsio/nats-box:0.19.2` (pinned) is used as a client in the tests, not as a brick: on
+  Compose a subscriber container and a publisher container on the project network; on k3d a
+  `nats-sub` pod that subscribes and receives the published message in its log.
+- **Consequences:** no persistence, no per-consumer credentials, no JetStream; the broker is not
+  published and has no healthcheck, so `status --runtime` reports it as `unknown` ("running; no
+  health check"), never as healthy.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
