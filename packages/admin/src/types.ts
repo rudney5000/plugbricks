@@ -49,12 +49,35 @@ export interface Session {
   runtime: string;
 }
 
+export type ActionName = "add" | "enable" | "disable" | "remove" | "up";
+
+export interface ActionInput {
+  action: ActionName;
+  brick?: string;
+  source?: string;
+}
+
+export interface ActionRecord {
+  id: string;
+  action: ActionName;
+  brick?: string;
+  source?: string;
+  user: string;
+  role: Role;
+  state: "running" | "succeeded" | "failed";
+  exitCode: number | null;
+  output: string[];
+  issues: string[];
+  startedAt: string;
+  finishedAt: string | null;
+}
+
 export interface AuditEntry {
   time: string;
   user: string;
   role: string;
   action: string;
   brick: string;
-  result: "Success" | "Refused" | "Failed";
+  result: "Accepted" | "Success" | "Refused" | "Failed";
   details: string;
 }

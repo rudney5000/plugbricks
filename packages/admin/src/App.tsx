@@ -41,7 +41,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout session={session} />}>
-          <Route index element={<Bricks />} />
+          <Route index element={<Bricks session={session} />} />
           <Route path="router" element={<RouterPage />} />
           <Route path="audit" element={<Audit />} />
           <Route path="*" element={<Navigate to="/" replace />} />
