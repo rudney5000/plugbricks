@@ -27,5 +27,9 @@
     "service": "app",
     "schema": "schema.graphql",
     "path": "/graphql"
-  }
+  },
+  "tags": [
+    "api",
+    "graphql"
+  ]
 }

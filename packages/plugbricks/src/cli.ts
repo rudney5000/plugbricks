@@ -2,7 +2,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
-import { addBrick, initPlatform, PlugbricksError, platformStatus, removeBrick, type StatusResult, type VolumeRef } from "./platform.js";
+import {
+  addBrick,
+  initPlatform,
+  PlugbricksError,
+  platformStatus,
+  removeBrick,
+  setBrickEnabled,
+  type StatusResult,
+  type VolumeRef,
+} from "./platform.js";
 import { liveStatusText } from "./live.js";
 import {
   down,
@@ -31,6 +40,8 @@ Commands:
   init [--name <name>]   Create platform.json, platform.lock and .platform/bricks/ here
   add <path>             Install the brick at <path> (a directory with a plugin.json)
   remove <name>          Uninstall a brick
+  enable <name>          Deploy an installed brick again (it was disabled)
+  disable <name>         Stop deploying an installed brick; its volumes and secrets are kept
   status [--json]        Show installed bricks, capabilities and retained volumes
   status --runtime <name> [--json]
                          Also read what the runtime really runs (read-only): state, reason, restarts
@@ -64,6 +75,7 @@ function printDeclared(io: Io, s: StatusResult): void {
   io.stdout(`Platform ${s.name}: ${s.bricks.length} brick(s)`);
   for (const b of s.bricks) {
     const parts = [
+      ...(b.enabled ? [] : ["disabled"]),
       ...(b.provides.length ? [`provides ${b.provides.join(", ")}`] : []),
       ...Object.entries(b.requires).map(([cap, r]) => `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`),
     ];
@@ -186,6 +198,14 @@ export function main(argv: string[], io: Io): number {
         for (const v of r.pendingDeletion) {
           io.stdout(`  volume ${vol(v)} marked for deletion (retention: delete); only "up --prune-volumes" deletes it`);
         }
+        return 0;
+      }
+      case "enable":
+      case "disable": {
+        only(1, "a brick name");
+        const enabled = command === "enable";
+        const r = setBrickEnabled(root, args[0], enabled);
+        io.stdout(`${enabled ? "Enabled" : "Disabled"} ${r.name}`);
         return 0;
       }
       case "status": {

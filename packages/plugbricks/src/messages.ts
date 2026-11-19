@@ -84,6 +84,7 @@ export const MESSAGES = {
   BRICK_SYMLINK: 'brick "{brick}" contains a symbolic link ({file}); a brick must contain regular files only',
   BRICK_NAME_CONFLICT: 'a different brick named "{name}" is already installed (from {source}); remove it before adding this one',
   CAPABILITY_ALREADY_PROVIDED: 'brick "{brick}" provides "{capability}", which "{provider}" already provides',
+  PROVIDER_DISABLED: 'capability "{capability}" is provided by "{provider}", which is disabled; enable it first',
   REQUIRED_CAPABILITY_MISSING:
     'brick "{brick}" requires capability "{capability}", which no installed brick provides; add a provider first',
 

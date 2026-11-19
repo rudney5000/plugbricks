@@ -7,7 +7,9 @@
   "additionalProperties": false,
   "required": ["name", "version", "services"],
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "name": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$",
@@ -18,32 +20,59 @@
       "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$",
       "description": "Published plugin version (semver)."
     },
-    "description": { "type": "string" },
+    "description": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "description": "Free-form labels, for filtering in the admin (api, graphql, database, auth, ...). Sorted in the lock."
+    },
     "services": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/service" }
+      "items": {
+        "$ref": "#/$defs/service"
+      }
     },
     "provides": {
       "type": "object",
       "description": "Capabilities this plugin provides, keyed by capability name (e.g. database, queue).",
-      "propertyNames": { "$ref": "#/$defs/capabilityName" },
-      "additionalProperties": { "$ref": "#/$defs/provide" }
+      "propertyNames": {
+        "$ref": "#/$defs/capabilityName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/provide"
+      }
     },
     "requires": {
       "type": "object",
       "description": "Capabilities this plugin needs, keyed by capability name. The resolver activates a missing provider.",
-      "propertyNames": { "$ref": "#/$defs/capabilityName" },
-      "additionalProperties": { "$ref": "#/$defs/require" }
+      "propertyNames": {
+        "$ref": "#/$defs/capabilityName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/require"
+      }
     },
-    "subgraph": { "$ref": "#/$defs/subgraph" },
+    "subgraph": {
+      "$ref": "#/$defs/subgraph"
+    },
     "extends": {
       "type": "array",
       "description": "Entities owned by another plugin that this subgraph extends. The resolver activates the owner.",
-      "items": { "$ref": "#/$defs/extends" }
+      "items": {
+        "$ref": "#/$defs/extends"
+      }
     }
   },
-  "dependentRequired": { "extends": ["subgraph"] },
+  "dependentRequired": {
+    "extends": ["subgraph"]
+  },
   "$defs": {
     "capabilityName": {
       "type": "string",
@@ -76,13 +105,20 @@
       "additionalProperties": false,
       "required": ["name", "image", "port"],
       "properties": {
-        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
         "image": {
           "type": "string",
           "minLength": 1,
           "description": "Image reference. Pin a version; a floating tag such as :latest is rejected by the resolver."
         },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
         "extraPorts": {
           "type": "array",
           "description": "Additional ports the service listens on. Kubernetes: extra ports of its Service, so that a provision task or an operator in the platform can reach them; Compose needs nothing (containers of the platform network reach any port). Never published on the host (D9). Use it for a management or metrics API, not for a second service.",
@@ -97,7 +133,11 @@
                 "maxLength": 15,
                 "description": "Kubernetes Service port name: lowercase letters, digits and dashes, at most 15 characters. \"main\" is reserved for the primary port; names and port numbers must be unique within the service."
               },
-              "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              }
             }
           }
         },
@@ -108,8 +148,14 @@
             "additionalProperties": false,
             "required": ["name", "mountPath"],
             "properties": {
-              "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-              "mountPath": { "type": "string", "pattern": "^/" },
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*$"
+              },
+              "mountPath": {
+                "type": "string",
+                "pattern": "^/"
+              },
               "retention": {
                 "enum": ["retain", "delete"],
                 "default": "retain",
@@ -127,17 +173,27 @@
             "exec": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Command run inside the container. Exec probes only: they translate to both runtimes."
             },
-            "intervalSeconds": { "type": "integer", "minimum": 1, "default": 5 },
+            "intervalSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 5
+            },
             "timeoutSeconds": {
               "type": "integer",
               "minimum": 1,
               "default": 3,
               "description": "Limit for one attempt. Always set explicitly by the drivers, because Kubernetes defaults to 1s and Docker Compose to 30s."
             },
-            "retries": { "type": "integer", "minimum": 1, "default": 10 },
+            "retries": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 10
+            },
             "startPeriodSeconds": {
               "type": "integer",
               "minimum": 0,
@@ -148,8 +204,12 @@
         },
         "env": {
           "type": "object",
-          "propertyNames": { "$ref": "#/$defs/envName" },
-          "additionalProperties": { "type": "string" },
+          "propertyNames": {
+            "$ref": "#/$defs/envName"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Static variables. The only template allowed is ${secrets.<name>} (a secret generated by plugbricks, owned by this brick); never put a secret in clear here. A lone $ is literal."
         }
       }
@@ -172,7 +232,9 @@
             "exec": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Command, without a shell, that exits 0 when the capability is ready. Must target ${provider.host}; may use ${provider.port}."
             },
             "image": {
@@ -180,7 +242,11 @@
               "minLength": 1,
               "description": "Image to run the command in; it must contain /bin/sh, date and sleep (the wait loop). Default: the image of provides.<capability>.service. Same pinning rule as services[].image."
             },
-            "intervalSeconds": { "type": "integer", "minimum": 1, "default": 2 }
+            "intervalSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 2
+            }
           }
         },
         "provision": {
@@ -189,11 +255,17 @@
           "required": ["image", "command"],
           "description": "One-shot task run once per consumer, before it starts. Must be idempotent (create if absent).",
           "properties": {
-            "image": { "type": "string", "minLength": 1, "description": "Image reference. Same pinning rule as services[].image." },
+            "image": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Image reference. Same pinning rule as services[].image."
+            },
             "command": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Full argv, run without a shell; it replaces the image entrypoint. Templates: ${provider.host}, ${provider.port}, ${consumer.name}; never a secret (pass secrets through env)."
             },
             "scripts": {
@@ -203,16 +275,24 @@
             },
             "env": {
               "type": "object",
-              "propertyNames": { "$ref": "#/$defs/envName" },
-              "additionalProperties": { "type": "string" }
+              "propertyNames": {
+                "$ref": "#/$defs/envName"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           }
         },
         "inject": {
           "type": "object",
           "minProperties": 1,
-          "propertyNames": { "$ref": "#/$defs/envName" },
-          "additionalProperties": { "type": "string" },
+          "propertyNames": {
+            "$ref": "#/$defs/envName"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "Variables added to the consumer's environment. Templates: ${consumer.name}, ${provider.host}, ${provider.port}, ${secrets.<name>}. A secret this brick's own services also use is the brick's; any other secret is generated per consumer."
         }
       }
@@ -222,12 +302,19 @@
       "additionalProperties": false,
       "required": ["service", "schema", "path"],
       "properties": {
-        "service": { "type": "string", "description": "Service that serves the subgraph." },
+        "service": {
+          "type": "string",
+          "description": "Service that serves the subgraph."
+        },
         "schema": {
           "type": "string",
           "description": "Path of the SDL file shipped with the plugin, relative to the manifest. Composition never uses introspection."
         },
-        "path": { "type": "string", "pattern": "^/", "default": "/graphql" }
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/graphql"
+        }
       }
     },
     "extends": {
@@ -235,12 +322,18 @@
       "additionalProperties": false,
       "required": ["plugin", "entities"],
       "properties": {
-        "plugin": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$" },
+        "plugin": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$"
+        },
         "entities": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" }
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9]*$"
+          }
         }
       }
     }

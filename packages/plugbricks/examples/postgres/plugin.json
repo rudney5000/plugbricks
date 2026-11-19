@@ -63,5 +63,8 @@
         "DATABASE_URL": "postgres://${consumer.name}:${secrets.consumer_password}@${provider.host}:${provider.port}/${consumer.name}"
       }
     }
-  }
+  },
+  "tags": [
+    "database"
+  ]
 }

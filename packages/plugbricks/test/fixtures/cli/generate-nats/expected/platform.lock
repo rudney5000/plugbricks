@@ -16,12 +16,15 @@
       "volumes": []
     },
     "nats": {
-      "integrity": "sha256-fe77e3d6aeb292ecda4dc94511e82245937e3f0e84a64d400cffee1449479d9f",
+      "integrity": "sha256-3014469103cea2b3289614bdeca9e632b02a3842cd62eb990b1e916b207abc20",
       "provides": [
         "queue"
       ],
       "requires": {},
       "source": "examples/nats",
+      "tags": [
+        "queue"
+      ],
       "version": "0.1.0",
       "volumes": []
     }

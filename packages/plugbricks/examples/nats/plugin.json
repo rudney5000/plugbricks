@@ -14,18 +14,30 @@
     "queue": {
       "service": "broker",
       "ready": {
-        "exec": ["nc", "-z", "-w", "2", "${provider.host}", "${provider.port}"],
+        "exec": [
+          "nc",
+          "-z",
+          "-w",
+          "2",
+          "${provider.host}",
+          "${provider.port}"
+        ],
         "image": "busybox:1.36",
         "intervalSeconds": 2
       },
       "provision": {
         "image": "busybox:1.36",
-        "command": ["true"]
+        "command": [
+          "true"
+        ]
       },
       "inject": {
         "NATS_URL": "nats://${provider.host}:${provider.port}",
         "SUBJECT": "${consumer.name}"
       }
     }
-  }
+  },
+  "tags": [
+    "queue"
+  ]
 }

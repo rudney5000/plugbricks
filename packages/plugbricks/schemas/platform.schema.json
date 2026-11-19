@@ -7,7 +7,9 @@
   "additionalProperties": false,
   "required": ["name", "bricks"],
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "name": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$",
@@ -30,7 +32,9 @@
     "bricks": {
       "type": "object",
       "description": "Installed bricks, keyed by the name in their plugin.json.",
-      "propertyNames": { "$ref": "#/$defs/brickName" },
+      "propertyNames": {
+        "$ref": "#/$defs/brickName"
+      },
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
@@ -40,12 +44,20 @@
             "type": "string",
             "minLength": 1,
             "description": "Directory the brick was added from, relative to this file, with / separators."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether the brick is deployed. A disabled brick stays installed (its volumes and secrets are kept) but generate and up do not render it. Absent means true."
           }
         }
       }
     }
   },
   "$defs": {
-    "brickName": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$" }
+    "brickName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,38}[a-z0-9]$"
+    }
   }
 }

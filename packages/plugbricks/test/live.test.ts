@@ -349,4 +349,43 @@ describe("plugbricks status --runtime", () => {
     expect(f.calls).toEqual([]);
     expect(r.out).not.toContain("Runtime (");
   });
+
+  it("reports a disabled brick as stopped and enabled false, without degrading the platform", () => {
+    const dir = join(pkg, ".test-work/live/disabled");
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    for (const b of ["postgres", "orders"]) cpSync(join(pkg, "examples", b), join(dir, b), { recursive: true });
+    const io = { cwd: dir, stdout: () => {}, stderr: () => {} };
+    expect(main(["init", "--name", "demo"], io)).toBe(0);
+    expect(main(["add", "postgres"], io)).toBe(0);
+    expect(main(["add", "orders"], io)).toBe(0);
+    expect(main(["disable", "orders"], io)).toBe(0);
+
+    const project = readProject(dir);
+    const plan = planProject(project);
+    expect(plan.services.map((s) => s.name)).toEqual(["postgres-db"]);
+    const observed = new Map([
+      ["postgres-db", { state: "healthy" as const, reason: null, restarts: 0, instances: ["postgres-db-1"], image: null }],
+    ]);
+    const report = buildLiveStatus({
+      plan,
+      runtime: "compose",
+      context: null,
+      problems: [],
+      observed,
+      routerAddress: null,
+      disabled: [{ name: "orders", tags: ["api", "graphql"], services: [{ name: "orders-app", service: "app" }] }],
+    });
+    expect(schemaIssues(statusRuntimeSchema.validate, report)).toEqual([]);
+    expect(report.bricks.find((b) => b.name === "orders")).toMatchObject({ enabled: false, tags: ["api", "graphql"] });
+    const orders = report.bricks.flatMap((b) => b.services).find((s) => s.name === "orders-app")!;
+    expect(orders).toMatchObject({
+      enabled: false,
+      deployed: false,
+      state: "stopped",
+      reason: "disabled in platform.json",
+      mismatch: null,
+    });
+    expect(report.state).toBe("healthy");
+  });
 });

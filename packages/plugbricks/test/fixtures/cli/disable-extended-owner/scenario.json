@@ -1,0 +1,10 @@
+{
+  "description": "disabling the owner of an entity that an enabled brick extends is refused",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/shipping"] },
+    { "run": ["disable", "orders"], "exit": 1, "codes": ["EXTENDS_IN_USE"], "unchanged": true }
+  ]
+}
