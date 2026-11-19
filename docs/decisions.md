@@ -28,12 +28,12 @@ Each entry says which milestone implements it. Status: **accepted** = agreed, no
 Checked on 2026-11-16. Every archive was verified against the release `checksums.txt`
 before extraction (linux/amd64).
 
-| Tool | Version | sha256 of the archive | Flag in `init --help` | Behaviour |
-|---|---|---|---|---|
-| score-k8s | 0.23.0 | `36a99aea22b5f87a5e6545854086b6dcb2f8d3cafc7f52e02d4b52ae6d62d944` | yes | no provisioner loaded, `generate` fails |
-| score-k8s | 0.22.0 | `d32f190d6278943d85cfecfacdee31146ff56b5fa148d6fe2850da1fa237d2f0` | yes | same |
-| score-compose | 0.50.0 | `7257a7eed0079f92382668ff3ea4abc3158d93bce4b5b2f40b1476d84d313564` | yes | same |
-| score-compose | 0.49.0 | `4d69d33049c5042e47e432d28f1021aee068c75ab766341e2689cb9b85646c6d` | yes | same |
+| Tool          | Version | sha256 of the archive                                              | Flag in `init --help` | Behaviour                               |
+| ------------- | ------- | ------------------------------------------------------------------ | --------------------- | --------------------------------------- |
+| score-k8s     | 0.23.0  | `36a99aea22b5f87a5e6545854086b6dcb2f8d3cafc7f52e02d4b52ae6d62d944` | yes                   | no provisioner loaded, `generate` fails |
+| score-k8s     | 0.22.0  | `d32f190d6278943d85cfecfacdee31146ff56b5fa148d6fe2850da1fa237d2f0` | yes                   | same                                    |
+| score-compose | 0.50.0  | `7257a7eed0079f92382668ff3ea4abc3158d93bce4b5b2f40b1476d84d313564` | yes                   | same                                    |
+| score-compose | 0.49.0  | `4d69d33049c5042e47e432d28f1021aee068c75ab766341e2689cb9b85646c6d` | yes                   | same                                    |
 
 The help text says only "Disable generation of the default provisioners file", so the
 behaviour was checked as well, offline, for each version:
@@ -222,15 +222,15 @@ end yet.
      Compose service named `<workload>-<container>`, and provisioned resources get random names
      (`pg-e3W8IV`); our convention (one network name `<brick>-<service>` per service) does not
      map onto it.
-  Together, the confirmed reasons (1, 3) can be patched with patch templates, but each driver
-  would then depend on an external binary, its state file (`.score-compose/state.yaml`, with
-  secrets in clear) and its version, and would no longer be a pure function plan → files. That
-  trade-off, not a failure of Score, is the reason for the decision.
-  **Kubernetes: the reasons are an extrapolation, the driver is now verified.** score-k8s 0.22.0
-  and 0.23.0 were tested earlier on a k3d cluster, only for the init-container wait of D2, which
-  worked. None of the three reasons above was verified with score-k8s, so dropping score-k8s
-  still rests on the Compose observations and on the dependency argument. What changed on
-  2026-11-17 is that plugbricks' own Kubernetes driver ran on a real cluster (see Consequences).
+     Together, the confirmed reasons (1, 3) can be patched with patch templates, but each driver
+     would then depend on an external binary, its state file (`.score-compose/state.yaml`, with
+     secrets in clear) and its version, and would no longer be a pure function plan → files. That
+     trade-off, not a failure of Score, is the reason for the decision.
+     **Kubernetes: the reasons are an extrapolation, the driver is now verified.** score-k8s 0.22.0
+     and 0.23.0 were tested earlier on a k3d cluster, only for the init-container wait of D2, which
+     worked. None of the three reasons above was verified with score-k8s, so dropping score-k8s
+     still rests on the Compose observations and on the dependency argument. What changed on
+     2026-11-17 is that plugbricks' own Kubernetes driver ran on a real cluster (see Consequences).
 - **Evidence** (score-compose 0.50.0, `linux_amd64` archive sha256
   `7257a7eed0079f92382668ff3ea4abc3158d93bce4b5b2f40b1476d84d313564`, equal to the published
   checksums file; run offline with the built-in provisioners):
@@ -288,6 +288,7 @@ end yet.
     completing. Not reproduced.
   - Reason 3: the services are `client-main` (workload `client` + container `main`) and
     `pg-e3W8IV` (random), not `<brick>-<service>`.
+
 - **Decision:**
   - `src/plan.ts` builds a runtime-independent plan from `platform.lock` and the installed
     copies (integrity checked, manifests re-validated). `src/drivers/compose.ts` and
@@ -346,16 +347,17 @@ end yet.
 - **Status:** implemented (milestone 3).
 - **Templates** are checked when a brick is added (`TEMPLATE_UNKNOWN`), per field:
 
-  | Field | Allowed |
-  |---|---|
-  | `services[].env` | `${secrets.<name>}` |
-  | `provides.<cap>.ready.exec` | `${provider.host}`, `${provider.port}` |
-  | `provides.<cap>.provision.command` | `${provider.host}`, `${provider.port}`, `${consumer.name}` |
-  | `provides.<cap>.provision.env`, `inject` | all four |
+  | Field                                    | Allowed                                                    |
+  | ---------------------------------------- | ---------------------------------------------------------- |
+  | `services[].env`                         | `${secrets.<name>}`                                        |
+  | `provides.<cap>.ready.exec`              | `${provider.host}`, `${provider.port}`                     |
+  | `provides.<cap>.provision.command`       | `${provider.host}`, `${provider.port}`, `${consumer.name}` |
+  | `provides.<cap>.provision.env`, `inject` | all four                                                   |
 
   Secrets never go on a command line, where every process can read them (`ps`). Any other
   `${...}` is refused, so a typo never reaches a container as literal text. A lone `$` is
   literal; the drivers double it, because Compose and Kubernetes both read `$$` as `$`.
+
 - **Scope of a secret:** a secret name that the brick's own `services[].env` uses belongs to
   the brick (`PB_<BRICK>__<NAME>`, e.g. the postgres superuser password), even when `provision`
   or `inject` use it too. Any other secret used in `provision.env` or `inject` is generated
@@ -470,9 +472,9 @@ end yet.
      permissive licences of the rest of the tree are reviewed in
      `docs/pre-publication-checklist.md`.
   3. **Speed**, 3 to 5 times lower per call.
-  The error texts of the composer are shown as they are (it names the bricks, because a subgraph
-  is named after its brick, the type and the field) and are not parsed: only their codes and
-  structure would be stable with Apollo's library, and we accepted that trade.
+     The error texts of the composer are shown as they are (it names the bricks, because a subgraph
+     is named after its brick, the type and the field) and are not parsed: only their codes and
+     structure would be stable with Apollo's library, and we accepted that trade.
 - **`extends` exercised by a real second API (4b-2, 2026-11-17):** `examples/shipping` extends
   `Order` of `examples/orders`. A test composes all the example bricks together and expects
   success; scenarios on the real example bricks show `EXTENDS_OWNER_MISSING` while orders is not
@@ -500,9 +502,9 @@ end yet.
   on purpose; the end-to-end test asserts the first, so that fixing it makes the test say so.
   - **`shipOrder` accepts an order id that does not exist.** Shipping has its own database and cannot
     know which orders exist. Through the router: `mutation { shipOrder(orderId: "999999", carrier: "ups")
-    { carrier status } }` answers `{"data":{"shipOrder":{"carrier":"ups","status":"SHIPPED"}}}`; the
+{ carrier status } }` answers `{"data":{"shipOrder":{"carrier":"ups","status":"SHIPPED"}}}`; the
     shipment is then visible only by asking shipping directly, `{ shipment(orderId: "999999") { carrier
-    status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`, and never through an
+status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`, and never through an
     `Order`: `{ order(id: "999999") { id shipment { carrier } } }` answers `{"data":{"order":null}}`.
     The shipment of an order that was never created is an orphan row in the shipping database.
   - **No implicit `extends` detection.** With the `extends` field removed from the shipping manifest,
@@ -806,7 +808,7 @@ end yet.
   and by a live-report test.
 - **Decision:**
   - **A brick is enabled unless `platform.json` says otherwise.** `add` writes no flag; `disable
-    <name>` writes `enabled: false`; `enable <name>` removes it. A disabled brick is still installed:
+<name>` writes `enabled: false`; `enable <name>` removes it. A disabled brick is still installed:
     its lock entry, volumes and secrets are kept, and its name stays reserved; `generate` and `up`
     simply do not render it. Compose `--remove-orphans` and the Kubernetes cleanup remove its
     workloads; its volumes (PVCs) and the secret file are kept.
@@ -877,6 +879,38 @@ end yet.
   Router page shows the live router and its subgraphs but not yet the configuration hash, its size or
   the composed SDL; the monorepo serves `packages/admin/dist`, and the published package will copy the
   build at `prepack` (next step).
+
+---
+
+## D16. One changing command at a time: a lock file per platform
+
+- **Status:** implemented (step 6b, before the admin actions): `src/lock.ts`, taken by the CLI for
+  `add`, `remove`, `enable`, `disable`, `generate`, `up` and `down`. Tested by `test/lock.test.ts`, with
+  a real second process holding the lock.
+- **Decision:** a command that changes the platform first creates `.platform/lock` with `O_EXCL`
+  (`openSync(…, "wx")`) and writes its pid, the command with its arguments and the time; the file is
+  removed when the command ends, also when it fails. Another changing command meanwhile is refused with
+  `PLATFORM_BUSY` (exit code 1), which names that command and its process. `init`, `status` (with or
+  without `--runtime`) and `admin` do not take the lock: reading is never blocked.
+- **Why:**
+  - **The admin runs the CLI.** Its actions are `plugbricks` commands in a child process (next step);
+    a person can run `up` in a terminal at the same time. Two writers of `platform.lock`, of
+    `.generated/` or of the runtime at once would leave either one's result, or a mix.
+  - **A file, not a lock in the admin's memory:** only a file is seen by every process, the terminal's
+    included. `O_EXCL` creation is atomic on every OS we support, local file systems included.
+- **A holder that died:** a process killed with `SIGKILL`, or a machine that crashed, leaves its lock.
+  The next command checks the pid with `process.kill(pid, 0)` (sends nothing); a process that no longer
+  exists has its lock taken over. An empty lock file (its holder is still writing it) gets a second look
+  100 ms later before it counts as stale.
+- **Limits:**
+  - The pid is only meaningful on the same machine: a platform folder shared between machines (a
+    network drive) is not protected, and a pid reused by an unrelated process keeps a stale lock until
+    that process ends (the message names the file and the process).
+  - The lock does not wait: a busy platform is refused, not queued.
+  - The lock file is in `.platform/`, beside the bricks, which a project may commit: `init` writes
+    `.platform/.gitignore` with `/lock` in it. A platform created before this has none: add
+    `.platform/lock` to its `.gitignore` (a refused command must not change any file, so the lock
+    does not write one).
 
 ---
 
