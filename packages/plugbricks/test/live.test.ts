@@ -15,7 +15,7 @@ import {
 } from "../src/live.js";
 import { planProject, type Plan } from "../src/plan.js";
 import { readProject } from "../src/platform.js";
-import type { Exec, ExecResult } from "../src/runtime.js";
+import { defaultAsyncExec, statusRuntime, statusRuntimeAsync, type AsyncExec, type Exec, type ExecResult } from "../src/runtime.js";
 import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 
 // status --runtime, without Docker or a cluster: the real plan of a platform postgres + orders + shipping,
@@ -387,5 +387,66 @@ describe("plugbricks status --runtime", () => {
       mismatch: null,
     });
     expect(report.state).toBe("healthy");
+  });
+});
+
+describe("status --runtime for a server (statusRuntimeAsync, used by the admin)", () => {
+  it("makes the same calls, with the same timeouts, and builds the same report as the synchronous one", async () => {
+    for (const [runtime, answers, k8s] of [
+      ["compose", composeAnswers("compose/healthy.ndjson"), undefined],
+      [
+        "k8s",
+        (_c: string, args: string[]) => (args.includes("get") ? { stdout: fixture("k8s/healthy.json") } : undefined),
+        { context: "k3d-pbtest-x" },
+      ],
+    ] as const) {
+      const sync = fakeRuntime(answers);
+      const expected = statusRuntime(work, runtime, [], { exec: sync.exec, k8s });
+      const calls: Call[] = [];
+      const execAsync: AsyncExec = async (cmd, args, opts) => {
+        calls.push({ cmd, args, timeoutMs: opts.timeoutMs });
+        return { status: 0, stdout: "", stderr: "", ...answers(cmd, args) };
+      };
+      expect(await statusRuntimeAsync(work, runtime, [], { execAsync, k8s })).toEqual(expected);
+      expect(calls).toEqual(sync.calls);
+    }
+  });
+
+  it("keeps the cluster guards: a protected context is refused before any call", async () => {
+    const execAsync: AsyncExec = async () => {
+      throw new Error("no call expected");
+    };
+    await expect(statusRuntimeAsync(work, "k8s", [], { execAsync, k8s: { context: "k3d-platform" } })).rejects.toMatchObject({
+      issues: [expect.objectContaining({ code: "K8S_CONTEXT_REFUSED" })],
+    });
+  });
+});
+
+describe("defaultAsyncExec (a real process, no shell)", () => {
+  const node = process.execPath;
+  it("returns the exit code and both outputs", async () => {
+    const r = await defaultAsyncExec(node, ["-e", "process.stdout.write('out'); process.stderr.write('err'); process.exit(3)"], {
+      cwd: pkg,
+    });
+    expect(r).toEqual({ status: 3, stdout: "out", stderr: "err" });
+  });
+
+  it("reports a program that is not installed as ENOENT", async () => {
+    const r = await defaultAsyncExec("plugbricks-no-such-program", [], { cwd: pkg });
+    expect(r.error).toBe("ENOENT");
+    expect(r.status).toBeNull();
+  });
+
+  it("kills a program that runs past its timeout and reports ETIMEDOUT", async () => {
+    const started = Date.now();
+    const r = await defaultAsyncExec(node, ["-e", "setTimeout(() => {}, 30000)"], { cwd: pkg, timeoutMs: 200 });
+    expect(r.error).toBe("ETIMEDOUT");
+    expect(r.status).toBeNull();
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
+  it("passes arguments as they are: no shell expansion", async () => {
+    const r = await defaultAsyncExec(node, ["-e", "process.stdout.write(process.argv[1])", "$HOME; echo hi"], { cwd: pkg });
+    expect(r.stdout).toBe("$HOME; echo hi");
   });
 });

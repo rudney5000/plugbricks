@@ -98,7 +98,8 @@ export interface LiveStatus {
   problems: { code: string; path: string; message: string; params: Record<string, string> }[];
 }
 
-const SEVERITY: Record<LiveState, number> = { healthy: 0, unknown: 1, starting: 2, stopped: 3, "not deployed": 4, unhealthy: 5 };
+/** How bad each state is, the worst last: the one order used by status --runtime and the admin. */
+export const SEVERITY: Record<LiveState, number> = { healthy: 0, unknown: 1, starting: 2, stopped: 3, "not deployed": 4, unhealthy: 5 };
 
 /** The worst of several instances: one unhealthy pod among two makes the service unhealthy. */
 function worst(parts: Observed[]): Observed {

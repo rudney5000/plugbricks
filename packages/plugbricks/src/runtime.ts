@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ROUTER_NAME, WAIT_TIMEOUT_EXIT } from "./drivers/common.js";
@@ -462,6 +462,81 @@ function callFailure(cmd: string, args: string[], r: ExecResult): string {
  * cluster must be named, with the same guards as up and down. `problems` are the declared state's.
  */
 export function statusRuntime(root: string, runtime: Runtime, problems: Issue[], deps: RuntimeDeps = {}): LiveStatus {
+  const steps = statusSteps(root, runtime, problems, deps);
+  const quiet: RuntimeDeps = { ...deps, log: undefined };
+  let next = steps.next();
+  while (!next.done) {
+    const c = next.value;
+    next = steps.next(run(quiet, c.cwd, c.cmd, c.args, STATUS_CALL_TIMEOUT_MS));
+  }
+  return next.value;
+}
+
+/** Runs a program without a shell, without blocking the event loop. Same result shape as Exec. */
+export type AsyncExec = (cmd: string, args: string[], opts: { cwd: string; timeoutMs?: number }) => Promise<ExecResult>;
+
+const ASYNC_MAX_OUTPUT = 64 * 1024 * 1024;
+
+export const defaultAsyncExec: AsyncExec = (cmd, args, opts) =>
+  new Promise((done) => {
+    let stdout = "";
+    let stderr = "";
+    let error: string | undefined;
+    let settled = false;
+    const child = spawn(cmd, args, { cwd: opts.cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const finish = (r: ExecResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      done(r);
+    };
+    const stop = (why: string) => {
+      error ??= why;
+      child.kill("SIGKILL");
+    };
+    const timer = opts.timeoutMs !== undefined ? setTimeout(() => stop("ETIMEDOUT"), opts.timeoutMs) : undefined;
+    child.stdout.setEncoding("utf8").on("data", (d: string) => {
+      stdout += d;
+      if (stdout.length > ASYNC_MAX_OUTPUT) stop("ENOBUFS");
+    });
+    child.stderr.setEncoding("utf8").on("data", (d: string) => {
+      stderr += d;
+      if (stderr.length > ASYNC_MAX_OUTPUT) stop("ENOBUFS");
+    });
+    child.on("error", (e: NodeJS.ErrnoException) => finish({ status: null, stdout, stderr, error: e.code ?? e.message }));
+    child.on("close", (code) => finish({ status: error ? null : code, stdout, stderr, ...(error ? { error } : {}) }));
+  });
+
+/**
+ * statusRuntime for a server: the same calls and the same report, but each call runs without
+ * blocking the event loop. `execAsync` replaces the programs (tests); a synchronous `exec` is also
+ * accepted and wrapped.
+ */
+export async function statusRuntimeAsync(
+  root: string,
+  runtime: Runtime,
+  problems: Issue[],
+  deps: RuntimeDeps & { execAsync?: AsyncExec } = {},
+): Promise<LiveStatus> {
+  const exec: AsyncExec = deps.execAsync ?? (deps.exec ? async (c, a, o) => deps.exec!(c, a, o) : defaultAsyncExec);
+  const steps = statusSteps(root, runtime, problems, deps);
+  let next = steps.next();
+  while (!next.done) {
+    const c = next.value;
+    next = steps.next(await exec(c.cmd, c.args, { cwd: c.cwd, timeoutMs: STATUS_CALL_TIMEOUT_MS }));
+  }
+  return next.value;
+}
+
+/** One read call statusSteps needs; the driver runs it and passes the result back. */
+interface StatusCall {
+  cmd: string;
+  args: string[];
+  cwd: string;
+}
+
+/** The single definition of what status --runtime reads and how it builds the report. */
+function* statusSteps(root: string, runtime: Runtime, problems: Issue[], deps: RuntimeDeps): Generator<StatusCall, LiveStatus, ExecResult> {
   // First, as for up and down: a refused cluster is refused before anything runs.
   const target = runtime === "k8s" ? k8sTargetFlags(deps.k8s) : [];
   const project = readProject(root);
@@ -481,17 +556,16 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
         service: service.name,
       })),
     }));
-  // No progress lines: stdout may be a JSON document.
-  const quiet: RuntimeDeps = { ...deps, log: undefined };
-  const call = (cmd: string, args: string[]) => run(quiet, dir, cmd, args, STATUS_CALL_TIMEOUT_MS);
+  // No progress lines (the drivers run quietly): stdout may be a JSON document.
+  const call = (cmd: string, args: string[]): StatusCall => ({ cmd, args, cwd: dir });
 
   if (runtime === "compose") {
     const version = ["compose", "version"];
-    const v = call("docker", version);
+    const v = yield call("docker", version);
     if (v.error || v.status !== 0) throw unavailable(runtime, callFailure("docker", version, v));
     // By project name, like down: works even when .generated/ was deleted.
     const ps = ["compose", "--project-name", plan.platform, "ps", "--all", "--format", "json"];
-    const listed = call("docker", ps);
+    const listed = yield call("docker", ps);
     if (listed.error || listed.status !== 0) throw unavailable(runtime, callFailure("docker", ps, listed));
     let ids: string[];
     try {
@@ -502,7 +576,7 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
       throw unavailable(runtime, `unexpected output from "${shown("docker", ps)}"`);
     }
     // Restart counts only; a container removed between the two calls just has no count.
-    const inspected = ids.length ? call("docker", ["inspect", "--format", DOCKER_INSPECT_TEMPLATE, ...ids]) : undefined;
+    const inspected = ids.length ? yield call("docker", ["inspect", "--format", DOCKER_INSPECT_TEMPLATE, ...ids]) : undefined;
     const inspectText = (inspected?.stdout ?? "")
       .split(/\r?\n/)
       .filter((l) => l.startsWith("{"))
@@ -518,7 +592,7 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
     });
   }
 
-  const client = kubectl(quiet, dir, target, ["version", "--client"], STATUS_CALL_TIMEOUT_MS);
+  const client = yield call("kubectl", [...target, "version", "--client"]);
   if (client.error || client.status !== 0) throw unavailable(runtime, callFailure("kubectl", ["version", "--client"], client));
   // Deployments, Pods and Services only: never Secrets, never ConfigMaps.
   const get = [
@@ -531,7 +605,7 @@ export function statusRuntime(root: string, runtime: Runtime, problems: Issue[],
     "--output",
     "json",
   ];
-  const listed = kubectl(quiet, dir, target, get, STATUS_CALL_TIMEOUT_MS);
+  const listed = yield call("kubectl", [...target, ...get]);
   if (listed.error || listed.status !== 0) throw unavailable(runtime, callFailure("kubectl", [...target, ...get], listed));
   try {
     return buildLiveStatus({
