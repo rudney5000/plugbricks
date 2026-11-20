@@ -969,6 +969,68 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D17. Web bricks: one loopback port per brick, and a router that accepts only their origins
+
+- **Status:** accepted, not built (step 7). Chosen by Dedy on 2026-11-21 between two options: a web
+  gateway (one published reverse proxy in front of the pages and `/graphql`) and one published port per
+  web brick. The second was chosen: simpler to start, no new component to pin and harden.
+- **Context:** the admin mockup shows a shop page served by an `orders-web` brick. Until now only the
+  router is published (D9), and the router serves GraphQL only, so a page needs its own entry. With one
+  port per web brick, the page's origin (`http://127.0.0.1:<its port>`) differs from the router's
+  (`http://127.0.0.1:<router.port>`): every GraphQL call from the browser is cross-origin, so the router's
+  CORS settings decide what works and what is allowed.
+- **Observed on the router 0.372.0** (2026-11-21, the pinned digest, on Docker 29.8.0):
+  - **Today it accepts every origin.** A preflight from `http://127.0.0.1:8080` gets
+    `Access-Control-Allow-Origin: *` with `Access-Control-Allow-Credentials: true`. Worse, a request no
+    browser preflights, a `POST` with `content-type: text/plain` and an `Origin: http://evil.example`
+    header, carrying `mutation { createOrder(total: 1) { id } }`, answered 200 and created the order.
+    Any web page the user opens can therefore read the platform's graph and run its mutations through
+    `127.0.0.1:<router.port>`. That is true whether or not web bricks exist.
+  - **`CORS_ALLOW_ORIGINS` closes it.** With `CORS_ALLOW_ORIGINS=http://127.0.0.1:8080,http://localhost:8080`:
+    a preflight from either origin gets that origin back (204); a preflight from `http://evil.example`
+    gets 403; and the same `text/plain` and `application/json` mutations with `Origin: http://evil.example`
+    get **403 and are not executed** (the router refuses the request itself, not only the response
+    headers). A request without an `Origin` header (curl, a server, the tests) is not affected.
+- **Decision:**
+  1. **The router always restricts origins**, also with no web brick: `CORS_ALLOW_ORIGINS` lists
+     `http://127.0.0.1:<p>` and `http://localhost:<p>` for the port `p` of each enabled web brick, and
+     with none, only the router's own origin (`http://127.0.0.1:<router.port>`), which no other page
+     has. This step comes first and stands alone: it fixes the hole above for every platform.
+  2. **The manifest** gains an optional `web: { "service": "<name>", "path": "/" }`: the service that
+     serves pages on its `port`, and the entry path shown by the admin (default `/`). A brick may have
+     both `subgraph` and `web`. `WEB_SERVICE_UNKNOWN` when the service does not exist.
+  3. **The host port is the platform's choice, not the brick's:** `platform.json` gets
+     `bricks.<name>.webPort` (1024 to 65535). `add` writes the first port from 8080 upwards that no other
+     web brick and not `router.port` uses, so the same `add` twice still gives identical files; the user
+     may change it. Two equal ports, or a web port equal to `router.port`, are refused by every command
+     (`WEB_PORT_CONFLICT`). The admin's own port (4100 by default, a flag) is not in `platform.json`; a
+     clash with it shows as the admin failing to listen.
+  4. **Exposure, D9 amended:** on Compose the web service is published on `127.0.0.1:<webPort>` only,
+     with the same long syntax and `host_ip` as the router; nothing else gains a `ports` entry. On
+     Kubernetes nothing new is published: the service already has a ClusterIP Service, reached with
+     `kubectl port-forward` (the allowed origins assume the same local port as `webPort`).
+  5. **What the web service is given**, only when a router exists: `GRAPHQL_URL`, the router's internal
+     address (`http://router:3002/graphql` on Compose, `http://router:<router.port>/graphql` on
+     Kubernetes), for server-side calls or for proxying `/graphql` itself (then the browser makes no
+     cross-origin call at all); and `PUBLIC_GRAPHQL_URL`, `http://127.0.0.1:<router.port>/graphql`, for
+     code that runs in the browser. A manifest that sets either name in that service's `env` is refused
+     (`WEB_ENV_RESERVED`).
+  6. **The admin** shows `http://127.0.0.1:<webPort><path>` in the Hosts column for a web brick, as a
+     link on Compose; `status --runtime` reports the published address of the web service.
+  7. **An example**, `examples/orders-web` with its source in `apis/orders-web`: a small page that lists
+     the orders through `PUBLIC_GRAPHQL_URL` and shows the shipment as unavailable when shipping does not
+     answer, like the mockup.
+- **Tests planned:** golden files for both runtimes (one `ports` entry per web brick plus the router,
+  `CORS_ALLOW_ORIGINS` in the router's environment, the two injected variables); the refusals; end to end
+  on Docker Compose: the page answers on `127.0.0.1:<webPort>` and on no other address, a preflight from
+  its origin is accepted, one from another origin is refused, and the cross-site `text/plain` mutation is
+  refused and creates nothing; the same scenario in the k3d job through port-forward.
+- **Limits:** each web brick costs one published port; the origins list follows `webPort`, so a page
+  reached through another host name (a tunnel, a LAN address) is refused by the router, which is the
+  point; there is no TLS on these loopback ports, as for the router.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
