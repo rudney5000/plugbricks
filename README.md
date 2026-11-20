@@ -120,8 +120,9 @@ Keycloak walkthrough is in [`docs/keycloak.md`](docs/keycloak.md). From the Bric
 relative to the platform), enable or disable it, remove it, or deploy (`up`); each action runs the
 CLI as a child process, one at a time, and is written twice to `.admin/audit.log` (accepted, then its
 outcome). There is no `--prune-volumes` in the admin: deleting data stays a terminal decision. A
-viewer sees the same pages and cannot change anything. The composed router schema is still the next
-step.
+viewer sees the same pages and cannot change anything. The Router page shows the configuration hash,
+size, source, composition and composed schema; the published package still needs to carry the UI
+build (next step).
 
 ### `enabled` and `tags`
 

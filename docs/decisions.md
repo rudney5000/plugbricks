@@ -885,6 +885,10 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     platform lock (D16) still refuses a terminal command meanwhile, and the CLI's `PLATFORM_BUSY` is
     reported as the action's result. The last 50 actions are kept in memory, with the last 2000
     output lines, and SIGKILL after 30 minutes.
+  - **The Router page:** `/api/bricks` also returns the router configuration: its hash and size from the
+    plan (`configSha256`, bytes), the generated source (`.generated/<runtime>/router-config.json`), the
+    composition (subgraphs, extended entities of the enabled manifests) and the composed SDL
+    (`engineConfig.graphqlSchema`), all read-only. It uses the same plan and runtime read as the CLI.
   - **Reading an action:** `GET /api/actions` and `GET /api/actions/:id` (any signed-in role) give the
     state (`running`/`succeeded`/`failed`), exit code, output lines, the issue codes parsed from
     `error <CODE>` lines, the user and the times. The UI polls every second, shows the output, and
