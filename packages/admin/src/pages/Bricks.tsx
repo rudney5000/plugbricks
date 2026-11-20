@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBricks } from "../api.js";
-import { allTags, filterByTag, summary, tone } from "../lib.js";
+import { allTags, filterByTag, hostOf, needsDeploy, reachability, summary, tone } from "../lib.js";
 import { useAction } from "../useAction.js";
 import type { AdminBrick, BricksResponse, Session } from "../types.js";
 
@@ -33,6 +33,72 @@ function NameCell({ brick }: { brick: AdminBrick }) {
   );
 }
 
+function HostCell({ brick, router, runtime }: { brick: AdminBrick; router: BricksResponse["router"]; runtime: string }) {
+  const host = hostOf(brick, router);
+  if (!host) return <span className="text-slate-400">—</span>;
+  return (
+    <div>
+      {/* On Compose the router is on this machine; on Kubernetes its address is the cluster IP of its Service. */}
+      {runtime === "compose" ? (
+        <a href={host} className="break-all font-mono text-xs text-blue-700 hover:underline">
+          {host}
+        </a>
+      ) : (
+        <span className="break-all font-mono text-xs text-slate-700">{host}</span>
+      )}
+      <div className="text-xs text-slate-500">GraphQL, through the router</div>
+    </div>
+  );
+}
+
+/** The confirmation of a removal, with the CLI's refusal shown before trying when there is one. */
+function RemoveDialog({ brick, onCancel, onConfirm }: { brick: AdminBrick; onCancel: () => void; onConfirm: () => void }) {
+  const blocked = brick.removeBlockedBy.length > 0;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  return (
+    <div className="fixed inset-0 z-10 flex items-center justify-center bg-slate-900/40 p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="remove-title" className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+        <h2 id="remove-title" className="text-lg font-semibold text-slate-900">
+          Remove {brick.name}?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          This stops its services and removes it from <code>platform.json</code>. No data is deleted from the admin: volumes marked for
+          deletion are deleted only by <code>plugbricks up --prune-volumes</code> in a terminal. Its secrets are kept.
+        </p>
+        {blocked && (
+          <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+            {brick.removeBlockedBy.map((r) => (
+              <div key={r.code + r.message}>
+                <strong>{r.code}</strong>: {r.message}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            autoFocus
+            onClick={onCancel}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={blocked}
+            className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Remove {brick.name}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatusCell({ brick }: { brick: AdminBrick }) {
   const t = tone(brick.state);
   return (
@@ -54,6 +120,8 @@ export function Bricks({ session }: { session: Session }) {
   const [updated, setUpdated] = useState<string>("");
   const [showAdd, setShowAdd] = useState(false);
   const [source, setSource] = useState("");
+  const [removing, setRemoving] = useState<AdminBrick | null>(null);
+  const cancelRemove = useCallback(() => setRemoving(null), []);
 
   const load = useCallback(() => {
     getBricks()
@@ -100,7 +168,9 @@ export function Bricks({ session }: { session: Session }) {
           </span>
           <span className="text-slate-600">{data.router.address ?? "not published"}</span>
           <span className="text-slate-500">{data.router.image.split("@")[0]}</span>
-          <span className="text-slate-500">{data.router.subgraphs.length} subgraph(s)</span>
+          <span className="text-slate-500">
+            {reachability(data.router).reachable} of {reachability(data.router).total} subgraphs reachable
+          </span>
         </div>
       )}
 
@@ -224,7 +294,7 @@ export function Bricks({ session }: { session: Session }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-              {["Name", "Version", "Tags", "Port", "Subgraph", "Extends", "Enabled", "Deployed", "Status", "Actions"].map((h) => (
+              {["Name", "Version", "Tags", "Port", "Subgraph", "Extends", "Enabled", "Deployed", "Status", "Hosts", "Actions"].map((h) => (
                 <th key={h} className="px-4 py-3 font-medium">
                   {h}
                 </th>
@@ -258,21 +328,19 @@ export function Bricks({ session }: { session: Session }) {
                     onToggle={() => void run({ action: b.enabled ? "disable" : "enable", brick: b.name })}
                   />
                 </td>
-                <td className="px-4 py-4 text-slate-700">{b.deployed ? "Yes" : "No"}</td>
+                <td className="px-4 py-4 text-slate-700">
+                  <div>{b.deployed ? "Yes" : "No"}</div>
+                  {needsDeploy(b) && <div className="text-xs text-amber-700">Needs deploy</div>}
+                </td>
                 <td className="px-4 py-4">
                   <StatusCell brick={b} />
                 </td>
                 <td className="px-4 py-4">
+                  <HostCell brick={b} router={data?.router ?? null} runtime={data?.runtime ?? ""} />
+                </td>
+                <td className="px-4 py-4">
                   <button
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Remove brick "${b.name}"? Its volumes and secrets may be kept or marked for deletion; this cannot be undone from the admin.`,
-                        )
-                      ) {
-                        void run({ action: "remove", brick: b.name });
-                      }
-                    }}
+                    onClick={() => setRemoving(b)}
                     disabled={disabled}
                     title={canAdmin ? `Remove ${b.name}` : "Your role is viewer"}
                     className="rounded-md border border-red-200 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -284,7 +352,7 @@ export function Bricks({ session }: { session: Session }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan={11} className="px-4 py-8 text-center text-sm text-slate-500">
                   No brick installed.
                 </td>
               </tr>
@@ -297,6 +365,17 @@ export function Bricks({ session }: { session: Session }) {
         Enabled is what <code>platform.json</code> asks for. Deployed is what the runtime reports. Actions run the same CLI as a terminal,
         one at a time; each attempt is written to the audit log.
       </p>
+
+      {removing && (
+        <RemoveDialog
+          brick={removing}
+          onCancel={cancelRemove}
+          onConfirm={() => {
+            void run({ action: "remove", brick: removing.name });
+            setRemoving(null);
+          }}
+        />
+      )}
     </div>
   );
 }

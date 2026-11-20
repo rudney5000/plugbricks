@@ -314,6 +314,34 @@ describe("the admin server", () => {
     expect(view.router.subgraphs).toHaveLength(2);
   });
 
+  it("says before a removal what the CLI would refuse it for", async () => {
+    const root = join(pkg, ".test-work/admin-remove-blocked");
+    rmSync(root, { recursive: true, force: true });
+    mkdirSync(root, { recursive: true });
+    cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
+    const rio = { cwd: root, stdout: () => {}, stderr: () => {} };
+    for (const args of [
+      ["init", "--name", "blocked-demo"],
+      ["add", "examples/postgres"],
+      ["add", "examples/orders"],
+      ["add", "examples/shipping"],
+    ]) {
+      expect(main(args, rio), args.join(" ")).toBe(0);
+    }
+    const { base } = await start({ root });
+    const view = (await (await fetch(`${base}/api/bricks`)).json()) as {
+      bricks: { name: string; removeBlockedBy: { code: string; message: string }[] }[];
+    };
+    const blocked = Object.fromEntries(view.bricks.map((b) => [b.name, b.removeBlockedBy.map((r) => r.code)]));
+    expect(blocked).toEqual({ postgres: ["CAPABILITY_IN_USE"], orders: ["EXTENDS_IN_USE"], shipping: [] });
+    expect(view.bricks.find((b) => b.name === "orders")!.removeBlockedBy[0].message).toContain('"shipping"');
+
+    // The CLI refuses with the same code the admin showed.
+    const err: string[] = [];
+    expect(main(["remove", "orders"], { ...rio, stderr: (s: string) => err.push(s) })).not.toBe(0);
+    expect(err.join("")).toContain("EXTENDS_IN_USE");
+  });
+
   it("refuses the API without a session when dev mode is off", async () => {
     const { base } = await start({ dev: false });
     expect((await fetch(`${base}/api/session`)).status).toBe(401);

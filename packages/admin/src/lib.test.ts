@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { allTags, filterByTag, summary, tone } from "./lib.js";
-import type { AdminBrick } from "./types.js";
+import { allTags, filterByTag, hostOf, needsDeploy, reachability, summary, tone } from "./lib.js";
+import type { AdminBrick, RouterView } from "./types.js";
 
 const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminBrick => ({
   name,
@@ -16,6 +16,16 @@ const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminB
   extends: "",
   provides: [],
   requires: "",
+  removeBlockedBy: [],
+});
+
+const router = (address: string | null, states: AdminBrick["state"][]): RouterView => ({
+  state: "healthy",
+  address,
+  image: "router",
+  digest: null,
+  subgraphs: states.map((state, i) => ({ brick: `b${i}`, name: `b${i}-app`, state })),
+  config: null,
 });
 
 describe("the Bricks view helpers", () => {
@@ -29,6 +39,26 @@ describe("the Bricks view helpers", () => {
     expect(filterByTag(bricks, "api").map((b) => b.name)).toEqual(["a", "b"]);
     expect(filterByTag(bricks, "all")).toHaveLength(3);
     expect(allTags(bricks)).toEqual(["api", "db", "graphql"]);
+  });
+
+  it("counts the subgraphs the router can reach", () => {
+    expect(reachability(router("127.0.0.1:4000", ["healthy", "unhealthy"]))).toEqual({ reachable: 1, total: 2 });
+    expect(reachability(router("127.0.0.1:4000", []))).toEqual({ reachable: 0, total: 0 });
+  });
+
+  it("gives a subgraph brick the router's GraphQL endpoint, and nothing to the others", () => {
+    const api = { ...brick("orders", "healthy", []), subgraph: true };
+    expect(hostOf(api, router("127.0.0.1:4000", ["healthy"]))).toBe("http://127.0.0.1:4000/graphql");
+    expect(hostOf(brick("postgres", "healthy", []), router("127.0.0.1:4000", []))).toBeNull();
+    expect(hostOf({ ...api, enabled: false }, router("127.0.0.1:4000", []))).toBeNull();
+    expect(hostOf(api, router(null, []))).toBeNull();
+    expect(hostOf(api, null)).toBeNull();
+  });
+
+  it("flags an enabled brick that is not running as needing a deploy", () => {
+    expect(needsDeploy({ ...brick("a", "not deployed", []), deployed: false })).toBe(true);
+    expect(needsDeploy(brick("a", "healthy", []))).toBe(false);
+    expect(needsDeploy({ ...brick("a", "stopped", []), enabled: false })).toBe(false);
   });
 
   it("gives every state a dot and a badge colour", () => {

@@ -35,7 +35,7 @@ export function Audit() {
         <p className="text-sm text-slate-500">Loading…</p>
       ) : entries.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
-          No entry yet. Actions (enable, disable, deploy, remove) are the next step.
+          No entry yet. Each action run from the Bricks page (add, enable, disable, remove, deploy) adds two lines here.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

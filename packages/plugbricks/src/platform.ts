@@ -641,28 +641,41 @@ export interface RemoveResult {
 }
 
 /** Uninstalls a brick unless another brick still requires a capability it provides. */
+/**
+ * Why `remove <name>` would be refused because of other installed bricks, before composition: the
+ * capabilities they still require (CAPABILITY_IN_USE), else the entities they still extend
+ * (EXTENDS_IN_USE). Empty when nothing depends on it. The admin shows the same list before a removal.
+ */
+export function removeRefusals(project: Project, name: string): Issue[] {
+  const brick = installedBrick(project.lock, name);
+  if (!brick) return [];
+  const inUse = brick.provides.flatMap((cap) => {
+    const consumers = Object.entries(project.lock.bricks)
+      .filter(([other, b]) => other !== name && b.requires[cap])
+      .map(([other]) => `"${other}"`)
+      .sort();
+    return consumers.length ? [issue("CAPABILITY_IN_USE", "", { brick: name, capability: cap, consumers: consumers.join(", ") })] : [];
+  });
+  if (inUse.length) return inUse;
+
+  // Entities of this brick that an installed brick extends (disabled ones included: they would break
+  // when re-enabled).
+  const { manifests } = installedSubgraphs(project, name, undefined, true);
+  const extenders = [...manifests]
+    .filter(([, other]) => (other.extends ?? []).some((e) => e.plugin === name))
+    .map(([other]) => `"${other}"`);
+  return extenders.length ? [issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })] : [];
+}
+
 export function removeBrick(root: string, name: string): RemoveResult {
   const project = readProject(root);
   const { lock, platform } = project;
   const brick = installedBrick(lock, name);
   if (!brick) fail("BRICK_NOT_INSTALLED", { name });
 
-  const inUse = brick.provides.flatMap((cap) => {
-    const consumers = Object.entries(lock.bricks)
-      .filter(([other, b]) => other !== name && b.requires[cap])
-      .map(([other]) => `"${other}"`)
-      .sort();
-    return consumers.length ? [issue("CAPABILITY_IN_USE", "", { brick: name, capability: cap, consumers: consumers.join(", ") })] : [];
-  });
-  if (inUse.length) throw new PlugbricksError(inUse);
-
-  // Entities of this brick that an installed brick extends (disabled ones included: they would break
-  // when re-enabled), then composition of what stays.
-  const { manifests } = installedSubgraphs(project, name, undefined, true);
-  const extenders = [...manifests]
-    .filter(([, other]) => (other.extends ?? []).some((e) => e.plugin === name))
-    .map(([other]) => `"${other}"`);
-  if (extenders.length) throw new PlugbricksError([issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })]);
+  const refusals = removeRefusals(project, name);
+  if (refusals.length) throw new PlugbricksError(refusals);
+  // Then composition of what stays.
   const federation = checkFederation(project, name);
 
   const ref = (v: LockedBrick["volumes"][number]): VolumeRef => ({ brick: name, service: v.service, name: v.name });

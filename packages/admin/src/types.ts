@@ -15,6 +15,8 @@ export interface AdminBrick {
   extends: string;
   provides: string[];
   requires: string;
+  /** Why `remove` would be refused (CAPABILITY_IN_USE, EXTENDS_IN_USE), from the CLI's own check. */
+  removeBlockedBy: { code: string; message: string }[];
 }
 
 export interface RouterConfig {
