@@ -516,6 +516,8 @@ async function bricksView(o: AdminOptions) {
       restarts: services.reduce((n, s) => n + s.restarts, 0),
       port: m?.services[0]?.port ?? null,
       subgraph: m?.subgraph !== undefined,
+      // A web brick's entry page (D17), where its pages are published on this machine.
+      webUrl: m?.web && b.webPort !== undefined ? `http://127.0.0.1:${b.webPort}${m.web.path ?? "/"}` : null,
       extends: (m?.extends ?? []).map((e) => `${e.entities.join(", ")} (${e.plugin})`).join("; "),
       provides: b.provides,
       requires: Object.entries(b.requires)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allTags, filterByTag, hostOf, needsDeploy, reachability, summary, tone } from "./lib.js";
+import { allTags, filterByTag, hostsOf, needsDeploy, reachability, summary, tone } from "./lib.js";
 import type { AdminBrick, RouterView } from "./types.js";
 
 const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminBrick => ({
@@ -13,6 +13,7 @@ const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminB
   restarts: 0,
   port: 4000,
   subgraph: false,
+  webUrl: null,
   extends: "",
   provides: [],
   requires: "",
@@ -46,13 +47,17 @@ describe("the Bricks view helpers", () => {
     expect(reachability(router("127.0.0.1:4000", []))).toEqual({ reachable: 0, total: 0 });
   });
 
-  it("gives a subgraph brick the router's GraphQL endpoint, and nothing to the others", () => {
+  it("lists where a brick answers: its page, its GraphQL endpoint through the router, or nothing", () => {
+    const r = router("127.0.0.1:4000", ["healthy"]);
     const api = { ...brick("orders", "healthy", []), subgraph: true };
-    expect(hostOf(api, router("127.0.0.1:4000", ["healthy"]))).toBe("http://127.0.0.1:4000/graphql");
-    expect(hostOf(brick("postgres", "healthy", []), router("127.0.0.1:4000", []))).toBeNull();
-    expect(hostOf({ ...api, enabled: false }, router("127.0.0.1:4000", []))).toBeNull();
-    expect(hostOf(api, router(null, []))).toBeNull();
-    expect(hostOf(api, null)).toBeNull();
+    const page = { ...brick("orders-web", "healthy", []), webUrl: "http://127.0.0.1:8080/orders" };
+    expect(hostsOf(api, r)).toEqual([{ url: "http://127.0.0.1:4000/graphql", note: "GraphQL, through the router" }]);
+    expect(hostsOf(page, r)).toEqual([{ url: "http://127.0.0.1:8080/orders", note: "Web page" }]);
+    expect(hostsOf({ ...page, subgraph: true }, r).map((h) => h.note)).toEqual(["Web page", "GraphQL, through the router"]);
+    expect(hostsOf(brick("postgres", "healthy", []), r)).toEqual([]);
+    expect(hostsOf({ ...page, enabled: false }, r)).toEqual([]);
+    expect(hostsOf(api, router(null, []))).toEqual([]);
+    expect(hostsOf(api, null)).toEqual([]);
   });
 
   it("flags an enabled brick that is not running as needing a deploy", () => {

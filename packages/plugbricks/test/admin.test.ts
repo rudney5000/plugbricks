@@ -314,7 +314,7 @@ describe("the admin server", () => {
     expect(view.router.subgraphs).toHaveLength(2);
   });
 
-  it("says before a removal what the CLI would refuse it for", async () => {
+  it("says before a removal what the CLI would refuse it for, and where a web brick's page is", async () => {
     const root = join(pkg, ".test-work/admin-remove-blocked");
     rmSync(root, { recursive: true, force: true });
     mkdirSync(root, { recursive: true });
@@ -325,15 +325,23 @@ describe("the admin server", () => {
       ["add", "examples/postgres"],
       ["add", "examples/orders"],
       ["add", "examples/shipping"],
+      ["add", "examples/orders-web"],
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
     }
     const { base } = await start({ root });
     const view = (await (await fetch(`${base}/api/bricks`)).json()) as {
-      bricks: { name: string; removeBlockedBy: { code: string; message: string }[] }[];
+      bricks: { name: string; webUrl: string | null; removeBlockedBy: { code: string; message: string }[] }[];
     };
     const blocked = Object.fromEntries(view.bricks.map((b) => [b.name, b.removeBlockedBy.map((r) => r.code)]));
-    expect(blocked).toEqual({ postgres: ["CAPABILITY_IN_USE"], orders: ["EXTENDS_IN_USE"], shipping: [] });
+    expect(blocked).toEqual({ postgres: ["CAPABILITY_IN_USE"], orders: ["EXTENDS_IN_USE"], shipping: [], "orders-web": [] });
+    // The web brick's entry page (D17): its webPort from platform.json and its path from the manifest.
+    expect(Object.fromEntries(view.bricks.map((b) => [b.name, b.webUrl]))).toEqual({
+      postgres: null,
+      orders: null,
+      shipping: null,
+      "orders-web": "http://127.0.0.1:8080/orders",
+    });
     expect(view.bricks.find((b) => b.name === "orders")!.removeBlockedBy[0].message).toContain('"shipping"');
 
     // The CLI refuses with the same code the admin showed.
