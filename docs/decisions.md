@@ -913,7 +913,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   refusal, the exact argv (with the k8s flags, and only for `up`), the stripped secret, 409 and a
   non-blocking `/api/session` while an action runs, the issue codes and the audit results, two audit
   lines per action with the POSIX modes, a cross-site POST refused, and enable/disable through the
-  real built CLI. Not tested: a real Keycloak or any other real provider, a browser, macOS/Windows
+  real built CLI. Not tested: a real Keycloak in CI (CI does not pull its image, so the e2e test above
+  runs only on a machine that has it), any other real provider, a browser, macOS/Windows
   (the audit modes are POSIX-only), and Kubernetes actions on a cluster. The `dist` test also checks
   that the tarball contains `dist/admin/ui/index.html` and that the packed CLI serves that UI. The Keycloak brick is not
   provided: a platform service is not published on the host (D9) and a provider-level setup task does
