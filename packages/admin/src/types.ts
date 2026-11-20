@@ -17,12 +17,21 @@ export interface AdminBrick {
   requires: string;
 }
 
+export interface RouterConfig {
+  sha256: string;
+  size: number;
+  source: string;
+  federatedSdl: string | null;
+  composition: { subgraphs: number; extendedEntities: string[] };
+}
+
 export interface RouterView {
   state: LiveState;
   address: string | null;
   image: string;
   digest: string | null;
   subgraphs: { brick: string; name: string; state: LiveState }[];
+  config: RouterConfig | null;
 }
 
 export interface Problem {

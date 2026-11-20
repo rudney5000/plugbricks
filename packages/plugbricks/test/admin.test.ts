@@ -278,6 +278,42 @@ describe("the admin server", () => {
     expect(await (await fetch(`${base}/router`)).text()).toContain("admin ui");
   });
 
+  it("serves the router configuration and the composed schema", async () => {
+    const routerRoot = join(pkg, ".test-work/admin-router");
+    rmSync(routerRoot, { recursive: true, force: true });
+    mkdirSync(routerRoot, { recursive: true });
+    cpSync(join(pkg, "examples"), join(routerRoot, "examples"), { recursive: true });
+    const rio = { cwd: routerRoot, stdout: () => {}, stderr: () => {} };
+    for (const args of [
+      ["init", "--name", "router-demo"],
+      ["add", "examples/postgres"],
+      ["add", "examples/orders"],
+      ["add", "examples/shipping"],
+    ]) {
+      expect(main(args, rio), args.join(" ")).toBe(0);
+    }
+    const { base } = await start({ root: routerRoot });
+    const view = (await (await fetch(`${base}/api/bricks`)).json()) as {
+      router: {
+        config: {
+          sha256: string;
+          size: number;
+          source: string;
+          federatedSdl: string;
+          composition: { subgraphs: number; extendedEntities: string[] };
+        };
+        subgraphs: unknown[];
+      };
+    };
+    expect(view.router.config.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(view.router.config.size).toBeGreaterThan(0);
+    expect(view.router.config.source).toBe(".generated/compose/router-config.json");
+    expect(view.router.config.composition).toEqual({ subgraphs: 2, extendedEntities: ["Order"] });
+    expect(view.router.config.federatedSdl).toContain("type Order");
+    expect(view.router.config.federatedSdl).toContain("shipment");
+    expect(view.router.subgraphs).toHaveLength(2);
+  });
+
   it("refuses the API without a session when dev mode is off", async () => {
     const { base } = await start({ dev: false });
     expect((await fetch(`${base}/api/session`)).status).toBe(401);

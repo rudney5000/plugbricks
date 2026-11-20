@@ -7,6 +7,7 @@ import { ActionRunner, validateAction } from "./actions.js";
 import { issue } from "../issues.js";
 import { SEVERITY } from "../live.js";
 import { platformStatus, PlugbricksError, readProject } from "../platform.js";
+import { planProject } from "../plan.js";
 import { loadInstalledBricks } from "../plan.js";
 import { RuntimeUnavailableError, statusRuntimeAsync, type AsyncExec, type K8sTarget, type Runtime, type RuntimeDeps } from "../runtime.js";
 
@@ -443,6 +444,16 @@ function readBody(req: IncomingMessage, limit: number): Promise<string | null> {
   });
 }
 
+/** The composed SDL in the router configuration, or null when the format is not the one we write. */
+function federatedSdlOf(config: string): string | null {
+  try {
+    const parsed = JSON.parse(config) as { engineConfig?: { graphqlSchema?: unknown } };
+    return typeof parsed.engineConfig?.graphqlSchema === "string" ? parsed.engineConfig.graphqlSchema : null;
+  } catch {
+    return null;
+  }
+}
+
 function readAudit(root: string): unknown[] {
   const file = join(root, ".admin", "audit.log");
   if (!existsSync(file)) return [];
@@ -465,7 +476,29 @@ type BricksView = Awaited<ReturnType<typeof bricksView>>;
 async function bricksView(o: AdminOptions) {
   const status = platformStatus(o.root);
   const live = await statusRuntimeAsync(o.root, o.runtime, status.problems, { ...o.runtimeDeps, k8s: o.k8s ?? o.runtimeDeps?.k8s });
-  const manifests = loadInstalledBricks(readProject(o.root));
+  const project = readProject(o.root);
+  const plan = planProject(project);
+  const manifests = loadInstalledBricks(project);
+  // The composed SDL is inside the router configuration (engineConfig.graphqlSchema); the plan is the
+  // source of truth for the hash, the size and the file the runtime reads.
+  const routerConfig = plan.router
+    ? {
+        sha256: plan.router.configSha256,
+        size: Buffer.byteLength(plan.router.config, "utf8"),
+        source: `.generated/${o.runtime}/router-config.json`,
+        federatedSdl: federatedSdlOf(plan.router.config),
+        composition: {
+          subgraphs: plan.router.subgraphs.length,
+          extendedEntities: [
+            ...new Set(
+              [...manifests]
+                .filter(([brick]) => plan.router!.subgraphs.some((s) => s.brick === brick))
+                .flatMap(([, m]) => (m.extends ?? []).flatMap((e) => e.entities)),
+            ),
+          ].sort(),
+        },
+      }
+    : null;
   const liveBricks = new Map(live.bricks.map((b) => [b.name, b]));
   const bricks = status.bricks.map((b) => {
     const m = manifests.get(b.name);
@@ -506,6 +539,7 @@ async function bricksView(o: AdminOptions) {
           image: live.router.image,
           digest: live.router.digest,
           subgraphs: live.router.subgraphs,
+          config: routerConfig,
         }
       : null,
     summary,
