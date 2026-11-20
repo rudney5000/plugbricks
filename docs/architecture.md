@@ -276,9 +276,10 @@ flowchart LR
 
 What the admin mockup still shows and the code does not have:
 
-1. **Web bricks** (the mockup's `orders-web`): a service that serves pages. The router is GraphQL only,
-   so pages would need their own published entry, which changes the loopback-only rule of D9 (only the
-   router is published) or adds a second published port.
+1. **Web bricks** (the mockup's `orders-web`): a service that serves pages. Decided in D17, not built:
+   each web brick is published on its own loopback port (`webPort` in `platform.json`), and the router
+   accepts cross-origin calls only from those pages. The first step of D17 also closes a hole that exists
+   today: the router accepts every origin, so any web page can run its mutations.
 2. **A Keycloak brick.** The supported path is an external issuer (`docs/keycloak.md`). A brick would
    need a service published on the host (against D9) and a setup task at the provider level (create the
    realm, the client and the roles), which the manifest cannot express today.
