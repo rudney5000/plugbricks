@@ -832,9 +832,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D15. The admin: a local React/Vite server, OIDC, read-only first
 
-- **Status:** implemented (step 6, the actions in 6c): `plugbricks admin`, `packages/admin`, OIDC and
-  dev authentication, `/api/session`, `/api/bricks`, `/api/actions`, `/api/audit`, the Bricks, Router
-  and Audit pages, and their actions.
+- **Status:** implemented (step 6: the actions in 6c, the real OIDC in 6d): `plugbricks admin`,
+  `packages/admin`, OIDC (public or confidential client) and dev authentication, `/api/session`,
+  `/api/bricks`, `/api/actions`, `/api/audit`, the Bricks, Router and Audit pages, and their actions.
 - **Decision:**
   - **A local command, not a brick:** `plugbricks admin` serves the UI on `127.0.0.1:4100` and exits
     only when killed. The CLI stays synchronous: the listening server keeps the process alive. Flags:
@@ -845,9 +845,12 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     built assets. The admin API is read-only and returns the same data as the CLI: `platformStatus`,
     `statusRuntime`, plus the installed manifests for port, subgraph and `extends`.
   - **OIDC, or an explicit dev mode:** authorization code + PKCE against any issuer, roles
-    `plugbricks-viewer` (read) and `plugbricks-admin` (actions). The client secret is read from
-    `PLUGBRICKS_OIDC_CLIENT_SECRET`, never a flag. `--dev` turns authentication off, for local use
-    only; without a session `/api/*` answers 401 and the SPA shows the sign-in page.
+    `plugbricks-viewer` (read) and `plugbricks-admin` (actions). The client may be **public** (PKCE
+    only, no secret) or **confidential** (the secret is read from `PLUGBRICKS_OIDC_CLIENT_SECRET`,
+    never a flag); with a public client, openid-client is told `none` explicitly because Keycloak does
+    not advertise that method. `--dev` turns authentication off, for local use only; without a session
+    `/api/*` answers 401 and the SPA shows the sign-in page. A real Keycloak walkthrough (external
+    issuer, public client, realm roles in the ID token) is in `docs/keycloak.md`.
   - **OIDC details:** the issuer must be `https`; plain `http` is accepted only on `127.0.0.1`,
     `localhost` or `[::1]` (`ADMIN_OIDC_ISSUER_INVALID` otherwise). The roles are read from the **ID
     token** (`realm_access.roles` or `roles`): with Keycloak, the realm roles mapper must have "Add to ID
@@ -896,12 +899,17 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   ID tokens; no network): admin and viewer roles, no role (403, no session), a callback without or
   with another state cookie, a state used twice, expiry after 8 hours, discovery retried, the `Host` and
   `Origin` checks, the headers, path traversal, a slow runtime that does not block other requests, and
-  `RUNTIME_UNAVAILABLE` (503). The actions are tested: roles (401/403/202, and dev), every validation
+  `RUNTIME_UNAVAILABLE` (503), and the real sign-in against Keycloak (the e2e test starts a real
+  Keycloak container when its image is already on the machine, imports a realm with a public client
+  and a realm-role mapper, and signs `demo` in; it is skipped when the image is absent). The actions
+  are tested: roles (401/403/202, and dev), every validation
   refusal, the exact argv (with the k8s flags, and only for `up`), the stripped secret, 409 and a
   non-blocking `/api/session` while an action runs, the issue codes and the audit results, two audit
   lines per action with the POSIX modes, a cross-site POST refused, and enable/disable through the
   real built CLI. Not tested: a real Keycloak or any other real provider, a browser, macOS/Windows
-  (the audit modes are POSIX-only), and Kubernetes actions on a cluster.
+  (the audit modes are POSIX-only), and Kubernetes actions on a cluster. The Keycloak brick is not
+  provided: a platform service is not published on the host (D9) and a provider-level setup task does
+  not exist yet, so the supported path is an external issuer; a brick would need both.
 - **Limits:** actions live in the admin's memory (a restart forgets them, the audit log stays); the
   UI polls instead of streaming the output; there is no `--prune-volumes` from the admin; the Router
   page shows the live router and its subgraphs but not yet the configuration hash, its size or the
