@@ -189,6 +189,7 @@ async function fakeIdp(port = 0): Promise<FakeIdp> {
           subject_types_supported: ["public"],
           id_token_signing_alg_values_supported: ["RS256"],
           code_challenge_methods_supported: ["S256"],
+          token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post", "none"],
         });
       }
       if (req.url === "/jwks") return json(200, { keys: [jwk] });
@@ -368,6 +369,14 @@ describe("the admin sign-in (OIDC, against a local provider)", () => {
     const { base } = await startOidc(idp);
     const { session } = await signIn(base, idp, { roles: ["plugbricks-viewer"] });
     expect(JSON.parse((await raw(base, "/api/session", { headers: { cookie: session! } })).body)).toMatchObject({ role: "viewer" });
+  });
+
+  it("signs in a public client, with PKCE and no client secret", async () => {
+    const idp = await fakeIdp();
+    const { base } = await startOidc(idp, { clientSecret: undefined });
+    const { back, session } = await signIn(base, idp, { realm_access: { roles: ["plugbricks-admin"] } });
+    expect(back.status).toBe(302);
+    expect(JSON.parse((await raw(base, "/api/session", { headers: { cookie: session! } })).body)).toMatchObject({ role: "admin" });
   });
 
   it("refuses an account with neither role, and gives it no session", async () => {
