@@ -1,4 +1,4 @@
-import type { AdminBrick, BricksResponse, LiveState } from "./types";
+import type { AdminBrick, BricksResponse, LiveState, RouterView } from "./types";
 
 export function summary(bricks: AdminBrick[]): BricksResponse["summary"] {
   return {
@@ -11,6 +11,25 @@ export function summary(bricks: AdminBrick[]): BricksResponse["summary"] {
 
 export function filterByTag(bricks: AdminBrick[], tag: string): AdminBrick[] {
   return tag === "all" ? bricks : bricks.filter((b) => b.tags.includes(tag));
+}
+
+/** "1 of 2 subgraphs reachable": a subgraph service counts when the runtime reports it healthy. */
+export function reachability(router: RouterView): { reachable: number; total: number } {
+  return { reachable: router.subgraphs.filter((s) => s.state === "healthy").length, total: router.subgraphs.length };
+}
+
+/**
+ * Where a brick answers: a subgraph is reached through the router (its GraphQL endpoint), never
+ * directly; other bricks are not published (D9). Null when there is nothing to show.
+ */
+export function hostOf(brick: AdminBrick, router: RouterView | null): string | null {
+  if (!brick.subgraph || !brick.enabled || !router?.address) return null;
+  return `http://${router.address}/graphql`;
+}
+
+/** Enabled in platform.json but not running yet: the next Deploy (up) starts it. */
+export function needsDeploy(brick: AdminBrick): boolean {
+  return brick.enabled && !brick.deployed;
 }
 
 export function allTags(bricks: AdminBrick[]): string[] {

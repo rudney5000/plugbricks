@@ -598,6 +598,19 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     It therefore runs as uid/gid 65532 with a read-only root filesystem and no capability on both
     runtimes (`runAsNonRoot`, `runAsUser`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`,
     `drop: [ALL]` and the `RuntimeDefault` seccomp profile on Kubernetes). Its 3002 port is above 1024.
+  - **No `no-new-privileges` on Compose** (changed 2026-11-21). With Docker 29.8.0 installed as a snap
+    (Ubuntu), the router restarted forever (exit 255, `exec /router: operation not permitted`), so
+    `status --runtime` and the admin showed it `unhealthy` and not published. Running its image by hand
+    with one option at a time on that engine: `--user 65532:65532`, `--read-only` and `--cap-drop ALL`
+    each start it; `--security-opt no-new-privileges:true` alone is enough to make the exec fail. The
+    Compose service therefore keeps the non-root user, the read-only root filesystem and `cap_drop: ALL`,
+    and no longer sets `security_opt`. What is lost: a setuid or file-capability binary in the image
+    could no longer be refused the privileges it grants. The image is distroless with a single static
+    binary (`/router`); and with every capability dropped from the bounding set, a setuid-root binary
+    would run as uid 0 but with no capability, on a read-only root filesystem. The remaining risk is
+    small; it would grow if the image changed. Kubernetes keeps
+    `allowPrivilegeEscalation: false`, which runs on k3d in CI. Why the snap engine refuses the exec
+    (its AppArmor confinement is the likely cause) was not investigated further.
 - **Verified on Docker first, then on a kubelet:** `runAsNonRoot` (a numeric `runAsUser` 65532),
   `readOnlyRootFilesystem` and the HTTP probes were first verified by running the image with Docker (`--user`,
   `--read-only`, `curl` on the health paths). The k3d CI job of pull request 9 (workflow runs 44087159424 and

@@ -117,9 +117,11 @@ describe("with orders and shipping", () => {
       expect(yaml.match(/host_ip: /g)).toHaveLength(1);
       expect(yaml).toContain('host_ip: "127.0.0.1"');
       expect(yaml).toContain('user: "65532:65532"');
-      for (const needle of ["read_only: true", "no-new-privileges:true", "cap_drop:\n      - ALL", "network_mode", "privileged"]) {
+      for (const needle of ["read_only: true", "cap_drop:\n      - ALL", "network_mode", "privileged"]) {
         expect(yaml.includes(needle), needle).toBe(needle !== "network_mode" && needle !== "privileged");
       }
+      // Left out on purpose: it stops the router from starting on Docker installed as a snap (D9).
+      expect(yaml).not.toContain("no-new-privileges");
     });
 
     it("Compose: it starts after every subgraph service is healthy", () => {

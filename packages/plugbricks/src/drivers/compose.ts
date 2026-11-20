@@ -97,7 +97,9 @@ function provisionTask(r: PlanRequirement, plan: Plan): Yaml {
  * The router: the only service published on the host, and only on the loopback address. Its image has
  * no shell and no wget, so it has no healthcheck; it starts after every subgraph service is healthy
  * (or started, for a service that declares no healthcheck, which Compose cannot wait on). It runs as
- * a non-root user with a read-only root filesystem and no capability.
+ * a non-root user with a read-only root filesystem and no capability. No `no-new-privileges`: with
+ * Docker installed as a snap, that option alone makes the exec of /router fail ("operation not
+ * permitted") and the router restart forever (D9).
  */
 function routerService(r: PlanRouter): Yaml {
   return {
@@ -105,7 +107,6 @@ function routerService(r: PlanRouter): Yaml {
     user: `${ROUTER_UID}:${ROUTER_UID}`,
     read_only: true,
     cap_drop: ["ALL"],
-    security_opt: ["no-new-privileges:true"],
     environment: ROUTER_ENV,
     // The router reads its configuration once, at start; a changed hash makes Compose recreate the container.
     labels: { "plugbricks.router-config-sha256": r.configSha256 },

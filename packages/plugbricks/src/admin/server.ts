@@ -6,7 +6,7 @@ import type { Configuration } from "openid-client";
 import { ActionRunner, validateAction } from "./actions.js";
 import { issue } from "../issues.js";
 import { SEVERITY } from "../live.js";
-import { platformStatus, PlugbricksError, readProject } from "../platform.js";
+import { platformStatus, PlugbricksError, readProject, removeRefusals } from "../platform.js";
 import { planProject } from "../plan.js";
 import { loadInstalledBricks } from "../plan.js";
 import { RuntimeUnavailableError, statusRuntimeAsync, type AsyncExec, type K8sTarget, type Runtime, type RuntimeDeps } from "../runtime.js";
@@ -521,6 +521,8 @@ async function bricksView(o: AdminOptions) {
       requires: Object.entries(b.requires)
         .map(([cap, r]) => `${cap} from ${r.provider}`)
         .join(", "),
+      // What `remove` would refuse it for, from the CLI's own check, so the UI can say so before trying.
+      removeBlockedBy: removeRefusals(project, b.name).map((i) => ({ code: i.code, message: i.message })),
     };
   });
   const summary = {
