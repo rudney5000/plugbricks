@@ -741,7 +741,9 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(env.status, env.stderr).toBe(0);
       expect(env.stdout.trim()).toBe("ok");
 
-      // A pinned nats-box pod subscribes; publish from inside it; its log shows the message.
+      // A pinned nats-box pod subscribes; a second pod publishes. Publishing with "kubectl exec" in the
+      // subscriber is flaky: when the subscriber exits on the message, the exec is killed (exit 137) even
+      // though the publish happened.
       const sub = kc([
         "--namespace",
         ns,
@@ -763,11 +765,15 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       try {
         const ready = kc(["--namespace", ns, "wait", "--for=condition=Ready", "pod/nats-sub", "--timeout=120s"]);
         expect(ready.status, ready.stderr).toBe(0);
+        await new Promise((r) => setTimeout(r, 2_000));
         const pub = kc([
           "--namespace",
           ns,
-          "exec",
-          "nats-sub",
+          "run",
+          "nats-pub",
+          "--image=natsio/nats-box:0.19.2",
+          "--restart=Never",
+          "--command",
           "--",
           "nats",
           "--server",
@@ -780,19 +786,14 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         await until(
           "the NATS subscriber to receive the message",
           async () => {
-            const pod = JSON.parse(kc(["--namespace", ns, "get", "pod", "nats-sub", "--output", "json"]).stdout) as {
-              status?: { phase?: string };
-            };
-            return pod.status?.phase === "Succeeded";
+            const logs = kc(["--namespace", ns, "logs", "nats-sub"]);
+            const text = `${logs.stdout}${logs.stderr}`;
+            return text.includes("Received on") && text.includes("world");
           },
           60_000,
         );
-        const logs = kc(["--namespace", ns, "logs", "nats-sub"]);
-        expect(logs.status, logs.stderr).toBe(0);
-        expect(logs.stdout).toContain("Received on");
-        expect(logs.stdout).toContain("world");
       } finally {
-        kc(["--namespace", ns, "delete", "pod", "nats-sub", "--ignore-not-found"]);
+        kc(["--namespace", ns, "delete", "pod", "nats-sub", "nats-pub", "--ignore-not-found"]);
       }
 
       expect(cli(work, ["down"]).code).toBe(0);
