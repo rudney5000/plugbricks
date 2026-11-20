@@ -403,6 +403,46 @@ describe("the router in front of orders and shipping", () => {
   );
 
   it.skipIf(!ready)(
+    `accepts browser calls only from its allowed origins: a cross-site mutation is refused and runs nothing (D17)${why}`,
+    async () => {
+      const count = async () => (await ask("how many orders", "query { orders(limit: 500) { id } }")).body.data.orders.length;
+      const before = await count();
+      const mutation = JSON.stringify({ query: "mutation { createOrder(total: 1) { id } }" });
+      const cross = async (origin: string, contentType: string) =>
+        (
+          await fetch(`http://127.0.0.1:${port}/graphql`, {
+            method: "POST",
+            headers: { origin, "content-type": contentType },
+            body: mutation,
+          })
+        ).status;
+      const preflight = async (origin: string) => {
+        const res = await fetch(`http://127.0.0.1:${port}/graphql`, {
+          method: "OPTIONS",
+          headers: { origin, "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+        });
+        return { status: res.status, allow: res.headers.get("access-control-allow-origin") };
+      };
+      // A request a browser sends without asking first (text/plain), and one it would preflight (JSON): both refused.
+      expect(await cross("http://evil.example", "text/plain")).toBe(403);
+      expect(await cross("http://evil.example", "application/json")).toBe(403);
+      expect((await preflight("http://evil.example")).status).toBe(403);
+      // Nothing was created by the refused requests.
+      expect(await count()).toBe(before);
+      // The router's own origin is the only one allowed while the platform has no web brick: a request from it
+      // runs. (A preflight from it gets 400: the router sees a same-origin request, which needs no preflight.)
+      const own = await fetch(`http://127.0.0.1:${port}/graphql`, {
+        method: "POST",
+        headers: { origin: `http://127.0.0.1:${port}`, "content-type": "application/json" },
+        body: JSON.stringify({ query: "{ __typename }" }),
+      });
+      expect(own.status).toBe(200);
+      console.log(`cross-site mutation from http://evil.example: 403, orders before and after: ${before}`);
+    },
+    120_000,
+  );
+
+  it.skipIf(!ready)(
     `follows the composition: remove shipping drops the field and recreates the router, add brings it back, remove orders is refused${why}`,
     async () => {
       // remove shipping, then up: the router is recreated with a configuration that has no shipment.

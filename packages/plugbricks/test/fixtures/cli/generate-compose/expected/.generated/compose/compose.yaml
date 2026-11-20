@@ -91,6 +91,7 @@ services:
     cap_drop:
       - ALL
     environment:
+      CORS_ALLOW_ORIGINS: http://127.0.0.1:4000
       COSMO_TELEMETRY_DISABLED: "true"
       DO_NOT_TRACK: "1"
       EXECUTION_CONFIG_FILE_PATH: /config/router-config.json

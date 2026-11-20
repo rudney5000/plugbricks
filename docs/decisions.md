@@ -971,7 +971,14 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D17. Web bricks: one loopback port per brick, and a router that accepts only their origins
 
-- **Status:** accepted, not built (step 7). Chosen by Dedy on 2026-11-21 between two options: a web
+- **Status:** step 7a (point 1 below, the router's origins) implemented on 2026-11-21: `allowedOrigins`
+  in the plan, `routerEnv` in `src/drivers/common.ts`, golden files for both runtimes, and an end-to-end
+  test on Docker Compose (`e2e-compose`, "accepts browser calls only from its allowed origins"): a
+  `text/plain` and a JSON mutation with `Origin: http://evil.example` get 403, a preflight from it gets
+  403, and the number of orders does not change. A request with the router's own origin runs (200); a
+  *preflight* with it gets 400, because the router treats it as a same-origin request, which never needs
+  one. Not run on k3d yet. Points 2 to 7 (the web bricks) are accepted, not built. Chosen by Dedy on
+  2026-11-21 between two options: a web
   gateway (one published reverse proxy in front of the pages and `/graphql`) and one published port per
   web brick. The second was chosen: simpler to start, no new component to pin and harden.
 - **Context:** the admin mockup shows a shop page served by an `orders-web` brick. Until now only the

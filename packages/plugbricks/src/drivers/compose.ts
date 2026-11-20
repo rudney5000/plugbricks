@@ -6,7 +6,7 @@ import {
   ROUTER_CONFIG_FILE,
   ROUTER_CONFIG_PATH,
   ROUTER_CONTAINER_PORT,
-  ROUTER_ENV,
+  routerEnv,
   ROUTER_NAME,
   ROUTER_UID,
   WAIT_ARGV0,
@@ -107,7 +107,7 @@ function routerService(r: PlanRouter): Yaml {
     user: `${ROUTER_UID}:${ROUTER_UID}`,
     read_only: true,
     cap_drop: ["ALL"],
-    environment: ROUTER_ENV,
+    environment: routerEnv(r.allowedOrigins),
     // The router reads its configuration once, at start; a changed hash makes Compose recreate the container.
     labels: { "plugbricks.router-config-sha256": r.configSha256 },
     // Relative to this file's folder (.generated/compose/), like the provision scripts.

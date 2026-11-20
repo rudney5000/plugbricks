@@ -16,7 +16,7 @@ import {
   ROUTER_CONFIG_DIR,
   ROUTER_CONFIG_FILE,
   ROUTER_CONTAINER_PORT,
-  ROUTER_ENV,
+  routerEnv,
   ROUTER_LIVE_PATH,
   ROUTER_NAME,
   ROUTER_READY_PATH,
@@ -243,7 +243,7 @@ function routerDocs(r: PlanRouter, plan: Plan): Yaml[] {
                 name: r.name,
                 image: r.image,
                 ports: [{ name: "graphql", containerPort: ROUTER_CONTAINER_PORT }],
-                env: Object.entries(ROUTER_ENV).map(([name, value]) => ({ name, value })),
+                env: Object.entries(routerEnv(r.allowedOrigins)).map(([name, value]) => ({ name, value })),
                 readinessProbe: {
                   httpGet: { path: ROUTER_READY_PATH, port: ROUTER_CONTAINER_PORT },
                   periodSeconds: 5,
