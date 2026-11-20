@@ -166,15 +166,17 @@ export function startAdmin(o: AdminOptions): AdminServer {
   let bricksInFlight: Promise<BricksView> | undefined;
 
   const oidc = async () => {
-    if (!o.issuer || !o.clientId || !o.clientSecret) throw new Error("OIDC is not configured");
+    if (!o.issuer || !o.clientId) throw new Error("OIDC is not configured");
     const client = (oidcModule ??= await import("openid-client"));
+    // A public client authenticates with PKCE only; Keycloak does not advertise "none", so say it.
+    const clientAuth = o.clientSecret ? undefined : client.None();
     // A failed discovery is not kept: the next sign-in tries again (the provider may start after the admin).
     config ??= client
       .discovery(
         new URL(o.issuer),
         o.clientId,
         o.clientSecret,
-        undefined,
+        clientAuth,
         insecureIssuer ? { execute: [client.allowInsecureRequests] } : undefined,
       )
       .catch((e: unknown) => {
