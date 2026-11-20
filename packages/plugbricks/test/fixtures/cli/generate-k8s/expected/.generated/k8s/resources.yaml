@@ -290,6 +290,8 @@ spec:
             - name: graphql
               containerPort: 3002
           env:
+            - name: CORS_ALLOW_ORIGINS
+              value: http://127.0.0.1:4000
             - name: COSMO_TELEMETRY_DISABLED
               value: "true"
             - name: DO_NOT_TRACK

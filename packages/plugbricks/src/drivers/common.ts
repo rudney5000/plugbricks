@@ -67,8 +67,11 @@ export const ROUTER_UID = 65532;
  * - COSMO_TELEMETRY_DISABLED=true and DO_NOT_TRACK=1: without them the router opens an HTTPS connection to
  *   eu.i.posthog.com at start (anonymous usage tracking, even with no graph token); with them, no DNS query
  *   and no outgoing connection in 25 s.
+ * - CORS_ALLOW_ORIGINS (added by routerEnv): without it the router allows every origin, and a cross-site
+ *   POST with content-type text/plain ran a mutation; with it, any other Origin gets 403 and its request
+ *   is not run (D17).
  */
-export const ROUTER_ENV: Record<string, string> = {
+const ROUTER_ENV: Record<string, string> = {
   COSMO_TELEMETRY_DISABLED: "true",
   DO_NOT_TRACK: "1",
   EXECUTION_CONFIG_FILE_PATH: ROUTER_CONFIG_PATH,
@@ -78,6 +81,12 @@ export const ROUTER_ENV: Record<string, string> = {
   PROMETHEUS_ENABLED: "false",
   TRACING_ENABLED: "false",
 };
+
+/** The router's environment, sorted by name: the fixed variables above and the origins it accepts. */
+export function routerEnv(allowedOrigins: string[]): Record<string, string> {
+  const env = { ...ROUTER_ENV, CORS_ALLOW_ORIGINS: allowedOrigins.join(",") };
+  return Object.fromEntries(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
+}
 
 /** Probes of the router (it has no shell, so no exec probe): its own health endpoints. */
 export const ROUTER_READY_PATH = "/health/ready";

@@ -135,6 +135,12 @@ export interface PlanRouter {
   configSha256: string;
   /** The subgraph services the router calls; it starts after them. */
   subgraphs: { service: string; brick: string; healthy: boolean }[];
+  /**
+   * Origins a browser may call the router from (its CORS_ALLOW_ORIGINS, D17). Any other Origin is
+   * refused with 403 and its request is not run; requests without an Origin header are not affected.
+   * With no web brick, only the router's own origin, which no other page has.
+   */
+  allowedOrigins: string[];
 }
 
 export interface Plan {
@@ -442,6 +448,7 @@ function buildRouter(
     config: built.json,
     configSha256: createHash("sha256").update(built.json).digest("hex"),
     subgraphs: subgraphs.sort((a, b) => a.service.localeCompare(b.service)),
+    allowedOrigins: [`http://127.0.0.1:${router.port}`],
   };
 }
 

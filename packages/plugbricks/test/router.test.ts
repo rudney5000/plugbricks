@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,6 +107,14 @@ describe("with orders and shipping", () => {
     expect(JSON.parse(run(withRouter, ["status", "--json"]).out).router).toEqual({ port: 4000, image: ROUTER_IMAGE });
   });
 
+  it("with no web brick, the router accepts only its own origin, which follows router.port (D17)", () => {
+    expect(planProject(readProject(withRouter)).router!.allowedOrigins).toEqual(["http://127.0.0.1:4000"]);
+    const moved = project("router-port-cors", ["postgres", "orders"]);
+    const file = join(moved, "platform.json");
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), router: { port: 14000 } }, null, 2) + "\n");
+    expect(planProject(readProject(moved)).router!.allowedOrigins).toEqual(["http://127.0.0.1:14000"]);
+  });
+
   describe("what the router exposes", () => {
     const plan = (): Plan => planProject(readProject(withRouter));
 
@@ -175,6 +183,17 @@ describe("rendering rules on a hand-made plan", () => {
     config,
     configSha256: createHash("sha256").update(config).digest("hex"),
     subgraphs,
+    allowedOrigins: ["http://127.0.0.1:4000"],
+  });
+
+  it("the router accepts only the origins of the plan, on both runtimes (D17)", () => {
+    const plan = { ...base, router: { ...router("{}"), allowedOrigins: ["http://127.0.0.1:8080", "http://localhost:8080"] } };
+    expect(renderCompose(plan)[".generated/compose/compose.yaml"]).toContain(
+      '      CORS_ALLOW_ORIGINS: "http://127.0.0.1:8080,http://localhost:8080"\n',
+    );
+    expect(renderK8s(plan)[".generated/k8s/resources.yaml"]).toContain(
+      '            - name: CORS_ALLOW_ORIGINS\n              value: "http://127.0.0.1:8080,http://localhost:8080"\n',
+    );
   });
 
   it("a subgraph service without a healthcheck is waited for until started, which is all Compose can do", () => {
