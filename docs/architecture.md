@@ -21,16 +21,17 @@ document links to them instead of repeating them.
 
 plugbricks is split like most platforms:
 
-- the **control plane** decides *what should run*. Today it is the `plugbricks` CLI only; it reads
-  manifests, checks them, writes `platform.json` / `platform.lock`, renders runtime files and calls
-  `docker compose` or `kubectl`. It never stays running.
+- the **control plane** decides *what should run*. It is the `plugbricks` CLI: it reads manifests,
+  checks them, writes `platform.json` / `platform.lock`, renders runtime files and calls
+  `docker compose` or `kubectl`, then exits. The admin (section 8) is the only long-running part, and
+  it changes nothing itself: it runs the same CLI.
 - the **data plane** is *what runs*: the services of the bricks, their wait and provision tasks, and
   the router. It does not know plugbricks exists; it only sees the files the driver rendered.
 
 ```mermaid
 flowchart LR
   subgraph CP["Control plane (CLI, runs and exits)"]
-    M["plugin.json + schema.graphql<br/>(each brick)"] --> ADD["init / add / remove<br/>validate, resolve, compose"]
+    M["plugin.json + schema.graphql<br/>(each brick)"] --> ADD["init / add / remove<br/>enable / disable<br/>validate, resolve, compose"]
     ADD --> PJ["platform.json<br/>platform.lock"]
     PJ --> PLAN["plan.ts<br/>runtime-independent plan"]
     PLAN --> DRV["driver<br/>compose.ts / k8s.ts"]
@@ -57,11 +58,27 @@ flowchart LR
 2. **`remove <name>`** runs the same checks for the platform without the brick. It is refused while
    another brick requires what it provides, or extends one of its entities (`EXTENDS_IN_USE`). Its
    volumes are kept by default (`retainedVolumes`, D3); its secrets are always kept (D6).
-3. **`generate`** builds a plan from the lock and the installed copies (integrity checked again), then
+3. **`disable <name>` / `enable <name>`**: an installed brick is not necessarily enabled (D14).
+   `disable` writes `enabled: false` in `platform.json`; the brick stays installed (its copy, lock
+   entry, volumes, secrets and name are kept) but `generate` and `up` no longer render it, so the next
+   `up` stops it. `enable` removes the flag. The same consistency rules as `add` / `remove` apply:
+   disabling a provider an enabled brick requires is `CAPABILITY_IN_USE`, disabling an owner an enabled
+   brick extends is `EXTENDS_IN_USE`, enabling a consumer of a disabled provider is
+   `PROVIDER_DISABLED`; the federated schema is recomposed on every toggle.
+
+   | | in `platform.json` | `enabled` | rendered and running after `up` | volumes and secrets |
+   |---|---|---|---|---|
+   | not installed | no | — | no | none, or kept from an earlier `remove` |
+   | installed, disabled | yes | `false` | no | kept |
+   | installed, enabled | yes | `true` or absent | yes | kept |
+4. **`generate`** builds a plan from the lock and the installed copies (integrity checked again), then
    the driver renders it. Drivers are pure functions plan → files, tested with golden files.
-4. **`up` / `down`** render, then call the runtime. `up --prune-volumes` deletes only the volumes the
+5. **`up` / `down`** render, then call the runtime. `up --prune-volumes` deletes only the volumes the
    lock lists in `pendingDeletion`.
-5. **`status`** compares what was asked, what was resolved and the federation hash
+6. **One changing command at a time** (D16): `add`, `remove`, `enable`, `disable`, `generate`, `up`
+   and `down` hold `.platform/lock` while they run; another one meanwhile, from a terminal or from the
+   admin, is refused with `PLATFORM_BUSY`. Reading (`status`, `admin`) never takes it.
+7. **`status`** compares what was asked, what was resolved and the federation hash
    (`FEDERATION_CHANGED`). `status --runtime compose|k8s` adds what the runtime really runs,
    read-only (D10): per brick, service and router, `enabled` vs `deployed`, state, reason, restart
    count and instances, as a table or as a versioned JSON report (`schemas/status-runtime.schema.json`).
@@ -215,35 +232,56 @@ without listing it in `extends` is not detected.
 | Secrets | random, 0600, never on a command line, never in `.generated/`, never deleted | D6 |
 | Kubernetes | never the current context; `--context` required | D5 |
 
-## 8. Planned: what the admin mockup adds (not built)
+## 8. The admin (built)
 
-The admin mockup (Bricks, Router, Audit log, Sign in, a shop page) needs pieces that do not exist yet.
-This is a first proposal, to be settled one decision at a time in `docs/decisions.md`.
+`plugbricks admin` is a local web server for the platform (D15). It is part of the control plane, not
+a brick: it does not run in the runtime, and it never changes the platform itself. It reads what the CLI
+reads, and to change something it runs the CLI.
 
 ```mermaid
-flowchart TB
-  U["browser"] -->|"127.0.0.1"| GW["admin entry point"]
-  GW -->|"OIDC redirect"| IDP["oidc brick (e.g. keycloak)<br/>provides: oidc"]
-  GW --> ADM["admin API<br/>reads platform.json / lock,<br/>runs add / remove / up"]
-  ADM --> AUD["audit log<br/>append-only JSON lines"]
-  ADM -->|"docker / kubectl"| RT["runtime"]
-  U --> WEB["web bricks (orders-web)<br/>pages served at a host / path"]
-  WEB -->|"GraphQL"| R["router"]
+flowchart LR
+  U["browser"] -->|"http://127.0.0.1:4100<br/>Host / Origin checked"| S
+  subgraph ADM["plugbricks admin (one local process)"]
+    S["HTTP server<br/>src/admin/server.ts"] --> UI["UI: React + Vite<br/>Bricks, Router, Audit"]
+    S --> API["/api/session, /api/bricks,<br/>/api/actions, /api/audit"]
+  end
+  S <-->|"authorization code + PKCE<br/>roles in the ID token"| IDP["OIDC issuer<br/>(external, e.g. Keycloak)"]
+  API -->|"read: platformStatus,<br/>statusRuntimeAsync, plan"| FILES["platform.json / lock<br/>.generated/"]
+  API -->|"read, no shell, 15 s timeout"| RT["docker compose / kubectl"]
+  API -->|"act: child process of the CLI<br/>add, enable, disable, remove, up"| CLI["plugbricks CLI<br/>(takes .platform/lock)"]
+  CLI --> RT
+  API -->|"2 lines per action"| AUD[".admin/audit.log<br/>JSONL, 0600"]
 ```
 
-Open questions, in the order they block the mockup:
+- **Pages:** *Bricks* (the table of the mockup: tags, port, subgraph, extends, `enabled` vs `deployed`,
+  runtime state and reason, actions), *Router* (configuration hash and size, source file, composition,
+  composed SDL, read-only) and *Audit*.
+- **Reading** uses the same functions as the CLI: `platformStatus`, the plan, and `statusRuntimeAsync`,
+  which gives the same report as `status --runtime` without blocking the server. Concurrent page loads
+  share one read of the runtime.
+- **Acting:** `POST /api/actions` with `add` (a path relative to the platform), `enable`, `disable`,
+  `remove` (a brick name) or `up`. The admin role is required; names and paths are checked before
+  anything runs; the action is a child process of the built CLI, without a shell, one at a time (`409
+  BUSY`), and `PLATFORM_BUSY` from the platform lock is reported if a terminal command holds it. There is
+  no `--prune-volumes`: deleting data stays a terminal decision.
+- **Who may do what:** sign-in with OIDC (authorization code + PKCE, public or confidential client).
+  `plugbricks-viewer` reads, `plugbricks-admin` reads and acts; no role, no access. `--dev` turns
+  authentication off for local use. Sessions are in memory and end after 8 hours on the server.
+- **Audit:** every action writes one line when accepted and one when it ends (`Success`, `Refused`,
+  `Failed`), with the user, the role, the action id and the duration; never the output, never a secret.
+- **Exposure:** like the router, loopback only. The server listens on `127.0.0.1` and refuses any
+  request whose `Host` or `Origin` is not the loopback address (protection against DNS rebinding).
 
-1. **`enabled` separate from installed.** The mockup distinguishes *Enabled* (asked in `platform.json`)
-   from *Deployed* (reported by the runtime). Today a brick in `platform.json` is always meant to run.
-2. **Runtime status per brick** (healthy, starting, down, stopped, with a reason): **done** in
-   `status --runtime` (D10); the admin page would consume its JSON report.
-3. **Tags** in the manifest, for filtering.
-4. **Web bricks**: a service that serves pages. The router is GraphQL only, so pages need their own
-   published entry (and therefore a change to the loopback-only rule of D9, or a second published port).
-5. **Who runs the admin.** A long-running process is a new kind of component: plugbricks has only a
-   CLI today. It must hold the runtime credentials, so its access rules (roles `plugbricks-admin`,
-   `plugbricks-viewer`) and its audit log come before any button that changes something.
-6. **Identity**: an `oidc` capability provided by a brick, required by the admin and by API bricks
-   that check tokens; the router could validate JWTs before forwarding.
-7. **Messaging** (roadmap milestone 5, NATS): a `queue` capability with the same provides / requires
-   wiring as `database`.
+## 9. Not built yet
+
+What the admin mockup still shows and the code does not have:
+
+1. **Web bricks** (the mockup's `orders-web`): a service that serves pages. The router is GraphQL only,
+   so pages would need their own published entry, which changes the loopback-only rule of D9 (only the
+   router is published) or adds a second published port.
+2. **A Keycloak brick.** The supported path is an external issuer (`docs/keycloak.md`). A brick would
+   need a service published on the host (against D9) and a setup task at the provider level (create the
+   realm, the client and the roles), which the manifest cannot express today.
+3. **Tokens in the data plane:** the router and the API bricks do not check any token today; only the
+   admin signs people in.
+4. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).
