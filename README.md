@@ -124,6 +124,28 @@ viewer sees the same pages and cannot change anything. The Router page shows the
 size, source, composition and composed schema. The published package carries the built UI
 (`prepack` copies it to `dist/admin/ui`), and the `dist` test checks it.
 
+The screenshots below were taken on a real platform (`postgres`, `orders`, `shipping` and the router on
+Docker Compose, admin in `--dev`). On Compose the router has no healthcheck (its image has no shell,
+D9), so its state is shown as `Unknown` while it runs.
+
+**Bricks**: what `platform.json` asks for next to what the runtime reports; a subgraph brick is reached
+through the router.
+
+![The Bricks page: three healthy bricks, their tags, ports, subgraphs and router endpoint](docs/screenshots/admin-bricks.png)
+
+**Removing a brick**: the dialog shows the CLI's refusal before anything runs, here `orders`, whose
+`Order` entity `shipping` extends.
+
+![The removal dialog for orders, blocked with EXTENDS_IN_USE](docs/screenshots/admin-remove-blocked.png)
+
+**Router**: the configuration, the subgraphs it calls and the composed schema, read-only.
+
+![The Router page: state, configuration hash, subgraphs and composed schema](docs/screenshots/admin-router.png)
+
+**Audit log**: two lines per action, accepted then its outcome, refusals included.
+
+![The Audit log page with accepted, successful and refused actions](docs/screenshots/admin-audit.png)
+
 ### `enabled` and `tags`
 
 A brick can be **disabled without being removed**: `plugbricks disable <name>` writes `enabled: false` in `platform.json`; its services stop (the next `up` removes them), while its volumes and secrets stay. `enable` brings it back, and the federated schema is recomposed either way (D14). `status` marks it `disabled`, and `status --runtime` reports it `stopped` with `enabled: false`, without making the platform degraded.
