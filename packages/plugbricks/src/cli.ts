@@ -238,7 +238,8 @@ export function main(argv: string[], io: Io): number {
           }
           const dev = values.dev === true;
           const clientSecret = process.env.PLUGBRICKS_OIDC_CLIENT_SECRET;
-          if (!dev && (!values.issuer || !values["client-id"] || !clientSecret)) {
+          // A public client (PKCE, no secret) is enough; a confidential client adds the env secret.
+          if (!dev && (!values.issuer || !values["client-id"])) {
             throw new PlugbricksError([issue("ADMIN_OIDC_NOT_CONFIGURED", "")]);
           }
           const uiDir =

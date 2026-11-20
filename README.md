@@ -114,8 +114,9 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
 
 This report feeds the **admin** (D15): `plugbricks admin --dev` serves the UI on
 `http://127.0.0.1:4100` (Bricks, Router, Audit). Without `--dev`, pass `--issuer` and `--client-id`
-and set `PLUGBRICKS_OIDC_CLIENT_SECRET`; the account needs `plugbricks-viewer` (read) or
-`plugbricks-admin` (read and act). From the Bricks page an administrator can add a brick (a path
+and set `PLUGBRICKS_OIDC_CLIENT_SECRET` only for a confidential client (a public client uses PKCE
+alone); the account needs `plugbricks-viewer` (read) or `plugbricks-admin` (read and act). A real
+Keycloak walkthrough is in [`docs/keycloak.md`](docs/keycloak.md). From the Bricks page an administrator can add a brick (a path
 relative to the platform), enable or disable it, remove it, or deploy (`up`); each action runs the
 CLI as a child process, one at a time, and is written twice to `.admin/audit.log` (accepted, then its
 outcome). There is no `--prune-volumes` in the admin: deleting data stays a terminal decision. A

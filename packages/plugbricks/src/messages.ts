@@ -89,7 +89,8 @@ export const MESSAGES = {
     'another plugbricks command is changing this platform: "{command}" (process {pid}, since {since}); wait for it to end ({file} is removed then)',
   ADMIN_UI_MISSING: 'the admin UI is not built at "{dir}"; run "npm run build -w plugbricks-admin"',
   ADMIN_OIDC_ISSUER_INVALID: 'the OIDC issuer "{issuer}" must be an https URL (http is accepted only on 127.0.0.1, localhost or [::1])',
-  ADMIN_OIDC_NOT_CONFIGURED: "the admin needs --issuer and --client-id, and PLUGBRICKS_OIDC_CLIENT_SECRET, or --dev for local use",
+  ADMIN_OIDC_NOT_CONFIGURED:
+    "the admin needs --issuer and --client-id (and PLUGBRICKS_OIDC_CLIENT_SECRET for a confidential client), or --dev for local use",
   REQUIRED_CAPABILITY_MISSING:
     'brick "{brick}" requires capability "{capability}", which no installed brick provides; add a provider first',
 
