@@ -3,6 +3,10 @@ import { getBricks } from "../api.js";
 import { tone } from "../lib.js";
 import type { BricksResponse, RouterView } from "../types.js";
 
+function bytes(n: number): string {
+  return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KiB`;
+}
+
 export function RouterPage() {
   const [router, setRouter] = useState<RouterView | null | undefined>(undefined);
   const [runtime, setRuntime] = useState("");
@@ -24,7 +28,7 @@ export function RouterPage() {
       {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {router === null ? (
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500">
-          No router: no installed brick serves a subgraph.
+          No router: no enabled brick serves a subgraph.
         </div>
       ) : router ? (
         <div className="space-y-4">
@@ -46,6 +50,30 @@ export function RouterPage() {
               <dd className="text-slate-800">{runtime}</dd>
             </dl>
           </section>
+
+          {router.config && (
+            <section className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="mb-3 text-sm font-semibold text-slate-900">Configuration</h2>
+              <dl className="grid grid-cols-[10rem_1fr] gap-y-2 text-sm">
+                <dt className="text-slate-500">Config hash</dt>
+                <dd className="break-all font-mono text-xs text-slate-800">{router.config.sha256}</dd>
+                <dt className="text-slate-500">Size</dt>
+                <dd className="text-slate-800">{bytes(router.config.size)}</dd>
+                <dt className="text-slate-500">Source</dt>
+                <dd className="break-all font-mono text-xs text-slate-800">{router.config.source}</dd>
+                <dt className="text-slate-500">Composition</dt>
+                <dd className="text-slate-800">
+                  {router.config.composition.subgraphs} subgraph(s)
+                  {router.config.composition.extendedEntities.length > 0 && (
+                    <span className="text-slate-600"> · {router.config.composition.extendedEntities.join(", ")}</span>
+                  )}
+                </dd>
+                <dt className="text-slate-500">Subgraphs</dt>
+                <dd className="text-slate-800">{router.subgraphs.map((s) => s.brick).join(", ")}</dd>
+              </dl>
+            </section>
+          )}
+
           <section className="rounded-lg border border-slate-200 bg-white p-5">
             <h2 className="mb-3 text-sm font-semibold text-slate-900">Subgraphs</h2>
             <table className="w-full text-sm">
@@ -69,7 +97,16 @@ export function RouterPage() {
               </tbody>
             </table>
           </section>
-          <p className="text-xs text-slate-500">The configuration hash, its size and the composed schema arrive with the next step.</p>
+
+          {router.config?.federatedSdl && (
+            <section className="rounded-lg border border-slate-200 bg-white p-5">
+              <h2 className="mb-1 text-sm font-semibold text-slate-900">Composed schema</h2>
+              <p className="mb-3 text-xs text-slate-500">Read-only: this is what the router serves, composed from the enabled subgraphs.</p>
+              <pre className="max-h-96 overflow-auto rounded-md bg-slate-950 p-3 text-xs leading-5 text-slate-100">
+                {router.config.federatedSdl}
+              </pre>
+            </section>
+          )}
         </div>
       ) : (
         <div className="text-sm text-slate-500">Loading…</div>
