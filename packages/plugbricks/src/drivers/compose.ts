@@ -7,6 +7,7 @@ import {
   ROUTER_CONFIG_PATH,
   ROUTER_CONTAINER_PORT,
   routerEnv,
+  serviceEnv,
   ROUTER_NAME,
   ROUTER_UID,
   WAIT_ARGV0,
@@ -45,7 +46,7 @@ function service(s: PlanService, plan: Plan): Yaml {
   const reqs = s.requires.map((cap) => plan.requirements.find((r) => r.consumer === s.brick && r.capability === cap)!);
   return {
     image: s.image,
-    environment: envMap(s.env),
+    environment: envMap(serviceEnv(s, plan, `http://${ROUTER_NAME}:${ROUTER_CONTAINER_PORT}/graphql`)),
     healthcheck: s.healthcheck && {
       test: ["CMD", ...s.healthcheck.exec.map(escapeDollars)],
       interval: seconds(s.healthcheck.intervalSeconds),
@@ -57,6 +58,8 @@ function service(s: PlanService, plan: Plan): Yaml {
     depends_on: reqs.length
       ? Object.fromEntries(reqs.map((r) => [r.provision.name, { condition: "service_completed_successfully" }]))
       : undefined,
+    // A web brick's pages (D17): published like the router, on the loopback address only.
+    ports: s.web ? [{ target: s.port, published: String(s.web.port), host_ip: "127.0.0.1", protocol: "tcp" }] : undefined,
     restart: "unless-stopped",
   };
 }

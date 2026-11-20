@@ -1,0 +1,16 @@
+{
+  "description": "a web brick gets the first free port from 8080, is published on 127.0.0.1 only, is given the router's two addresses, and the router accepts only its origins (D17)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/orders-web"], "stdout": "Added orders-web 0.1.0" },
+    { "run": ["status"], "stdout": "orders-web 0.1.0  pages on 127.0.0.1:8080" },
+    { "run": ["generate"] },
+    { "run": ["generate", "--runtime", "k8s"] }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "      CORS_ALLOW_ORIGINS: \"http://127.0.0.1:8080,http://localhost:8080\"",
+    "platform.json": "\"webPort\": 8080"
+  }
+}

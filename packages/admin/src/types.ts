@@ -12,6 +12,8 @@ export interface AdminBrick {
   restarts: number;
   port: number | null;
   subgraph: boolean;
+  /** A web brick's entry page, http://127.0.0.1:<webPort><path> (D17); null for any other brick. */
+  webUrl: string | null;
   extends: string;
   provides: string[];
   requires: string;

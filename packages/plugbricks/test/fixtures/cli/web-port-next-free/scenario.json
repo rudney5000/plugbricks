@@ -1,0 +1,13 @@
+{
+  "description": "add gives each web brick the first port from 8080 that neither the router nor another web brick uses",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "patchJson": { "file": "platform.json", "set": { "router": { "port": 8080 } } } } },
+    { "run": ["add", "examples/orders-web"] },
+    { "run": ["add", "bricks/shop-web"] },
+    { "run": ["status"], "stdout": "shop-web 1.0.0  pages on 127.0.0.1:8082" }
+  ],
+  "expectRaw": {
+    "platform.json": "\"orders-web\": {\n      \"source\": \"examples/orders-web\",\n      \"webPort\": 8081\n    }"
+  }
+}

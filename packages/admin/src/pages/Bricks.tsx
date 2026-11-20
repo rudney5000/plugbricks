@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBricks } from "../api.js";
-import { allTags, filterByTag, hostOf, needsDeploy, reachability, summary, tone } from "../lib.js";
+import { allTags, filterByTag, hostsOf, needsDeploy, reachability, summary, tone } from "../lib.js";
 import { useAction } from "../useAction.js";
 import type { AdminBrick, BricksResponse, Session } from "../types.js";
 
@@ -34,19 +34,24 @@ function NameCell({ brick }: { brick: AdminBrick }) {
 }
 
 function HostCell({ brick, router, runtime }: { brick: AdminBrick; router: BricksResponse["router"]; runtime: string }) {
-  const host = hostOf(brick, router);
-  if (!host) return <span className="text-slate-400">—</span>;
+  const hosts = hostsOf(brick, router);
+  if (hosts.length === 0) return <span className="text-slate-400">—</span>;
   return (
-    <div>
-      {/* On Compose the router is on this machine; on Kubernetes its address is the cluster IP of its Service. */}
-      {runtime === "compose" ? (
-        <a href={host} className="break-all font-mono text-xs text-blue-700 hover:underline">
-          {host}
-        </a>
-      ) : (
-        <span className="break-all font-mono text-xs text-slate-700">{host}</span>
-      )}
-      <div className="text-xs text-slate-500">GraphQL, through the router</div>
+    <div className="flex flex-col gap-2">
+      {hosts.map((h) => (
+        <div key={h.url}>
+          {/* On Compose these addresses are on this machine. On Kubernetes the router's is the cluster IP of its
+              Service, and a page answers on 127.0.0.1 only through kubectl port-forward: shown, not linked. */}
+          {runtime === "compose" ? (
+            <a href={h.url} className="break-all font-mono text-xs text-blue-700 hover:underline">
+              {h.url}
+            </a>
+          ) : (
+            <span className="break-all font-mono text-xs text-slate-700">{h.url}</span>
+          )}
+          <div className="text-xs text-slate-500">{h.note}</div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -62,6 +62,9 @@
     "subgraph": {
       "$ref": "#/$defs/subgraph"
     },
+    "web": {
+      "$ref": "#/$defs/web"
+    },
     "extends": {
       "type": "array",
       "description": "Entities owned by another plugin that this subgraph extends. The resolver activates the owner.",
@@ -334,6 +337,24 @@
             "type": "string",
             "pattern": "^[A-Z][A-Za-z0-9]*$"
           }
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service"],
+      "description": "The service that serves web pages on its port (D17). The platform publishes it on its own loopback port (webPort in platform.json) and, when a router exists, gives that service GRAPHQL_URL (the router inside the platform) and PUBLIC_GRAPHQL_URL (the router as a browser on this machine reaches it).",
+      "properties": {
+        "service": {
+          "type": "string",
+          "description": "Service that serves the pages."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/",
+          "description": "Entry page, shown by the admin."
         }
       }
     }

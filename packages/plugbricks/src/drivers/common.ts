@@ -1,3 +1,5 @@
+import type { Plan, PlanService, Value } from "../plan.js";
+
 /**
  * Shell script run by every wait task (Compose) and wait init container (Kubernetes). It runs the
  * provider's ready command, without a shell, until it succeeds or PB_WAIT_TIMEOUT seconds have
@@ -91,3 +93,18 @@ export function routerEnv(allowedOrigins: string[]): Record<string, string> {
 /** Probes of the router (it has no shell, so no exec probe): its own health endpoints. */
 export const ROUTER_READY_PATH = "/health/ready";
 export const ROUTER_LIVE_PATH = "/health/live";
+
+/**
+ * The environment of a service, plus what a web brick's service is given when the platform has a router
+ * (D17): GRAPHQL_URL, the router as the platform reaches it (`internalGraphql`, which differs per runtime),
+ * and PUBLIC_GRAPHQL_URL, the router as a browser on this machine reaches it. Sorted by name.
+ */
+export function serviceEnv(s: PlanService, plan: Plan, internalGraphql: string): Record<string, Value> {
+  if (!s.web || !plan.router) return s.env;
+  const env: Record<string, Value> = {
+    ...s.env,
+    GRAPHQL_URL: [internalGraphql],
+    PUBLIC_GRAPHQL_URL: [`http://127.0.0.1:${plan.router.port}/graphql`],
+  };
+  return Object.fromEntries(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
+}

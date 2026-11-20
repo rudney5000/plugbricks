@@ -243,7 +243,7 @@ let apisBuilt = false;
 function buildExampleApis(): void {
   if (apisBuilt) return;
   const repo = fileURLToPath(new URL("../../../", import.meta.url));
-  for (const api of ["orders", "shipping"]) {
+  for (const api of ["orders", "shipping", "orders-web"]) {
     const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
       encoding: "utf8",
     });
@@ -522,6 +522,96 @@ describe("the router in front of orders and shipping", () => {
       });
     },
     300_000,
+  );
+});
+
+describe("a web brick in front of the router (D17)", () => {
+  const name = "pbtest-web";
+  const routerAt = 14105;
+  const pageAt = 14106;
+  const page = (path = "/orders") => fetch(`http://127.0.0.1:${pageAt}${path}`);
+
+  it.skipIf(!ready)(
+    `serves its page on its own loopback port, reads the orders through the router, and keeps them when shipping is down${why}`,
+    async () => {
+      buildExampleApis();
+      const work = project(name, []);
+      for (const brick of ["orders", "shipping", "orders-web"])
+        cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "postgres"],
+        ["add", "orders"],
+        ["add", "shipping"],
+        ["add", "orders-web"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+      routerPort(work, routerAt);
+      const file = join(work, "platform.json");
+      const platform = JSON.parse(readFileSync(file, "utf8"));
+      expect(platform.bricks["orders-web"].webPort, "add gives the first free port from 8080").toBe(8080);
+      platform.bricks["orders-web"].webPort = pageAt;
+      writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      await routerReady(routerAt);
+      console.log(`docker ps (project ${name}):\n${containersOf(name, "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}")}`);
+
+      // Two things are published, both on the loopback address only: the router and the page.
+      const ports = containersOf(name, "--format", "{{.Ports}}");
+      expect(ports).not.toMatch(/0\.0\.0\.0:|\[::\]:/);
+      expect((ports.match(/127\.0\.0\.1:\d+->/g) ?? []).sort()).toEqual([`127.0.0.1:${pageAt}->`, `127.0.0.1:${routerAt}->`].sort());
+
+      // An order created and shipped through the router shows on the page, rendered by its server through GRAPHQL_URL.
+      const created = await through(routerAt, "createOrder", "mutation { createOrder(total: 42.5) { id } }");
+      const id = created.body.data.createOrder.id as string;
+      await through(routerAt, "shipOrder", `mutation { shipOrder(orderId: "${id}", carrier: "dhl") { status } }`);
+      await until("the page", async () => (await page("/health")).status === 200);
+      const html = await (await page()).text();
+      expect(html).toContain(`#${id}`);
+      expect(html).toContain("dhl · SHIPPED");
+      // The browser is told where the router is (PUBLIC_GRAPHQL_URL).
+      expect(html).toContain(`data-graphql="http://127.0.0.1:${routerAt}/graphql"`);
+
+      // What the browser does from the page: the router accepts the page's origins, and only them.
+      const pageOrigins = [`http://127.0.0.1:${pageAt}`, `http://localhost:${pageAt}`];
+      for (const origin of pageOrigins) {
+        const pre = await fetch(`http://127.0.0.1:${routerAt}/graphql`, {
+          method: "OPTIONS",
+          headers: { origin, "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+        });
+        expect([pre.status, pre.headers.get("access-control-allow-origin")], origin).toEqual([204, origin]);
+      }
+      const fromPage = await fetch(`http://127.0.0.1:${routerAt}/graphql`, {
+        method: "POST",
+        headers: { origin: pageOrigins[0], "content-type": "application/json" },
+        body: JSON.stringify({ query: "{ orders(limit: 5) { id } }" }),
+      });
+      expect(fromPage.status).toBe(200);
+      const elsewhere = await fetch(`http://127.0.0.1:${routerAt}/graphql`, {
+        method: "POST",
+        headers: { origin: "http://evil.example", "content-type": "text/plain" },
+        body: JSON.stringify({ query: "mutation { createOrder(total: 1) { id } }" }),
+      });
+      expect(elsewhere.status).toBe(403);
+
+      // Shipping stops: the page still lists the orders and says the shipment is unavailable, as in the mockup.
+      const shipping = containersOf(name, "--filter", "name=shipping-app", "--format", "{{.Names}}").trim();
+      expect(spawnSync("docker", ["stop", shipping], { encoding: "utf8" }).status).toBe(0);
+      let degraded = "";
+      await until("the degraded page", async () => {
+        degraded = await (await page()).text();
+        return degraded.includes("Unavailable");
+      });
+      expect(degraded).toContain(`#${id}`);
+      expect(degraded).toContain("Shipping information is temporarily unavailable");
+      console.log(`page with shipping stopped: order #${id} listed, shipment "Unavailable"`);
+
+      const down = cli(work, ["down"]);
+      expect(down.code, `${down.out}\n${down.err}`).toBe(0);
+      expect(containersOf(name, "--format", "{{.Ports}}")).not.toContain("127.0.0.1");
+    },
+    900_000,
   );
 });
 

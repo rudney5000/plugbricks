@@ -49,6 +49,8 @@ export interface BrickManifest {
     env?: Record<string, string>;
   }[];
   subgraph?: { service: string; schema: string; path?: string };
+  /** The service that serves web pages (D17). */
+  web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
   provides?: Record<
     string,
@@ -82,6 +84,11 @@ export interface PlanService {
   healthcheck?: Healthcheck;
   /** Capabilities this service's brick requires, in name order; see Plan.requirements. */
   requires: string[];
+  /**
+   * Present on the service that serves a web brick's pages (D17): `port` is its webPort, published on
+   * 127.0.0.1 by Compose (and the local port of a kubectl port-forward on Kubernetes); `path` its entry page.
+   */
+  web?: { port: number; path: string };
 }
 
 export interface PlanRequirement {
@@ -284,6 +291,8 @@ export function buildPlan(
   router?: { port: number; readSchema: (brick: string, file: string) => string },
   /** Volumes of disabled bricks: their names stay theirs even though they are not rendered. */
   reservedVolumes: VolumeRef[] = [],
+  /** webPort of each web brick, from platform.json (D17); a web brick without one is not published. */
+  webPorts: Record<string, number> = {},
 ): Plan {
   const names = new Names();
   const secrets = new Map<string, string>();
@@ -391,6 +400,9 @@ export function buildPlan(
         volumes: vols,
         ...(s.healthcheck ? { healthcheck: { ...MANIFEST_DEFAULTS.healthcheck, ...s.healthcheck } } : {}),
         requires,
+        ...(m.web?.service === s.name && webPorts[brick] !== undefined
+          ? { web: { port: webPorts[brick], path: m.web.path ?? MANIFEST_DEFAULTS.webPath } }
+          : {}),
       });
     }
   }
@@ -448,8 +460,20 @@ function buildRouter(
     config: built.json,
     configSha256: createHash("sha256").update(built.json).digest("hex"),
     subgraphs: subgraphs.sort((a, b) => a.service.localeCompare(b.service)),
-    allowedOrigins: [`http://127.0.0.1:${router.port}`],
+    allowedOrigins: allowedOrigins(router.port, services),
   };
+}
+
+/**
+ * The origins a browser may call the router from (D17): each published web page, by the two names of the
+ * loopback address; with none, only the router's own origin, which no other page has.
+ */
+function allowedOrigins(routerPort: number, services: PlanService[]): string[] {
+  const pages = services
+    .flatMap((s) => (s.web ? [s.web.port] : []))
+    .sort((a, b) => a - b)
+    .flatMap((port) => [`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
+  return pages.length ? pages : [`http://127.0.0.1:${routerPort}`];
 }
 
 /** The plan of an initialised project, from its lock and installed copies. */
@@ -473,5 +497,8 @@ export function planProject(project: Project): Plan {
       readSchema: (brick, file) => readFileSync(join(project.root, BRICKS_DIR, brick, file), "utf8"),
     },
     reservedVolumes,
+    Object.fromEntries(
+      Object.entries(project.platform.bricks).flatMap(([brick, b]) => (b.webPort !== undefined ? [[brick, b.webPort]] : [])),
+    ),
   );
 }

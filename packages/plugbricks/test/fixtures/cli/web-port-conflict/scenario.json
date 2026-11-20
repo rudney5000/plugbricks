@@ -1,0 +1,15 @@
+{
+  "description": "a webPort equal to router.port is refused by every command, before anything is written",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/orders-web"] },
+    {
+      "mutate": {
+        "patchJson": { "file": "platform.json", "set": { "bricks": { "orders-web": { "source": "examples/orders-web", "webPort": 4000 } } } }
+      }
+    },
+    { "run": ["status"], "exit": 1, "codes": ["WEB_PORT_CONFLICT"] },
+    { "run": ["generate"], "exit": 1, "codes": ["WEB_PORT_CONFLICT"], "unchanged": true },
+    { "run": ["add", "examples/postgres"], "exit": 1, "codes": ["WEB_PORT_CONFLICT"], "unchanged": true }
+  ]
+}

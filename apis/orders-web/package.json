@@ -1,0 +1,22 @@
+{
+  "name": "plugbricks-example-orders-web",
+  "version": "0.1.0",
+  "description": "Example web brick for plugbricks: the shop's orders page, rendered by the server through the router (GRAPHQL_URL) and refreshed by the browser (PUBLIC_GRAPHQL_URL). Built as the image plugbricks-example/orders-web:0.1.0.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vitest": "2.1.9"
+  }
+}

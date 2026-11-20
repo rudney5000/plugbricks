@@ -46,7 +46,8 @@ export interface Platform {
   name: string;
   /** Absent in files written before the router existed: the default port applies. */
   router?: { port?: number };
-  bricks: Record<string, { source: string; enabled?: boolean }>;
+  /** webPort: the loopback port of a web brick's pages (D17), written by add. */
+  bricks: Record<string, { source: string; enabled?: boolean; webPort?: number }>;
 }
 
 /** A brick is deployed unless platform.json says otherwise; absent means enabled. Only an own key is read. */
@@ -255,6 +256,7 @@ interface Manifest {
   provides?: Record<string, { provision: { command: string[]; scripts?: string } }>;
   requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number }>;
   subgraph?: { service: string; schema: string; path?: string };
+  web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
 }
 
@@ -333,7 +335,44 @@ export function readProject(root: string): Project {
     if (!p.bricks[b]) fail("LOCK_OUT_OF_SYNC", { brick: b, detail: "it is in platform.lock but not in platform.json" });
   }
   checkVolumeLists(l);
+  checkWebPorts(p);
   return { root: dir, platform: p, lock: l };
+}
+
+/** First port tried for a web brick's pages; the next free one is taken (D17). */
+export const FIRST_WEB_PORT = 8080;
+
+/**
+ * The ports a platform publishes on the host, each with who uses it: router.port, then each webPort in
+ * brick-name order. A port already taken is reported with WEB_PORT_CONFLICT (D17), naming its first user.
+ */
+function hostPorts(platform: Platform): { used: Map<number, string>; conflicts: Issue[] } {
+  const used = new Map<number, string>([[platform.router?.port ?? PLATFORM_DEFAULTS.routerPort, "router.port"]]);
+  const conflicts: Issue[] = [];
+  for (const [brick, b] of Object.entries(platform.bricks).sort(([a], [c]) => a.localeCompare(c))) {
+    if (b.webPort === undefined) continue;
+    const other = used.get(b.webPort);
+    if (other) {
+      conflicts.push(issue("WEB_PORT_CONFLICT", `${PLATFORM_FILE}#/bricks/${brick}/webPort`, { port: String(b.webPort), brick, other }));
+    } else {
+      used.set(b.webPort, `the webPort of "${brick}"`);
+    }
+  }
+  return { used, conflicts };
+}
+
+/** Every command refuses a webPort that the router or another web brick already uses (D17). */
+function checkWebPorts(platform: Platform): void {
+  const { conflicts } = hostPorts(platform);
+  if (conflicts.length) throw new PlugbricksError(conflicts);
+}
+
+/** The first port from FIRST_WEB_PORT that the platform does not publish yet. */
+function nextWebPort(platform: Platform): number {
+  const { used } = hostPorts(platform);
+  let port = FIRST_WEB_PORT;
+  while (used.has(port)) port++;
+  return port;
 }
 
 const volumeKey = (r: VolumeRef) => `${r.brick}/${r.service}/${r.name}`;
@@ -625,7 +664,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   lock.retainedVolumes = lock.retainedVolumes.filter((r) => r.brick !== m.name);
   const cancelledDeletions = lock.pendingDeletion.filter((r) => r.brick === m.name);
   lock.pendingDeletion = lock.pendingDeletion.filter((r) => r.brick !== m.name);
-  platform.bricks[m.name] = { source };
+  platform.bricks[m.name] = { source, ...(m.web ? { webPort: nextWebPort(platform) } : {}) };
   setFederation(lock, federation);
   save(project);
   return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions };
@@ -703,7 +742,8 @@ export function removeBrick(root: string, name: string): RemoveResult {
 
 export interface StatusResult {
   name: string;
-  bricks: (LockedBrick & { name: string; enabled: boolean })[];
+  /** webPort: where a web brick's pages are published (D17), from platform.json. */
+  bricks: (LockedBrick & { name: string; enabled: boolean; webPort?: number })[];
   capabilities: Record<string, string>;
   retainedVolumes: VolumeRef[];
   pendingDeletion: VolumeRef[];
@@ -777,7 +817,8 @@ export function platformStatus(root: string): StatusResult {
         if (e instanceof PlugbricksError) problems.push(...e.issues);
         else problems.push(issue("BRICK_UNREADABLE", "", { brick: name, detail: (e as Error).message }));
       }
-      return { name, enabled: isBrickEnabled(platform, name), ...lock.bricks[name] };
+      const webPort = Object.hasOwn(platform.bricks, name) ? platform.bricks[name].webPort : undefined;
+      return { name, enabled: isBrickEnabled(platform, name), ...lock.bricks[name], ...(webPort !== undefined ? { webPort } : {}) };
     });
   const federation = federationStatus({ root: dir, platform, lock }, problems);
   return {
