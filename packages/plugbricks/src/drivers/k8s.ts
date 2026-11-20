@@ -17,6 +17,7 @@ import {
   ROUTER_CONFIG_FILE,
   ROUTER_CONTAINER_PORT,
   routerEnv,
+  serviceEnv,
   ROUTER_LIVE_PATH,
   ROUTER_NAME,
   ROUTER_READY_PATH,
@@ -189,7 +190,7 @@ function deployment(s: PlanService, plan: Plan): Yaml {
               name: s.service,
               image: s.image,
               ports: [{ containerPort: s.port }, ...s.extraPorts.map((p) => ({ containerPort: p.port }))],
-              env: envList(s.env),
+              env: envList(serviceEnv(s, plan, `http://${ROUTER_NAME}:${plan.router?.port}/graphql`)),
               // Readiness only, never liveness: a slow dependency must not get the pod killed.
               readinessProbe: s.healthcheck ? probe(s, false) : undefined,
               startupProbe: s.healthcheck && s.healthcheck.startPeriodSeconds > 0 ? probe(s, true) : undefined,

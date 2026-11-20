@@ -3,6 +3,9 @@ import { issue, type Issue } from "./issues.js";
 import { MANIFEST_SCHEMA_ID, manifestSchema, schemaIssues } from "./schemas.js";
 import { allowedList, parseTemplate, type TemplateContext } from "./templates.js";
 
+/** Variables plugbricks sets on the service of a web brick when the platform has a router (D17). */
+export const WEB_ENV = ["GRAPHQL_URL", "PUBLIC_GRAPHQL_URL"] as const;
+
 export { MANIFEST_SCHEMA_ID };
 
 /** Kept for compatibility: a manifest issue is a plain Issue whose path is a JSON Pointer. */
@@ -49,6 +52,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
       }
     >;
     subgraph?: { service: string };
+    web?: { service: string; path?: string };
   };
   const issues: ManifestIssue[] = [];
   const names = new Set<string>();
@@ -102,6 +106,17 @@ export function validateManifest(manifest: unknown): ValidationResult {
   }
   if (m.subgraph && !names.has(m.subgraph.service)) {
     issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: m.subgraph.service }));
+  }
+  if (m.web) {
+    const web = m.services.find((s) => s.name === m.web!.service);
+    if (!web) issues.push(issue("UNKNOWN_SERVICE", "/web/service", { name: m.web.service }));
+    // plugbricks sets these on the web service (D17); a manifest value would be overwritten silently.
+    for (const name of WEB_ENV) {
+      if (web?.env && Object.hasOwn(web.env, name)) {
+        const at = m.services.indexOf(web);
+        issues.push(issue("WEB_ENV_RESERVED", `/services/${at}/env/${name}`, { service: web.name, name }));
+      }
+    }
   }
 
   return issues.length ? { ok: false, issues } : { ok: true };

@@ -1,0 +1,7 @@
+{
+  "description": "a web brick that sets GRAPHQL_URL itself is refused: plugbricks sets it (D17)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/bad-web"], "exit": 1, "codes": ["MANIFEST_INVALID", "WEB_ENV_RESERVED"], "unchanged": true }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "shop-web",
+  "version": "1.0.0",
+  "services": [{ "name": "site", "image": "nginx:1.27.3-alpine", "port": 8080 }],
+  "web": { "service": "site" }
+}

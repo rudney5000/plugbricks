@@ -49,6 +49,12 @@
             "type": "boolean",
             "default": true,
             "description": "Whether the brick is deployed. A disabled brick stays installed (its volumes and secrets are kept) but generate and up do not render it. Absent means true."
+          },
+          "webPort": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65535,
+            "description": "Only for a brick whose manifest has web: the port its pages are published on. Docker Compose: 127.0.0.1:<webPort> only; Kubernetes: reached with kubectl port-forward on the same local port. Written by add (the first free port from 8080), and the router accepts browser calls from http://127.0.0.1:<webPort> and http://localhost:<webPort> (D17). Must differ from router.port and from every other webPort."
           }
         }
       }
