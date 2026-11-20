@@ -842,7 +842,10 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     `--client-id`; the Kubernetes target follows the same rules as `status --runtime`.
   - **The UI and the server are separate:** React 19 + Vite + Tailwind in `packages/admin` (built to
     `packages/admin/dist`); the HTTP server lives in the core (`src/admin/server.ts`) and serves the
-    built assets. The admin API is read-only and returns the same data as the CLI: `platformStatus`,
+    built assets. The core's `prepack` copies the build to `dist/admin/ui`, which the published
+    package ships (inside `files: dist`) and which `plugbricks admin` prefers; in the monorepo it
+    falls back to the sibling `packages/admin/dist`. A `dist` test checks the tarball and serves the
+    packed UI. The admin API is read-only and returns the same data as the CLI: `platformStatus`,
     `statusRuntime`, plus the installed manifests for port, subgraph and `extends`.
   - **OIDC, or an explicit dev mode:** authorization code + PKCE against any issuer, roles
     `plugbricks-viewer` (read) and `plugbricks-admin` (actions). The client may be **public** (PKCE
@@ -911,14 +914,12 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   non-blocking `/api/session` while an action runs, the issue codes and the audit results, two audit
   lines per action with the POSIX modes, a cross-site POST refused, and enable/disable through the
   real built CLI. Not tested: a real Keycloak or any other real provider, a browser, macOS/Windows
-  (the audit modes are POSIX-only), and Kubernetes actions on a cluster. The Keycloak brick is not
+  (the audit modes are POSIX-only), and Kubernetes actions on a cluster. The `dist` test also checks
+  that the tarball contains `dist/admin/ui/index.html` and that the packed CLI serves that UI. The Keycloak brick is not
   provided: a platform service is not published on the host (D9) and a provider-level setup task does
   not exist yet, so the supported path is an external issuer; a brick would need both.
 - **Limits:** actions live in the admin's memory (a restart forgets them, the audit log stays); the
-  UI polls instead of streaming the output; there is no `--prune-volumes` from the admin; the Router
-  page shows the live router and its subgraphs but not yet the configuration hash, its size or the
-  composed SDL; the monorepo serves `packages/admin/dist`, and the published package will copy the
-  build at `prepack` (next step).
+  UI polls instead of streaming the output; there is no `--prune-volumes` from the admin.
 
 ---
 

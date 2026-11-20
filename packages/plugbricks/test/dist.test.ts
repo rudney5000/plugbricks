@@ -1,5 +1,6 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -16,6 +17,17 @@ const work = join(pkgDir, ".test-work/dist");
 const unpacked = join(work, "package");
 
 let files: string[];
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      server.close(() => resolve(address.port));
+    });
+  });
+}
 
 beforeAll(() => {
   rmSync(work, { recursive: true, force: true });
@@ -35,6 +47,7 @@ describe("published package", () => {
         "dist/index.js",
         "dist/index.d.ts",
         "dist/bin.js",
+        "dist/admin/ui/index.html",
         "schemas/plugin-manifest.schema.json",
         "schemas/platform.schema.json",
         "schemas/platform-lock.schema.json",
@@ -136,6 +149,35 @@ describe("published package", () => {
       admin.close();
     }
   });
+
+  it("serves its own built UI from the packed package", async () => {
+    const project = join(work, "admin-ui-project");
+    mkdirSync(project);
+    const cli = (...args: string[]) =>
+      spawnSync(process.execPath, [join(unpacked, "dist/bin.js"), ...args], { cwd: project, encoding: "utf8" });
+    expect(cli("init", "--name", "ui-demo").status).toBe(0);
+    const port = await freePort();
+    const child = spawn(process.execPath, [join(unpacked, "dist/bin.js"), "admin", "--dev", "--port", String(port)], {
+      cwd: project,
+      stdio: "ignore",
+    });
+    try {
+      let up = false;
+      for (let i = 0; i < 100 && !up; i++) {
+        try {
+          up = (await fetch(`http://127.0.0.1:${port}/api/session`)).status === 200;
+        } catch {
+          // Not listening yet.
+        }
+        if (!up) await new Promise((r) => setTimeout(r, 100));
+      }
+      expect(up, "the packed admin started").toBe(true);
+      const page = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+      expect(page).toContain("plugbricks admin");
+    } finally {
+      child.kill();
+    }
+  }, 60_000);
 
   it("runs init, add, status and remove from the built CLI", () => {
     const project = join(work, "project");

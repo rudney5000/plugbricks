@@ -121,8 +121,8 @@ relative to the platform), enable or disable it, remove it, or deploy (`up`); ea
 CLI as a child process, one at a time, and is written twice to `.admin/audit.log` (accepted, then its
 outcome). There is no `--prune-volumes` in the admin: deleting data stays a terminal decision. A
 viewer sees the same pages and cannot change anything. The Router page shows the configuration hash,
-size, source, composition and composed schema; the published package still needs to carry the UI
-build (next step).
+size, source, composition and composed schema. The published package carries the built UI
+(`prepack` copies it to `dist/admin/ui`), and the `dist` test checks it.
 
 ### `enabled` and `tags`
 
