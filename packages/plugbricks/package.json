@@ -25,7 +25,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "npm run build",
+    "prepack": "npm run build && node scripts/copy-admin-ui.mjs",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/e2e-*.test.ts\" --exclude \"**/node_modules/**\"",
     "coverage": "vitest run --exclude \"**/e2e-*.test.ts\" --exclude \"**/node_modules/**\" --coverage --coverage.provider=v8 --coverage.reporter=text-summary --coverage.reporter=lcov",

@@ -242,9 +242,13 @@ export function main(argv: string[], io: Io): number {
           if (!dev && (!values.issuer || !values["client-id"])) {
             throw new PlugbricksError([issue("ADMIN_OIDC_NOT_CONFIGURED", "")]);
           }
+          const cliDir = dirname(fileURLToPath(import.meta.url));
+          const packagedUi = join(cliDir, "admin", "ui");
           const uiDir =
             values["ui-dir"] === undefined
-              ? join(dirname(fileURLToPath(import.meta.url)), "../../admin/dist")
+              ? existsSync(join(packagedUi, "index.html"))
+                ? packagedUi
+                : join(cliDir, "../../admin/dist")
               : resolve(io.cwd, values["ui-dir"]);
           if (!existsSync(join(uiDir, "index.html"))) throw new PlugbricksError([issue("ADMIN_UI_MISSING", "", { dir: uiDir })]);
           // Read-only: statusRuntime is bounded and never mutates; the server only serves the project.
