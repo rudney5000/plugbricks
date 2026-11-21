@@ -82,6 +82,7 @@ function printDeclared(io: Io, s: StatusResult): void {
   for (const b of s.bricks) {
     const parts = [
       ...(b.enabled ? [] : ["disabled"]),
+      ...(b.webPort !== undefined ? [`pages on 127.0.0.1:${b.webPort}`] : []),
       ...(b.provides.length ? [`provides ${b.provides.join(", ")}`] : []),
       ...Object.entries(b.requires).map(([cap, r]) => `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`),
     ];

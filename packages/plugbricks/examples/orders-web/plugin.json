@@ -1,0 +1,21 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "orders-web",
+  "version": "0.1.0",
+  "description": "Example web brick: the shop's orders page. Its pages are published on 127.0.0.1:<webPort> (platform.json); it reads the orders through the router, from the server (GRAPHQL_URL) and from the browser (PUBLIC_GRAPHQL_URL). Its source is apis/orders-web; build the image with: docker build -t plugbricks-example/orders-web:0.1.0 apis/orders-web",
+  "tags": ["web"],
+  "services": [
+    {
+      "name": "app",
+      "image": "plugbricks-example/orders-web:0.1.0",
+      "port": 3000,
+      "healthcheck": {
+        "exec": ["wget", "-qO-", "http://localhost:3000/health"]
+      }
+    }
+  ],
+  "web": {
+    "service": "app",
+    "path": "/orders"
+  }
+}

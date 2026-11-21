@@ -26,6 +26,8 @@ export const MESSAGES = {
     'ready command of capability "{capability}" must target ${provider.host}, otherwise it probes the waiting container itself',
   TEMPLATE_UNKNOWN: '"{template}" is not a template this field accepts; allowed here: {allowed}',
   PORT_CONFLICT: 'the ports of service "{service}" conflict: {detail}',
+  WEB_ENV_RESERVED:
+    'service "{service}" serves the pages of this brick and sets {name} in its env; plugbricks sets it (the router\'s address), so remove it from the manifest',
 
   // Runtime (generate, up, down).
   WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
@@ -62,6 +64,7 @@ export const MESSAGES = {
   PLATFORM_FILE_INVALID: "{file} does not match its schema; see the issues below",
   LOCK_MISSING: 'platform.lock is missing in {dir}; it is written by "plugbricks init"',
   LOCK_OUT_OF_SYNC: 'platform.json and platform.lock disagree on brick "{brick}"; {detail}',
+  WEB_PORT_CONFLICT: 'webPort {port} of brick "{brick}" is already used by {other}; give it another port in platform.json',
   LOCK_INCONSISTENT: "platform.lock lists volume {volume} {detail}; fix the lock before going further",
 
   // Federation: the subgraphs of the installed bricks (add, remove, status)

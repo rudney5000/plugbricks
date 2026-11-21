@@ -977,7 +977,19 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `text/plain` and a JSON mutation with `Origin: http://evil.example` get 403, a preflight from it gets
   403, and the number of orders does not change. A request with the router's own origin runs (200); a
   *preflight* with it gets 400, because the router treats it as a same-origin request, which never needs
-  one. Not run on k3d yet. Points 2 to 7 (the web bricks) are accepted, not built. Chosen by Dedy on
+  one. Not run on k3d yet. Step 7b (points 2 to 7, the web bricks) implemented on 2026-11-21: `web` in
+  the manifest, `webPort` in `platform.json` (written by `add`), the service published on
+  `127.0.0.1:<webPort>` by Compose, `GRAPHQL_URL` and `PUBLIC_GRAPHQL_URL` set on it, the router's origins
+  following the web bricks, `status` showing "pages on 127.0.0.1:<port>", the admin's Hosts column, and
+  `examples/orders-web` (source `apis/orders-web`). Tested by the CLI scenarios `web-brick-generate`
+  (golden files for both runtimes), `web-port-next-free`, `web-port-conflict` and
+  `add-web-env-reserved`, by the admin test, and end to end on Docker Compose (`e2e-compose`, "a web
+  brick in front of the router"): only the router and the page are published, both on 127.0.0.1; an
+  order created and shipped through the router shows on the page, rendered by its server through
+  `GRAPHQL_URL`; the page's two origins get 204 and their own origin back on a preflight, and a request
+  from the page's origin runs, while `http://evil.example` gets 403; with the shipping container stopped
+  the page still lists the order and marks its shipment "Unavailable". Not run: the k3d scenario (point 4
+  through port-forward) and a real browser clicking "Refresh". Chosen by Dedy on
   2026-11-21 between two options: a web
   gateway (one published reverse proxy in front of the pages and `/graphql`) and one published port per
   web brick. The second was chosen: simpler to start, no new component to pin and harden.
@@ -1005,7 +1017,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
      has. This step comes first and stands alone: it fixes the hole above for every platform.
   2. **The manifest** gains an optional `web: { "service": "<name>", "path": "/" }`: the service that
      serves pages on its `port`, and the entry path shown by the admin (default `/`). A brick may have
-     both `subgraph` and `web`. `WEB_SERVICE_UNKNOWN` when the service does not exist.
+     both `subgraph` and `web`. `UNKNOWN_SERVICE` (the code `subgraph` and `provides` already use) when
+     the service does not exist.
   3. **The host port is the platform's choice, not the brick's:** `platform.json` gets
      `bricks.<name>.webPort` (1024 to 65535). `add` writes the first port from 8080 upwards that no other
      web brick and not `router.port` uses, so the same `add` twice still gives identical files; the user

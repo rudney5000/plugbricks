@@ -124,12 +124,12 @@ viewer sees the same pages and cannot change anything. The Router page shows the
 size, source, composition and composed schema. The published package carries the built UI
 (`prepack` copies it to `dist/admin/ui`), and the `dist` test checks it.
 
-The screenshots below were taken on a real platform (`postgres`, `orders`, `shipping` and the router on
-Docker Compose, admin in `--dev`). On Compose the router has no healthcheck (its image has no shell,
+The screenshots below were taken on a real platform (`postgres`, `orders`, `shipping`, `orders-web` and
+the router on Docker Compose, admin in `--dev`). On Compose the router has no healthcheck (its image has no shell,
 D9), so its state is shown as `Unknown` while it runs.
 
 **Bricks**: what `platform.json` asks for next to what the runtime reports; a subgraph brick is reached
-through the router.
+through the router, a web brick's page on its own loopback port.
 
 ![The Bricks page: three healthy bricks, their tags, ports, subgraphs and router endpoint](docs/screenshots/admin-bricks.png)
 
@@ -153,6 +153,29 @@ A brick can be **disabled without being removed**: `plugbricks disable <name>` w
 Commands that change the platform (`add`, `remove`, `enable`, `disable`, `generate`, `up`, `down`) run **one at a time**: each holds `.platform/lock` while it runs, and another one meanwhile is refused with `PLATFORM_BUSY`, whether it comes from a terminal or from the admin. A lock left by a process that died is taken over (D16).
 
 A brick may also declare `tags` (`api`, `graphql`, `database`, `queue`, …) in its `plugin.json`; they are kept in `platform.lock` and shown in the JSON reports, for filtering in the admin.
+
+### `web`: a brick that serves pages
+
+A brick may declare the service that serves its pages: `"web": { "service": "app", "path": "/orders" }`.
+`add` gives it a `webPort` in `platform.json`, the first port from 8080 that neither the router nor
+another web brick uses (change it there if you like; a port already taken is refused with
+`WEB_PORT_CONFLICT`). On Docker Compose the service is published on `127.0.0.1:<webPort>` only; on
+Kubernetes it stays a ClusterIP Service, reached with `kubectl port-forward` on the same local port. When
+the platform has a router, the service is given `GRAPHQL_URL` (the router inside the platform, for its
+server) and `PUBLIC_GRAPHQL_URL` (`http://127.0.0.1:<router.port>/graphql`, for code that runs in the
+browser), and the router accepts browser calls from `http://127.0.0.1:<webPort>` and
+`http://localhost:<webPort>` only: any other origin gets 403 and its request does not run (D17). With
+no web brick, the router accepts only its own origin.
+
+`examples/orders-web` (source `apis/orders-web`) is the shop's orders page: its server reads the orders
+and their shipment through the router, and when shipping does not answer it still lists the orders with
+the shipment marked unavailable.
+
+![The orders page of orders-web on 127.0.0.1:8080, refreshed by the browser through the router](docs/screenshots/web-orders-page.png)
+
+With the shipping container stopped, the same page:
+
+![The orders page with shipping stopped: the orders are listed, the shipment is unavailable](docs/screenshots/web-orders-shipping-down.png)
 
 ### `queue`: one message broker for every service that needs it
 
@@ -282,4 +305,6 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (5d): `enabled` in `platform.json` (`enable` / `disable`: installed but not deployed) and `tags` in `plugin.json` (D14).
    - Done (6b): one changing command at a time, `.platform/lock` and `PLATFORM_BUSY` (D16).
    - Done (6, 6c, 6d): `plugbricks admin` on `127.0.0.1:4100`, the Bricks, Router and Audit pages, OIDC sign-in with the roles `plugbricks-viewer` and `plugbricks-admin`, actions (`add`, `enable`, `disable`, `remove`, `up`) run through the CLI and written to `.admin/audit.log`, the UI shipped in the package (D15).
-   - Not built: web bricks (pages served by a brick, like the mockup's `orders-web`) and a Keycloak brick (an external issuer is the supported path, `docs/keycloak.md`).
+   - Done (7a): the router accepts browser calls only from the origins it lists; it used to accept every origin, and a cross-site mutation ran (D17).
+   - Done (7b): web bricks: `web` in the manifest, `webPort` in `platform.json`, published on 127.0.0.1 only, `GRAPHQL_URL` and `PUBLIC_GRAPHQL_URL`, the example `orders-web`, tested end to end on Docker Compose (D17). Not yet on k3d.
+   - Not built: a Keycloak brick (an external issuer is the supported path, `docs/keycloak.md`).

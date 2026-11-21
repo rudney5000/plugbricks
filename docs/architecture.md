@@ -225,7 +225,7 @@ without listing it in `extends` is not detected.
 
 | Concern | Rule | Where |
 |---|---|---|
-| Exposure | only the router, loopback / ClusterIP | D9 |
+| Exposure | only the router and the web bricks' pages, loopback / ClusterIP | D9, D17 |
 | Browser origins | the router accepts only the origins it lists (`CORS_ALLOW_ORIGINS`); any other gets 403 and nothing runs | D17 |
 | Images | pinned to `MAJOR.MINOR` at least, or a digest; the router by digest | `src/image.ts`, `tools.json` |
 | Router | non-root (65532), read-only filesystem, no capability, playground off, telemetry off | D9 |
@@ -277,11 +277,9 @@ flowchart LR
 
 What the admin mockup still shows and the code does not have:
 
-1. **Web bricks** (the mockup's `orders-web`): a service that serves pages. Decided in D17, not built:
-   each web brick is published on its own loopback port (`webPort` in `platform.json`), and the router
-   accepts cross-origin calls only from those pages. The first step of D17 is built: the router used to
-   accept every origin, so any web page could run its mutations; it now refuses any origin it does not
-   list (403, nothing runs).
+1. **Web bricks on Kubernetes, end to end** (D17): web bricks are built and tested end to end on Docker
+   Compose (`examples/orders-web`, published on its own loopback port, `webPort`); the k3d scenario,
+   through `kubectl port-forward`, is not written yet.
 2. **A Keycloak brick.** The supported path is an external issuer (`docs/keycloak.md`). A brick would
    need a service published on the host (against D9) and a setup task at the provider level (create the
    realm, the client and the roles), which the manifest cannot express today.
