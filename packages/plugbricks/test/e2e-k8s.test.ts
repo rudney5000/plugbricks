@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import type { LiveStatus } from "../src/live.js";
 import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { ask, get, through, until, type Answer } from "./helpers/graphql.js";
 import { k8sTestTarget } from "./helpers/k8s-guard.js";
-import { portForward, stopAllForwards } from "./helpers/port-forward.js";
+import { freePort, portForward, stopAllForwards } from "./helpers/port-forward.js";
 
 // Runs the Kubernetes driver against a real, throwaway k3d cluster: up with postgres and orders, a
 // GraphQL call, down, remove + up --prune-volumes; the router in front of orders and shipping, with real requests
@@ -613,6 +613,117 @@ describe("Kubernetes driver against a real k3d cluster", () => {
 
       expect(cli(work, ["down"]).code).toBe(0);
       expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/rabbitmq-broker-data"]);
+    },
+    900_000,
+  );
+
+  // D17 on a cluster: a web brick is not published (its Service is a ClusterIP like every other); it is reached with
+  // kubectl port-forward on its webPort, the local port the router's allowed origins name.
+  it.skipIf(!ready)(
+    `serves a web brick's page through port-forward on its webPort, with the router accepting its origin only${why}`,
+    async () => {
+      for (const api of ["orders", "shipping", "orders-web"]) loadImage(api);
+      const ns = "pbtest-k8s-web";
+      const work = project(ns, []);
+      for (const brick of ["orders", "shipping", "orders-web"])
+        cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "postgres"],
+        ["add", "orders"],
+        ["add", "shipping"],
+        ["add", "orders-web"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+      // The local port of the forward must be the webPort: that is the origin the router accepts.
+      const webPort = await freePort();
+      const file = join(work, "platform.json");
+      const platform = JSON.parse(readFileSync(file, "utf8"));
+      platform.bricks["orders-web"].webPort = webPort;
+      writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      // Nothing is published: every Service is a ClusterIP, the web brick's too.
+      const services = JSON.parse(kc(["--namespace", ns, "get", "services", "--output", "json"]).stdout).items as {
+        metadata: { name: string };
+        spec: { type: string };
+      }[];
+      expect(services.map((s) => s.metadata.name).sort()).toEqual([
+        "orders-app",
+        "orders-web-app",
+        "postgres-db",
+        "router",
+        "shipping-app",
+      ]);
+      expect(services.every((s) => s.spec.type === "ClusterIP")).toBe(true);
+
+      // The web service is given the router inside the cluster (its Service port) and the router as a browser here reaches it.
+      const env = JSON.parse(kc(["--namespace", ns, "get", "deployment", "orders-web-app", "--output", "json"]).stdout).spec.template.spec
+        .containers[0].env as { name: string; value?: string }[];
+      expect(Object.fromEntries(env.map((e) => [e.name, e.value]))).toMatchObject({
+        GRAPHQL_URL: "http://router:4000/graphql",
+        PUBLIC_GRAPHQL_URL: "http://127.0.0.1:4000/graphql",
+      });
+
+      const origin = `http://127.0.0.1:${webPort}`;
+      const orderId = await viaRouter(
+        ns,
+        async (routerPort) => {
+          const created = await through(routerPort, "createOrder (k8s)", "mutation { createOrder(total: 42.5) { id } }");
+          const id = created.body.data.createOrder.id as string;
+          await through(routerPort, "shipOrder (k8s)", `mutation { shipOrder(orderId: "${id}", carrier: "dhl") { status } }`);
+          // The router accepts the page's origin, and refuses another one before running anything.
+          const pre = await fetch(`http://127.0.0.1:${routerPort}/graphql`, {
+            method: "OPTIONS",
+            headers: { origin, "access-control-request-method": "POST", "access-control-request-headers": "content-type" },
+          });
+          expect([pre.status, pre.headers.get("access-control-allow-origin")]).toEqual([204, origin]);
+          const elsewhere = await fetch(`http://127.0.0.1:${routerPort}/graphql`, {
+            method: "POST",
+            headers: { origin: "http://evil.example", "content-type": "text/plain" },
+            body: JSON.stringify({ query: "mutation { createOrder(total: 1) { id } }" }),
+          });
+          expect(elsewhere.status).toBe(403);
+          return id;
+        },
+        "{ orders(limit: 1) { id shipment { carrier } } }",
+      );
+
+      // The page, through a forward on its webPort: rendered by its server through GRAPHQL_URL, inside the cluster.
+      const page = await portForward({
+        kubectl: "kubectl",
+        clusterArgs: ["--kubeconfig", kubeconfig, "--context", context, "--namespace", ns],
+        service: "orders-web-app",
+        servicePort: 3000,
+        localPort: webPort,
+      });
+      try {
+        const html = async () => (await fetch(`${origin}/orders`)).text();
+        await until("the page through the forward", async () => (await html()).includes(`#${orderId}`), 120_000);
+        const shown = await html();
+        expect(shown).toContain("dhl · SHIPPED");
+        expect(shown).toContain('data-graphql="http://127.0.0.1:4000/graphql"');
+
+        // Shipping scaled to zero: the page still lists the order, its shipment unavailable.
+        expect(kc(["--namespace", ns, "scale", "deployment/shipping-app", "--replicas=0"]).status).toBe(0);
+        let degraded = "";
+        await until(
+          "the degraded page",
+          async () => {
+            degraded = await html();
+            return degraded.includes("Unavailable");
+          },
+          120_000,
+        );
+        expect(degraded).toContain(`#${orderId}`);
+        console.log(`k8s page on ${origin}/orders with shipping scaled to 0: order #${orderId} listed, shipment "Unavailable"`);
+      } finally {
+        page.stop();
+      }
+
+      expect(cli(work, ["down"]).code).toBe(0);
     },
     900_000,
   );

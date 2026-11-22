@@ -279,7 +279,7 @@ What the admin mockup still shows and the code does not have:
 
 1. **Web bricks on Kubernetes, end to end** (D17): web bricks are built and tested end to end on Docker
    Compose (`examples/orders-web`, published on its own loopback port, `webPort`); the k3d scenario,
-   through `kubectl port-forward`, is not written yet.
+   through `kubectl port-forward`, is written but has not run yet (its first run is the CI job).
 2. **A Keycloak brick.** The supported path is an external issuer (`docs/keycloak.md`). A brick would
    need a service published on the host (against D9) and a setup task at the provider level (create the
    realm, the client and the roles), which the manifest cannot express today.
