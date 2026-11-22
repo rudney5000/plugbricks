@@ -24,12 +24,14 @@ export interface ForwardOptions {
   clusterArgs: string[];
   service: string;
   servicePort: number;
+  /** The local port to listen on; a free one when absent. A web brick's page needs its webPort (D17). */
+  localPort?: number;
   timeoutMs?: number;
 }
 
 /** Starts the forward and returns once kubectl says it listens. `stop` kills it; it never outlives its test. */
 export async function portForward(o: ForwardOptions): Promise<{ port: number; stop: () => void }> {
-  const port = await freePort();
+  const port = o.localPort ?? (await freePort());
   const child = spawn(
     o.kubectl,
     [...o.clusterArgs, "port-forward", "--address", "127.0.0.1", `service/${o.service}`, `${port}:${o.servicePort}`],
