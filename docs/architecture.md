@@ -277,10 +277,8 @@ flowchart LR
 
 What the admin mockup still shows and the code does not have:
 
-1. **A Keycloak brick.** The supported path is an external issuer (`docs/keycloak.md`). Web bricks are
-   built (D17) and tested end to end on Docker Compose and on k3d, so a Keycloak brick could publish its
-   sign-in page the same way; what it still lacks is a setup step for its realm, client and roles, which
-   the manifest cannot express today.
+1. **An `oidc` capability.** The Keycloak brick exists (D18), but the admin is still pointed at it by hand
+   (`--issuer`); a capability would let the admin, and the router once it checks tokens, find the issuer.
 2. **Tokens in the data plane:** the router and the API bricks do not check any token today; only the
    admin signs people in.
 3. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).

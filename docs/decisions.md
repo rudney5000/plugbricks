@@ -1059,8 +1059,14 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D18. A Keycloak brick: a web brick with its own built image, a realm without users, the admin pointed at it
 
-- **Status:** proposed (2026-11-23), not built. Point 1 (an image of our own, built once) was chosen by Dedy
-  on 2026-11-23; the other points are proposals to confirm.
+- **Status:** implemented (2026-11-23). Point 1 (an image of our own, built once) was chosen by Dedy on
+  2026-11-23, and points 2 to 7 accepted by him the same day. `${web.origin}` (context `webServiceEnv` in
+  `src/templates.ts`), `WEB_PORT_MISSING`, `apis/keycloak` (Dockerfile, entry script, realm without users),
+  `examples/keycloak`. Tested by the CLI scenarios `keycloak-generate` (golden files for both runtimes),
+  `add-web-origin-outside` and `web-port-missing`, and end to end on Docker Compose (`e2e-oidc`, "the
+  keycloak brick"): `up` returns once the realm answers, its issuer is `http://127.0.0.1:<webPort>/realms/plugbricks`,
+  the realm has no user, a user created with the brick's generated administrator and given
+  `plugbricks-admin` signs into `plugbricks admin` and gets an admin session. Not on k3d (point "Tests").
 - **Context:** the admin signs people in with OIDC against an external issuer (D15, `docs/keycloak.md`).
   The mockup also has the identity provider inside the platform. D17 removed the first obstacle (a brick
   can publish its pages on its own loopback port); what was left unknown is how Keycloak behaves as a
@@ -1108,8 +1114,13 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
      http://127.0.0.1:<webPort>/realms/plugbricks --client-id plugbricks-admin`; `status` shows the webPort.
      An `oidc` capability, so that the admin and later the router find the issuer by themselves, comes
      with token checks in the data plane (a later decision): no brick consumes it yet.
-  7. **Waiting:** the healthcheck (bash, port 9000) has a start period of 180 s, so that a first start
-     (119 s measured) is not counted as failures.
+  7. **Waiting:** the healthcheck has a start period of 180 s, so that a first start (119 s measured) is not
+     counted as failures. **It asks for the realm, not for `/health/ready`:** while building the plan, a
+     platform `up` returned after 26 s with Keycloak "healthy" and the realm still answering 503. Keycloak's
+     readiness endpoint on port 9000 said UP during its bootstrap (schema creation and realm import), which
+     took about 100 s more. The check therefore sends `GET /realms/plugbricks/.well-known/openid-configuration`
+     on port 8080 with bash and requires a 200; with it, `down` then `up` (container recreated, database kept)
+     returned after 50 s with the realm already answering.
 - **Tests planned:** a CLI scenario with golden files for both runtimes (the template, the secret, the
   published port); refusal of `${web.origin}` outside a web brick's service; end to end on Docker Compose
   only: `postgres` and `keycloak` up, the discovery document on `127.0.0.1:<webPort>` with that issuer, a
@@ -1117,7 +1128,10 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `plugbricks admin` with that user (the flow of the D15 test). Not on k3d: the image is large and its first
   start long; the CI job would grow by minutes, and the local machine cannot run it.
 - **Limits:** the realm file is applied on the first start only; the redirect URI assumes the admin on port
-  4100; about 600 MB of memory; a first start of about two minutes.
+  4100; about 600 MB of memory; a first start of about two minutes. `add` picks the first port from 8080
+  that this platform does not use, not one that is free on the machine: with another platform's web brick
+  already on 8080, `up` failed with "Bind for 127.0.0.1:8080 failed: port is already allocated", and the
+  webPort had to be changed in `platform.json` (true of every web brick, D17).
 
 ---
 
