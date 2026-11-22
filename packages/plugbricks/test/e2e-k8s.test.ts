@@ -471,11 +471,17 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         ["add", "patient"],
       ])
         expect(cli(work, args).code).toBe(0);
-      // Kubernetes has no fast failure for a crash-looping init container: up gives up when the
-      // rollout deadline (the waits plus 300 s) passes, then reads the exit code 124 from the pod.
+      // Kubernetes restarts a crash-looping init container, so the rollout alone would only fail at its
+      // deadline (the waits plus 300 s). up waits in slices and reads the wait init container between them:
+      // the exit code 124 is reported after the first slice or so, as Compose does.
+      const started = Date.now();
       const up = cli(work, ["up"]);
+      const seconds = Math.round((Date.now() - started) / 1000);
       expect(up.code, `${up.out}\n${up.err}`).toBe(1);
       expect(up.err).toContain('error WAIT_TIMEOUT: "patient" gave up waiting for capability "slow" from "never" after 3s');
+      console.log(`WAIT_TIMEOUT reported by up after ${seconds} s`);
+      // Well under the old 303 s deadline: pulling the images and starting the pod, a 3 s wait, a slice or two.
+      expect(seconds).toBeLessThan(120);
     },
     900_000,
   );

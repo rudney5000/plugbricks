@@ -328,7 +328,14 @@ end yet.
   PersistentVolumeClaims, `remove` then `up --prune-volumes` deleting only the pending one, and
   `WAIT_TIMEOUT` after 304 s; the job took 6 min 13 s, of which the `WAIT_TIMEOUT` test is about
   five minutes (Kubernetes has no fast failure for a crash-looping init container, so `up` waits
-  for the rollout deadline). The decision stands. That run shows the driver works; it does not
+  for the rollout deadline). **Changed on 2026-11-23:** that wait was 5 of the 16 minutes the job had
+  grown to. `up` now waits for a service that waits on a capability in slices of 15 s
+  (`ROLLOUT_SLICE_SECONDS`) and reads its wait init containers between them, so a wait that exited 124 is
+  reported after the first slice or so, as Compose does; a `rollout status` failure that is not its own
+  timeout is reported at once. The k3d scenario asserts `WAIT_TIMEOUT` in less than 120 s. Behaviour
+  change: a wait that times out once and succeeds after Kubernetes restarts it used to let `up` succeed
+  if it happened before the deadline; it is now reported, as on Compose, where a wait task that exits 124
+  fails `up` too. The decision stands. That run shows the driver works; it does not
   compare it with score-k8s, so the Score reasons above stay as evidence, not as a measurement.
   Not yet tested on a cluster: killing the database pod and running `up` again (roadmap).
   - plugbricks now owns what Score provided: the YAML for Compose and Kubernetes objects
@@ -1064,8 +1071,8 @@ Points 1 to 3 of experiment D are in the manifest schema:
 - `requires.<capability>.timeoutSeconds` (default 120, maximum 900). On expiry the wait
   script exits 124. Compose: `up` finds the wait task that exited 124 and reports
   `WAIT_TIMEOUT`. Kubernetes: the init container exits 124, the pod goes to `Init:Error` /
-  `CrashLoopBackOff`, the rollout times out, and `up` reports `WAIT_TIMEOUT` from the init
-  container status.
+  `CrashLoopBackOff`, and `up`, which waits for the rollout in 15 s slices, reports `WAIT_TIMEOUT` from
+  the init container status after the slice in which it happened (D5).
 - `provides.<capability>.ready` (required): an exec array that must target
   `${provider.host}` (`READY_NOT_TARGETING_PROVIDER` otherwise).
 - `healthcheck.timeoutSeconds` (default 3) and `healthcheck.startPeriodSeconds` (default 0),

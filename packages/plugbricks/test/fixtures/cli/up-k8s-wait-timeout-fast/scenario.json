@@ -1,0 +1,57 @@
+{
+  "description": "a wait that exited 124 is reported as WAIT_TIMEOUT after the first rollout slice, not after the whole rollout deadline",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster"
+      ],
+      "exit": 1,
+      "codes": [
+        "WAIT_TIMEOUT"
+      ],
+      "fake": [
+        {
+          "match": "rollout status deployment/orders-app",
+          "status": 1,
+          "stderr": "error: timed out waiting for the condition"
+        },
+        {
+          "match": "get pods",
+          "stdout": "{\"items\": [{\"status\": {\"initContainerStatuses\": [{\"name\": \"wait-database\", \"state\": {\"waiting\": {\"reason\": \"CrashLoopBackOff\"}}, \"lastState\": {\"terminated\": {\"exitCode\": 124}}}]}}]}"
+        }
+      ],
+      "commands": [
+        "kubectl --context test-cluster version --client",
+        "kubectl --context test-cluster apply --filename .generated/k8s/namespace.yaml",
+        "kubectl --context test-cluster apply --filename .secrets/k8s-secret.yaml",
+        "kubectl --context test-cluster apply --filename .generated/k8s/resources.yaml",
+        "kubectl --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick,plugbricks/brick notin (orders,postgres) --ignore-not-found",
+        "kubectl --context test-cluster --namespace demo rollout status deployment/orders-app --timeout=15s",
+        "kubectl --context test-cluster --namespace demo get pods --selector plugbricks/service=orders-app --output json"
+      ]
+    }
+  ]
+}
