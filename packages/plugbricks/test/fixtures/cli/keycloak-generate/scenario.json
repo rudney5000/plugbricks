@@ -1,0 +1,15 @@
+{
+  "description": "the keycloak brick: a web brick requiring database, told the address the browser uses (${web.origin}) and given its own admin password (D18)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/keycloak"], "stdout": "Added keycloak 0.1.0" },
+    { "run": ["status"], "stdout": "keycloak 0.1.0  pages on 127.0.0.1:8080" },
+    { "run": ["generate"] },
+    { "run": ["generate", "--runtime", "k8s"] }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "      KC_HOSTNAME: http://127.0.0.1:8080\n",
+    ".secrets/secrets.env": "PB_KEYCLOAK__ADMIN_PASSWORD="
+  }
+}
