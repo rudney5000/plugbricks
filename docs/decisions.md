@@ -993,8 +993,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   scenario (`e2e-k8s`, "serves a web brick's page through port-forward on its webPort") is written on
   2026-11-22: every Service a ClusterIP, the two variables on the Deployment (`GRAPHQL_URL` is
   `http://router:4000/graphql` there), the page reached by a port-forward whose local port is its
-  webPort, the router's origins, and shipping scaled to zero. It has not run yet: the local machine could
-  not hold a k3d cluster with this platform, so its first run is the CI job "kubernetes (k3d)". Chosen by Dedy on
+  webPort, the router's origins, and shipping scaled to zero. The local machine could not hold a k3d
+  cluster with this platform, so it first ran in the CI job "kubernetes (k3d)" of pull request 34, green.
+  D17 is implemented in full. Chosen by Dedy on
   2026-11-21 between two options: a web
   gateway (one published reverse proxy in front of the pages and `/graphql`) and one published port per
   web brick. The second was chosen: simpler to start, no new component to pin and harden.
