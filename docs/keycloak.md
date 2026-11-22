@@ -1,9 +1,9 @@
 # Signing in to the admin with Keycloak
 
-The admin is a **host process** (`plugbricks admin`), and the platform does not publish its services
-on the host (D9). The supported identity provider is therefore an **external issuer**: a Keycloak you
-run on the host (or anywhere reachable from it). This page walks through a local Keycloak, a public
-client (PKCE, no secret) and the `plugbricks-admin` / `plugbricks-viewer` realm roles.
+The admin is a **host process** (`plugbricks admin`). Its identity provider is either the platform's
+own **Keycloak brick** (`examples/keycloak`, D18, see the README) or an **external issuer**: a Keycloak you
+run on the host (or anywhere reachable from it). This page walks through the second: a local Keycloak, a
+public client (PKCE, no secret) and the `plugbricks-admin` / `plugbricks-viewer` realm roles.
 
 The realm used below is the test fixture:
 [`packages/plugbricks/test/fixtures/keycloak/realm.json`](../packages/plugbricks/test/fixtures/keycloak/realm.json).
@@ -58,10 +58,9 @@ The browser, the issuer URL and the redirect URI must agree on the host: the adm
 `127.0.0.1` / `localhost` (D15), and Keycloak must issue the same host in the issuer and accept the
 callback.
 
-## Why not a Keycloak brick?
+## The Keycloak brick
 
-A brick runs inside the platform network, and plugbricks deliberately publishes nothing but the
-router on the host (D9); the host admin cannot reach it. A Keycloak brick would also need a
-provider-level setup task (create the realm and the client once, not once per consumer), which the
-manifest does not have yet. An external issuer is the supported path today; a brick can come when
-those two features exist.
+Since D17 a brick can publish its pages on its own loopback port, and since D18 there is a Keycloak brick:
+the same realm, roles and client, built into its image (`apis/keycloak`) **without any user**, its
+console at `http://127.0.0.1:<webPort>/admin/`, its administrator's password generated in
+`.secrets/secrets.env`. The README section "`keycloak`" shows the commands.

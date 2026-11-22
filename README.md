@@ -177,6 +177,29 @@ With the shipping container stopped, the same page:
 
 ![The orders page with shipping stopped: the orders are listed, the shipment is unavailable](docs/screenshots/web-orders-shipping-down.png)
 
+### `keycloak`: the platform's own identity provider
+
+`examples/keycloak` is a web brick that requires `database`: Keycloak with the realm `plugbricks` (roles
+`plugbricks-admin` and `plugbricks-viewer`, the admin's public client) and **no user**. Build its image once
+(`docker build -t plugbricks-example/keycloak:0.1.0 apis/keycloak`), then:
+
+```bash
+npx plugbricks add path/to/postgres
+npx plugbricks add path/to/keycloak    # its console: http://127.0.0.1:<webPort>/admin/
+npx plugbricks up                      # returns once the realm answers (about 2 minutes the first time)
+```
+
+Sign into the console as `admin` with the password `PB_KEYCLOAK__ADMIN_PASSWORD` from
+`.secrets/secrets.env`, create the users and give them `plugbricks-admin` or `plugbricks-viewer`, then:
+
+```bash
+npx plugbricks admin --issuer http://127.0.0.1:<webPort>/realms/plugbricks --client-id plugbricks-admin
+```
+
+The brick uses `${web.origin}`, the address the browser uses (`http://127.0.0.1:<webPort>`), a template
+allowed only in the env of a web brick's own service. The realm is imported on the first start only, and
+the admin must run on port 4100, the redirect URI of the realm's client (D18).
+
 ### `queue`: one message broker for every service that needs it
 
 `examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:
@@ -307,4 +330,4 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (6, 6c, 6d): `plugbricks admin` on `127.0.0.1:4100`, the Bricks, Router and Audit pages, OIDC sign-in with the roles `plugbricks-viewer` and `plugbricks-admin`, actions (`add`, `enable`, `disable`, `remove`, `up`) run through the CLI and written to `.admin/audit.log`, the UI shipped in the package (D15).
    - Done (7a): the router accepts browser calls only from the origins it lists; it used to accept every origin, and a cross-site mutation ran (D17).
    - Done (7b): web bricks: `web` in the manifest, `webPort` in `platform.json`, published on 127.0.0.1 only, `GRAPHQL_URL` and `PUBLIC_GRAPHQL_URL`, the example `orders-web`, tested end to end on Docker Compose and on k3d (D17).
-   - Not built: a Keycloak brick (an external issuer is the supported path, `docs/keycloak.md`).
+   - Done (7c): a Keycloak brick (`examples/keycloak`, image from `apis/keycloak`): the platform's own identity provider for the admin, tested end to end on Docker Compose with a real sign-in (D18).
