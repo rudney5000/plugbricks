@@ -63,7 +63,8 @@ export function validateManifest(manifest: unknown): ValidationResult {
     }
     names.add(s.name);
     checkImage(s.image, `/services/${i}/image`, issues);
-    checkTemplates(s.env, `/services/${i}/env`, "serviceEnv", issues);
+    // ${web.origin} only in the env of the service that serves the brick's pages (D18).
+    checkTemplates(s.env, `/services/${i}/env`, m.web?.service === s.name ? "webServiceEnv" : "serviceEnv", issues);
     // Extra ports: a Kubernetes Service cannot have two ports with the same name or number, and
     // "main" is the name of the primary port.
     const portNames = new Set(["main"]);
