@@ -694,7 +694,9 @@ describe("Kubernetes driver against a real k3d cluster", () => {
           expect(elsewhere.status).toBe(403);
           return id;
         },
-        "{ orders(limit: 1) { id shipment { carrier } } }",
+        // shipment(...) is a root field of shipping: the router must reach it before the first mutation. Asking only for
+        // orders (and their shipment) proves nothing while there is no order: the router then never calls shipping.
+        '{ orders(limit: 1) { id } shipment(orderId: "1") { carrier } }',
       );
 
       // The page, through a forward on its webPort: rendered by its server through GRAPHQL_URL, inside the cluster.
