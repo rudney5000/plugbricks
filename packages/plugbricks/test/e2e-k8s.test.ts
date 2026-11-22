@@ -673,7 +673,13 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         async (routerPort) => {
           const created = await through(routerPort, "createOrder (k8s)", "mutation { createOrder(total: 42.5) { id } }");
           const id = created.body.data.createOrder.id as string;
-          await through(routerPort, "shipOrder (k8s)", `mutation { shipOrder(orderId: "${id}", carrier: "dhl") { status } }`);
+          // Checked here, so that a failed mutation is reported as such and not, later, as a page without the shipment.
+          const shipped = await through(
+            routerPort,
+            "shipOrder (k8s)",
+            `mutation { shipOrder(orderId: "${id}", carrier: "dhl") { status } }`,
+          );
+          expect(shipped.body, "shipOrder through the router").toEqual({ data: { shipOrder: { status: "SHIPPED" } } });
           // The router accepts the page's origin, and refuses another one before running anything.
           const pre = await fetch(`http://127.0.0.1:${routerPort}/graphql`, {
             method: "OPTIONS",
@@ -688,7 +694,9 @@ describe("Kubernetes driver against a real k3d cluster", () => {
           expect(elsewhere.status).toBe(403);
           return id;
         },
-        "{ orders(limit: 1) { id shipment { carrier } } }",
+        // shipment(...) is a root field of shipping: the router must reach it before the first mutation. Asking only for
+        // orders (and their shipment) proves nothing while there is no order: the router then never calls shipping.
+        '{ orders(limit: 1) { id } shipment(orderId: "1") { carrier } }',
       );
 
       // The page, through a forward on its webPort: rendered by its server through GRAPHQL_URL, inside the cluster.
@@ -701,9 +709,24 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       });
       try {
         const html = async () => (await fetch(`${origin}/orders`)).text();
-        await until("the page through the forward", async () => (await html()).includes(`#${orderId}`), 120_000);
-        const shown = await html();
-        expect(shown).toContain("dhl · SHIPPED");
+        // The page's server calls the router, which calls shipping, at every request. Right after `up`, a call through
+        // a fresh Service can still fail once (see viaRouter): then that one page shows the shipment "Unavailable". So the
+        // page is read until it shows the shipped order, and the last row it showed is printed if it never does.
+        const rowOf = (text: string) => text.match(new RegExp(`<tr><td>#${orderId}</td>.*?</tr>`))?.[0] ?? "(order not listed)";
+        let shown = "";
+        try {
+          await until(
+            "the page to show the shipped order",
+            async () => {
+              shown = await html();
+              return shown.includes(`#${orderId}`) && shown.includes("dhl · SHIPPED");
+            },
+            120_000,
+          );
+        } catch (e) {
+          console.log(`last row of order #${orderId} on the page: ${rowOf(shown)}`);
+          throw e;
+        }
         expect(shown).toContain('data-graphql="http://127.0.0.1:4000/graphql"');
 
         // Shipping scaled to zero: the page still lists the order, its shipment unavailable.
