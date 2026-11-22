@@ -1,0 +1,17 @@
+{
+  "description": "a brick that uses ${web.origin} with no webPort in platform.json is refused when rendering (D18)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/keycloak"] },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.json",
+          "set": { "bricks": { "keycloak": { "source": "examples/keycloak" }, "postgres": { "source": "examples/postgres" } } }
+        }
+      }
+    },
+    { "run": ["generate"], "exit": 1, "codes": ["WEB_PORT_MISSING"], "unchanged": true }
+  ]
+}

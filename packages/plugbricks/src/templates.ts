@@ -1,6 +1,6 @@
 /**
- * Templates in manifest values: `${provider.host}`, `${provider.port}`, `${consumer.name}` and
- * `${secrets.<name>}`. Which ones a field may use depends on the field (TEMPLATE_CONTEXTS).
+ * Templates in manifest values: `${provider.host}`, `${provider.port}`, `${consumer.name}`,
+ * `${web.origin}` and `${secrets.<name>}`. Which ones a field may use depends on the field (TEMPLATE_CONTEXTS).
  * Anything else written as `${...}` is refused when the brick is added, so a typo never
  * reaches a running container.
  */
@@ -8,11 +8,13 @@
 /** Secret names: lowercase words joined by single underscores, so env var names never collide (see secretEnvName). */
 export const SECRET_NAME = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 
-export type TemplateVar = "provider.host" | "provider.port" | "consumer.name" | "secrets";
+export type TemplateVar = "provider.host" | "provider.port" | "consumer.name" | "web.origin" | "secrets";
 
 /** What each templated field may use. Secrets only in environment maps, never in a command line (visible in ps). */
 export const TEMPLATE_CONTEXTS = {
   serviceEnv: ["secrets"],
+  /** The env of the service that serves a web brick's pages: also where the browser reaches it (D18). */
+  webServiceEnv: ["secrets", "web.origin"],
   readyExec: ["provider.host", "provider.port"],
   provisionCommand: ["provider.host", "provider.port", "consumer.name"],
   provisionEnv: ["provider.host", "provider.port", "consumer.name", "secrets"],

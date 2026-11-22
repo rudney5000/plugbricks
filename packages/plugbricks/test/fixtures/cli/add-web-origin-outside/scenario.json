@@ -1,0 +1,7 @@
+{
+  "description": "${web.origin} is refused outside the env of the service that serves the brick's pages (D18)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/bad-origin"], "exit": 1, "codes": ["MANIFEST_INVALID", "TEMPLATE_UNKNOWN"], "unchanged": true }
+  ]
+}

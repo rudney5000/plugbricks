@@ -1057,6 +1057,84 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D18. A Keycloak brick: a web brick with its own built image, a realm without users, the admin pointed at it
+
+- **Status:** implemented (2026-11-23). Point 1 (an image of our own, built once) was chosen by Dedy on
+  2026-11-23, and points 2 to 7 accepted by him the same day. `${web.origin}` (context `webServiceEnv` in
+  `src/templates.ts`), `WEB_PORT_MISSING`, `apis/keycloak` (Dockerfile, entry script, realm without users),
+  `examples/keycloak`. Tested by the CLI scenarios `keycloak-generate` (golden files for both runtimes),
+  `add-web-origin-outside` and `web-port-missing`, and end to end on Docker Compose (`e2e-oidc`, "the
+  keycloak brick"): `up` returns once the realm answers, its issuer is `http://127.0.0.1:<webPort>/realms/plugbricks`,
+  the realm has no user, a user created with the brick's generated administrator and given
+  `plugbricks-admin` signs into `plugbricks admin` and gets an admin session. Not on k3d (point "Tests").
+- **Context:** the admin signs people in with OIDC against an external issuer (D15, `docs/keycloak.md`).
+  The mockup also has the identity provider inside the platform. D17 removed the first obstacle (a brick
+  can publish its pages on its own loopback port); what was left unknown is how Keycloak behaves as a
+  brick. It was measured on 2026-11-23 on the development machine (4 CPUs, 7.8 GB of RAM, Docker 29.8.0
+  installed as a snap), Keycloak 26.7.3, digest `sha256:29be7252db0a…d6c4`, in production mode (`start`)
+  against PostgreSQL 16.4:
+  - **The image** is 756 MB, runs as uid 1000, and has **neither curl nor wget**, only bash.
+  - **Realm import** (`--import-realm`, a JSON file in `/opt/keycloak/data/import`) created the realm, its
+    roles `plugbricks-admin` and `plugbricks-viewer` and the admin's public client. On a restart Keycloak
+    logged `Realm 'plugbricks' already exists. Import skipped`: the import runs once, so a later change to
+    the file is not applied to an existing database.
+  - **Health:** with `KC_HEALTH_ENABLED=true`, `/health/ready` answers on the management port 9000. A
+    check written with bash alone works: open `/dev/tcp/127.0.0.1/9000`, send the request, look for `"UP"`.
+  - **Memory:** about 570 to 590 MB for Keycloak, 45 MB for its PostgreSQL.
+  - **Start times** (until the realm's discovery document answers 200):
+
+    | Case | Official image (`start`) | Image built with `kc.sh build` (`start --optimized`) |
+    |---|---|---|
+    | new container, new database | about 200 s, of which 84 s rebuilding itself | 119 s |
+    | container recreated, database kept | the same 84 s again, plus the start | 58 s |
+
+    A plain `docker restart` of an already built container took 40 s; `up` recreates containers, so that
+    is not the case that matters. The 119 s of the first start are mostly the database schema and the import.
+- **Decision (proposed):**
+  1. **An image of our own** (chosen): `apis/keycloak`, `FROM` the official image pinned by digest, `kc.sh build`
+     for PostgreSQL with the health endpoints, then `start --optimized --import-realm`. Built like the other
+     example images (`plugbricks-example/keycloak:0.1.0`); the brick never rebuilds Keycloak at start.
+  2. **The realm ships in that image, without any user:** the realm `plugbricks`, its two roles, and the
+     public client `plugbricks-admin` whose redirect URI is the admin's default, `http://127.0.0.1:4100/auth/callback`.
+     The test realm of D15 (`test/fixtures/keycloak/realm.json`) has a user `demo` with a known password; it
+     stays a test fixture and never goes into the brick.
+  3. **A web brick requiring `database`** (`examples/keycloak`): `web: { service: "app", path: "/admin/" }`,
+     so the console is at `http://127.0.0.1:<webPort>/admin/`. The `postgres` brick gives it its own role
+     and database, but injects `DATABASE_URL` (`postgres://user:password@host:port/db`), while Keycloak
+     reads `KC_DB_URL` (JDBC), `KC_DB_USERNAME` and `KC_DB_PASSWORD`: a small entry script in the image
+     splits `DATABASE_URL` into those three before starting Keycloak. The provider stays generic.
+  4. **Keycloak must know the address the browser uses** (`KC_HOSTNAME`), or its issuer and redirects
+     point elsewhere. That address is `http://127.0.0.1:<webPort>`, chosen by the platform, so the manifest
+     gains one template, `${web.origin}`, allowed in the env of a web brick's own service only (refused
+     elsewhere with `TEMPLATE_UNKNOWN`). The issuer is then `http://127.0.0.1:<webPort>/realms/plugbricks`.
+  5. **The first administrator:** `KC_BOOTSTRAP_ADMIN_USERNAME=admin` and `KC_BOOTSTRAP_ADMIN_PASSWORD` from
+     a generated secret (`${secrets.admin_password}`, in `.secrets/`, D6). With it, the person signs into the
+     console, creates the platform's users and gives them `plugbricks-admin` or `plugbricks-viewer`.
+  6. **The admin is pointed at it by hand** for now: `plugbricks admin --issuer
+     http://127.0.0.1:<webPort>/realms/plugbricks --client-id plugbricks-admin`; `status` shows the webPort.
+     An `oidc` capability, so that the admin and later the router find the issuer by themselves, comes
+     with token checks in the data plane (a later decision): no brick consumes it yet.
+  7. **Waiting:** the healthcheck has a start period of 180 s, so that a first start (119 s measured) is not
+     counted as failures. **It asks for the realm, not for `/health/ready`:** while building the plan, a
+     platform `up` returned after 26 s with Keycloak "healthy" and the realm still answering 503. Keycloak's
+     readiness endpoint on port 9000 said UP during its bootstrap (schema creation and realm import), which
+     took about 100 s more. The check therefore sends `GET /realms/plugbricks/.well-known/openid-configuration`
+     on port 8080 with bash and requires a 200; with it, `down` then `up` (container recreated, database kept)
+     returned after 50 s with the realm already answering.
+- **Tests planned:** a CLI scenario with golden files for both runtimes (the template, the secret, the
+  published port); refusal of `${web.origin}` outside a web brick's service; end to end on Docker Compose
+  only: `postgres` and `keycloak` up, the discovery document on `127.0.0.1:<webPort>` with that issuer, a
+  user created with the bootstrap administrator through Keycloak's admin API, and a real sign-in to
+  `plugbricks admin` with that user (the flow of the D15 test). Not on k3d: the image is large and its first
+  start long; the CI job would grow by minutes, and the local machine cannot run it.
+- **Limits:** the realm file is applied on the first start only; the redirect URI assumes the admin on port
+  4100; about 600 MB of memory; a first start of about two minutes. `add` picks the first port from 8080
+  that this platform does not use, not one that is free on the machine: with another platform's web brick
+  already on 8080, `up` failed with "Bind for 127.0.0.1:8080 failed: port is already allocated", and the
+  webPort had to be changed in `platform.json` (true of every web brick, D17).
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

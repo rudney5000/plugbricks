@@ -242,10 +242,15 @@ export function loadInstalledBricks(project: Project): Map<string, BrickManifest
 
 // ---------- building the plan ----------
 
+/** The template context of a service's env: a web brick's own service may also use ${web.origin} (D18). */
+function envContext(m: BrickManifest, service: string): TemplateContext {
+  return m.web?.service === service ? "webServiceEnv" : "serviceEnv";
+}
+
 function resolveValue(
   value: string,
   context: TemplateContext,
-  vars: { "provider.host"?: string; "provider.port"?: string; "consumer.name"?: string },
+  vars: { "provider.host"?: string; "provider.port"?: string; "consumer.name"?: string; "web.origin"?: string },
   secret: (name: string) => string,
 ): Value {
   const r = parseTemplate(value, context);
@@ -303,7 +308,7 @@ export function buildPlan(
   };
   /** Secret names a brick's own services use: those stay the brick's, even inside provision and inject. */
   const brickSecrets = (m: BrickManifest) =>
-    new Set(m.services.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => secretsIn(v, "serviceEnv"))));
+    new Set(m.services.flatMap((s) => Object.values(s.env ?? {}).flatMap((v) => secretsIn(v, envContext(m, s.name)))));
 
   const services: PlanService[] = [];
   const requirements: PlanRequirement[] = [];
@@ -381,7 +386,15 @@ export function buildPlan(
       names.add("service", name, `${brick}/${s.name}`, `service ${s.name} of ${brick}`);
       names.add(`container/${brick}`, s.name, `service/${s.name}`, `container of ${brick}`);
       const env: Record<string, Value> = { ...injected };
-      for (const [k, v] of Object.entries(s.env ?? {})) env[k] = resolveValue(v, "serviceEnv", {}, own);
+      // The address the browser uses for a web brick (D18): known only once the platform gave it a webPort.
+      const webOrigin = m.web?.service === s.name && webPorts[brick] !== undefined ? `http://127.0.0.1:${webPorts[brick]}` : undefined;
+      for (const [k, v] of Object.entries(s.env ?? {})) {
+        const context = envContext(m, s.name);
+        if (context === "webServiceEnv" && webOrigin === undefined && v.includes("${web.origin}")) {
+          throw new PlugbricksError([issue("WEB_PORT_MISSING", `platform.json#/bricks/${brick}`, { brick })]);
+        }
+        env[k] = resolveValue(v, context, { "web.origin": webOrigin }, own);
+      }
       const vols = (s.volumes ?? []).map((v) => {
         const ref = { brick, service: s.name, name: v.name };
         const vname = volumeName(ref);
