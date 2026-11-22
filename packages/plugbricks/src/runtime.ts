@@ -289,6 +289,33 @@ function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan
   });
 }
 
+/** How long one `kubectl rollout status` waits, for a service that waits on a capability, before its wait init containers are looked at again. */
+export const ROLLOUT_SLICE_SECONDS = 15;
+
+/**
+ * Waits for one Deployment's rollout. A service that waits on a capability is waited for in slices, and its wait init
+ * containers are looked at after each one: a wait that exited with the timeout code (124) is reported as WAIT_TIMEOUT
+ * at once, as Docker Compose does, instead of after the whole rollout deadline (the timeouts of its waits plus 300 s).
+ * Kubernetes restarts a failed init container, so the rollout itself would only fail at that deadline. Any other
+ * failure of `rollout status` is reported as it is, at once.
+ */
+function waitForRollout(deps: RuntimeDeps, root: string, target: string[], plan: Plan, name: string): void {
+  const total = rolloutTimeout(plan, name);
+  const s = plan.services.find((x) => x.name === name);
+  const waits = s !== undefined && plan.requirements.some((r) => r.consumer === s.brick && r.wait);
+  const slice = waits ? ROLLOUT_SLICE_SECONDS : total;
+  for (let waited = 0; ; waited += slice) {
+    const seconds = Math.min(slice, total - waited);
+    const args = [...kubectlBase(plan), "rollout", "status", `deployment/${name}`, `--timeout=${seconds}s`];
+    const r = kubectl(deps, root, target, args);
+    if (r.status === 0) return;
+    const timeouts = s ? k8sWaitTimeouts(deps, root, target, plan, name) : [];
+    if (timeouts.length) throw new PlugbricksError(timeouts);
+    const sliceEnded = /timed out waiting/i.test(r.stderr + r.stdout);
+    if (!sliceEnded || waited + seconds >= total) throw new PlugbricksError([failed("kubectl", [...target, ...args], r)]);
+  }
+}
+
 /** Label selector of everything plugbricks created for bricks that are no longer installed. */
 export function removedBricksSelector(plan: Plan): string {
   const installed = [...new Set(plan.services.map((s) => s.brick))].sort();
@@ -375,12 +402,7 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
       if (gone.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...router], gone)]);
     }
     for (const name of [...plan.services.map((s) => s.name), ...(plan.router ? [plan.router.name] : [])]) {
-      const args = [...kubectlBase(plan), "rollout", "status", `deployment/${name}`, `--timeout=${rolloutTimeout(plan, name)}s`];
-      const r = kubectl(deps, dir, target, args);
-      if (r.status !== 0) {
-        const timeouts = plan.services.some((s) => s.name === name) ? k8sWaitTimeouts(deps, dir, target, plan, name) : [];
-        throw new PlugbricksError(timeouts.length ? timeouts : [failed("kubectl", [...target, ...args], r)]);
-      }
+      waitForRollout(deps, dir, target, plan, name);
     }
   }
 

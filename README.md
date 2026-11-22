@@ -307,7 +307,7 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
 2. **CLI core** — done: `init`, `add`, `remove`, `status`, `platform.json` / `platform.lock`, `npm create plugbricks`
    - Manifest: `requires.<cap>.timeoutSeconds`, `provides.<cap>.ready`, healthcheck `timeoutSeconds` and `startPeriodSeconds` (from experiment D).
 3. **Drivers** — done: `generate`, `up`, `down`, `up --prune-volumes` on Docker Compose and Kubernetes, rendered by plugbricks itself (D5, Score dropped); generated secrets (D6); templates checked at `add`.
-   - Done: the Kubernetes end-to-end test (`packages/plugbricks/test/e2e-k8s.test.ts`) and the CI job "kubernetes (k3d)": `up` with postgres and orders, a GraphQL call, `down`, `remove` + `up --prune-volumes`, `WAIT_TIMEOUT`, on a throwaway k3d cluster named `pbtest-*` (it is skipped for any other context). About 6 minutes, most of it the `WAIT_TIMEOUT` test.
+   - Done: the Kubernetes end-to-end test (`packages/plugbricks/test/e2e-k8s.test.ts`) and the CI job "kubernetes (k3d)": `up` with postgres and orders, a GraphQL call, `down`, `remove` + `up --prune-volumes`, `WAIT_TIMEOUT`, on a throwaway k3d cluster named `pbtest-*` (it is skipped for any other context). Its `WAIT_TIMEOUT` scenario used to wait about five minutes for the rollout deadline; `up` now reads the wait init containers every 15 s and reports it at once (D5).
    - Later pass: kill the database pod, then `up` again, and check that the platform recovers and the data is kept.
 4. **Federation**: real APIs, the Cosmo router, composition checked at `add`, a second API with `extends`
    - Done: the `orders` API (`apis/orders`), tested alone and on a platform.
