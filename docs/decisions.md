@@ -1142,6 +1142,81 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D19. Tokens in the data plane: the router requires a JWT when the platform has an `oidc` provider
+
+- **Status:** accepted (2026-11-23), not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
+  an enabled brick provides `oidc`) and B1 (each service gets its own Keycloak client through the
+  `provides` / `requires` wiring), over A2 (always require one) and B2 (one service account shared by all).
+- **Context:** since D17 a web page of another site cannot call the router (CORS), but any program on the
+  machine can, without credentials: read the orders, create them, ship them. Since D18 the platform can run
+  its own Keycloak. Nothing yet ties the two.
+- **Observed on the router 0.372.0** (2026-11-23, the pinned digest, Docker 29.8.0; a local JWKS server and
+  RS256 tokens signed by the probe, not Keycloak, to spare the machine):
+  - **Configuration:** a YAML file named by `CONFIG_PATH` ("Config file provided. Values in the config file
+    have higher priority than environment variables"); its schema, embedded in the binary, has
+    `authentication.jwt.jwks[]` with `url`, `issuers`, `audiences`, `algorithms`, `refresh_interval`, and
+    `authorization.require_authentication` (also the variable `REQUIRE_AUTHENTICATION`).
+  - **With `require_authentication: true`**, `{ __typename }` answered 200 with a valid token and
+    `401 {"errors":[{"message":"unauthorized"}]}` with no token, an expired one, one signed by another
+    key, a wrong issuer, a wrong audience, no audience, `alg: none`, and a string that is not a JWT.
+  - **With `require_authentication: false`**, the same, except that a request without a token answered 200:
+    a token that is present must be valid.
+  - **Without a token**, `/health/ready` and `/health/live` answered 200, and a CORS preflight from an
+    allowed origin answered 204 with `Authorization` among the allowed headers.
+  - **The keys are fetched at start.** With the JWKS URL not answering, the router logged `Could not start
+    router … could not setup authenticators: failed to create HTTP client storage for JWK…`, never listened,
+    and **exited after 18 s with code 0**; it did not come back when the JWKS did.
+  - The Keycloak image (D18) has `kcadm.sh`, Keycloak's admin command line, and `sh`, `date` and `sleep`,
+    which the wait script of D5 needs.
+- **Decision:**
+  1. **Optional requirements.** A requirement may say `"optional": true`. Without a provider the brick is
+     added and runs as before: nothing is injected and nothing waits. With a provider (enabled), it is wired
+     like any requirement: wait, provision, inject. It is resolved when the plan is built, not frozen at
+     `add`, so a provider added later wires the bricks already installed. Removing or disabling that
+     provider is allowed (no `CAPABILITY_IN_USE`); their next `up` runs them without it. This is what lets
+     `orders-web` run with or without Keycloak.
+  2. **Keycloak provides `oidc`.** `ready`: its realm's discovery document answers 200 (bash, as its
+     healthcheck, D18). `provision`, once per consumer and idempotent: with `kcadm.sh` and the brick's
+     administrator password, create in the realm a confidential client named after the consumer, with a
+     service account, the consumer's own generated secret, and an audience mapper adding `plugbricks-router`
+     to its tokens. `inject`: `OIDC_TOKEN_URL` (the realm's token endpoint at the provider's address inside
+     the platform), `OIDC_CLIENT_ID` (the consumer's name), `OIDC_CLIENT_SECRET` (`${secrets.client_secret}`,
+     per consumer, D6).
+  3. **What the router needs from the provider** is not in the capability's environment: the manifest of a
+     brick that provides `oidc` gains `oidc: { "issuerPath": "/realms/plugbricks", "jwksPath":
+     "/realms/plugbricks/protocol/openid-connect/certs", "audience": "plugbricks-router" }`. Such a brick
+     must be a web brick: its issuer is its web origin plus `issuerPath` (the address the browser uses, as
+     the tokens say, D18).
+  4. **The router (A1).** When an enabled brick provides `oidc`, plugbricks renders a router configuration
+     file (`.generated/<runtime>/router.yaml`, mounted read-only, named by `CONFIG_PATH`) with that JWKS (the
+     provider's service address inside the platform plus `jwksPath`), that issuer only, that audience only,
+     `RS256` only, and `require_authentication: true`. With no such brick, no file and no change: the router
+     works as today. The file's hash goes on the container and the pod with the configuration's (D9), so a
+     change recreates the router.
+  5. **The router starts after the provider is ready**, since it cannot start without the keys. Compose:
+     `depends_on` the provider's service with `service_healthy`. Kubernetes: the router gets the wait init
+     container of D5 for `oidc` (the provider's ready command, in the provider's image), and its rollout
+     deadline grows by that wait.
+  6. **`orders-web`** requires `oidc` optionally. Its server asks `OIDC_TOKEN_URL` for a token with its
+     client's credentials, keeps it until shortly before it expires, and sends it to the router. Its
+     "Refresh" button calls its own server (`/api/orders`) instead of the router: a browser has no token to
+     send. `PUBLIC_GRAPHQL_URL` and the router's origins (D17) stay for pages that sign their users in.
+  7. **The admin finds the issuer** when `--issuer` is not given and an enabled brick provides `oidc`
+     (its web origin plus `issuerPath`); `--issuer` still wins.
+- **To verify first, before building on it:** that a token obtained at the provider's address inside the
+  platform (`http://keycloak-app:8080/…`) carries the issuer the browser sees (`KC_HOSTNAME`, D18), which the
+  router will require; that the router accepts Keycloak's real tokens with the audience mapper; and how long
+  one `kcadm.sh` provision takes.
+- **Tests planned:** CLI scenarios with golden files (optional requirement with and without provider,
+  provider added after the consumer, router file present only with a provider); end to end on Docker
+  Compose with Keycloak: no token 401, `orders-web`'s own token 200 and its page listing the orders, a
+  token of another audience 401, the router starting only after Keycloak is ready. Not on k3d, as D18.
+- **Limits:** every request through the router then needs a token, the end-to-end tests' included; the
+  subgraphs do not see who called (the router does not forward the token: a later decision); a client
+  created for a consumer is not deleted when that consumer is removed.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
