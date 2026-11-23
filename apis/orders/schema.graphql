@@ -5,6 +5,8 @@ type Order @key(fields: "id") {
   id: ID!
   total: Float!
   status: String!
+  "Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20)."
+  createdBy: String
 }
 
 type Query {

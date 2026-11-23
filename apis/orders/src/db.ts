@@ -12,6 +12,8 @@ export const MIGRATIONS: string[] = [
      status text NOT NULL DEFAULT 'pending',
      created_at timestamptz NOT NULL DEFAULT now()
    )`,
+  // D20 point 4: who created the order, from the verified token; null for orders created without a token check.
+  `ALTER TABLE orders ADD COLUMN created_by text`,
 ];
 
 /** Any constant: identifies this service's migration lock among the advisory locks of the database. */
@@ -53,9 +55,10 @@ export interface OrderRow {
   id: string;
   total: number;
   status: string;
+  createdBy: string | null;
 }
 
-const COLUMNS = "id::text AS id, total::float8 AS total, status";
+const COLUMNS = 'id::text AS id, total::float8 AS total, status, created_by AS "createdBy"';
 
 /** Newest first, at most `limit` rows (the caller bounds it). */
 export async function listOrders(pool: pg.Pool, limit: number): Promise<OrderRow[]> {
@@ -70,6 +73,8 @@ export async function findOrder(pool: pg.Pool, id: string): Promise<OrderRow | n
   return (await pool.query<OrderRow>(`SELECT ${COLUMNS} FROM orders WHERE id = $1`, [id])).rows[0] ?? null;
 }
 
-export async function createOrder(pool: pg.Pool, total: number): Promise<OrderRow> {
-  return (await pool.query<OrderRow>(`INSERT INTO orders (total) VALUES ($1) RETURNING ${COLUMNS}`, [total])).rows[0];
+/** `createdBy`: the verified caller's name (D20), or null when this API checks no token. */
+export async function createOrder(pool: pg.Pool, total: number, createdBy: string | null = null): Promise<OrderRow> {
+  return (await pool.query<OrderRow>(`INSERT INTO orders (total, created_by) VALUES ($1, $2) RETURNING ${COLUMNS}`, [total, createdBy]))
+    .rows[0];
 }

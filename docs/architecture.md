@@ -320,7 +320,4 @@ flowchart LR
 
 1. **Authorization.** Every valid token may call every field; per-role or per-scope authorization is not
    built (D20).
-2. **`createdBy`.** D20 point 4: `orders` does not record who created an order yet.
-3. **Keycloak and tokens on Kubernetes.** Their end-to-end tests run on Docker Compose only (D18, D19);
-   the k3d job covers the rest.
-4. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).
+2. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).

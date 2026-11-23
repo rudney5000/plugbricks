@@ -757,6 +757,149 @@ describe("Kubernetes driver against a real k3d cluster", () => {
     900_000,
   );
 
+  // D18, D19 and D20 on a cluster: the Keycloak brick provides oidc, the router requires its tokens and passes them on,
+  // and orders checks them again itself and records who created an order. Keycloak's issuer is its web origin, so it
+  // is reached here, as a browser would, through a port-forward on its webPort.
+  it.skipIf(!ready)(
+    `requires Keycloak's tokens through the router and in orders itself, and records who created an order${why}`,
+    async () => {
+      for (const api of ["keycloak", "orders", "orders-web"]) loadImage(api);
+      const ns = "pbtest-k8s-oidc";
+      const work = project(ns, []);
+      for (const brick of ["keycloak", "orders", "orders-web"])
+        cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "postgres"],
+        ["add", "keycloak"],
+        ["add", "orders-web"],
+        ["add", "orders"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+      // The issuer the tokens carry is Keycloak's web origin: the local port of its forward must be its webPort.
+      const kcPort = await freePort();
+      const file = join(work, "platform.json");
+      const platform = JSON.parse(readFileSync(file, "utf8"));
+      platform.bricks.keycloak.webPort = kcPort;
+      platform.bricks["orders-web"].webPort = await freePort();
+      writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      const secretOf = (key: string) => {
+        const line = readFileSync(join(work, ".secrets/secrets.env"), "utf8")
+          .split("\n")
+          .find((l) => l.startsWith(`${key}=`));
+        expect(line, key).toBeDefined();
+        return line!.slice(key.length + 1);
+      };
+      const keycloak = await portForward({
+        kubectl: "kubectl",
+        clusterArgs: ["--kubeconfig", kubeconfig, "--context", context, "--namespace", ns],
+        service: "keycloak-app",
+        servicePort: 8080,
+        localPort: kcPort,
+      });
+      const router = await forward(ns, "router", 4000);
+      try {
+        // orders-web's own client, as its server asks for it: client credentials, from the issuer the browser reaches.
+        const asked = await fetch(`http://127.0.0.1:${kcPort}/realms/plugbricks/protocol/openid-connect/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "client_credentials",
+            client_id: "orders-web",
+            client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
+          }),
+        });
+        expect(asked.status).toBe(200);
+        const token = ((await asked.json()) as { access_token: string }).access_token;
+
+        const graphql = async (query: string, bearer?: string) => {
+          const r = await fetch(`http://127.0.0.1:${router.port}/graphql`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
+            body: JSON.stringify({ query }),
+          });
+          return { status: r.status, body: (await r.json().catch(() => null)) as { data?: any; errors?: unknown[] } | null }; // eslint-disable-line @typescript-eslint/no-explicit-any
+        };
+        await until("the router through the forward", async () => (await get(router.port, "/health/ready")) === 200);
+        // A read with the token proves the router's path to orders before the mutation, which is never retried.
+        await until(
+          "the router to answer with a token",
+          async () => {
+            const r = await graphql("{ orders(limit: 1) { id } }", token);
+            return r.status === 200 && !r.body?.errors?.length;
+          },
+          120_000,
+        );
+
+        // No token: nothing runs through the router, not even a read.
+        expect((await graphql("{ orders(limit: 1) { id } }")).status).toBe(401);
+        expect((await graphql("mutation { createOrder(total: 1) { id } }")).status).toBe(401);
+        // With orders-web's token: the router passes it on, orders checks it again and records who created the order.
+        const created = await graphql("mutation { createOrder(total: 42.5) { id createdBy } }", token);
+        expect(created.status).toBe(200);
+        expect(created.body?.data?.createOrder?.createdBy).toBe("service-account-orders-web");
+        const id = created.body!.data.createOrder.id as string;
+        console.log(`k8s: order #${id} created through the router with orders-web's token, createdBy service-account-orders-web`);
+
+        // A pod of the platform calling orders directly, past the router: 401 without a token, 200 with one (D20).
+        const pod = podsOf(ns, "--selector", "plugbricks/service=orders-web-app").find((p) => !p.metadata.deletionTimestamp)!;
+        const direct = (bearer: string) =>
+          kc([
+            "--namespace",
+            ns,
+            "exec",
+            pod.metadata.name,
+            "--",
+            "node",
+            "-e",
+            `const h = { "content-type": "application/json", "x-user-sub": "admin-forged" };
+             if (process.argv[1]) h.authorization = "Bearer " + process.argv[1];
+             const r = await fetch("http://orders-app:4000/graphql", { method: "POST", headers: h, body: '{"query":"{ orders(limit: 1) { id } }"}' });
+             console.log(r.status);`,
+            bearer,
+          ]);
+        const without = direct("");
+        expect(without.status, without.stderr).toBe(0);
+        expect(without.stdout.trim().split("\n").pop()).toBe("401");
+        const withToken = direct(token);
+        expect(withToken.stdout.trim().split("\n").pop()).toBe("200");
+      } finally {
+        router.stop();
+        keycloak.stop();
+      }
+
+      // orders-web asks for its own token inside the cluster and reads the orders through the router with it.
+      const page = await portForward({
+        kubectl: "kubectl",
+        clusterArgs: ["--kubeconfig", kubeconfig, "--context", context, "--namespace", ns],
+        service: "orders-web-app",
+        servicePort: 3000,
+        localPort: platform.bricks["orders-web"].webPort,
+      });
+      try {
+        let rows = "";
+        await until(
+          "orders-web to list the order",
+          async () => {
+            rows = ((await (await fetch(`http://127.0.0.1:${page.port}/api/orders`)).json()) as { rows: string }).rows;
+            return rows.includes("42.50");
+          },
+          120_000,
+        );
+        expect(rows).not.toContain("401");
+      } finally {
+        page.stop();
+      }
+
+      expect(cli(work, ["down"]).code).toBe(0);
+    },
+    1_200_000,
+  );
+
   // The "later pass" of milestone 3: the database pod is killed, `up` runs again, and the platform
   // recovers with its data (the PersistentVolumeClaim is reattached to the new pod).
   it.skipIf(!ready)(
