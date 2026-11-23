@@ -521,7 +521,13 @@ async function bricksView(o: AdminOptions) {
       extends: (m?.extends ?? []).map((e) => `${e.entities.join(", ")} (${e.plugin})`).join("; "),
       provides: b.provides,
       requires: Object.entries(b.requires)
-        .map(([cap, r]) => `${cap} from ${r.provider}`)
+        .map(([cap, r]) => {
+          if (!r.optional) return `${cap} from ${r.provider}`;
+          const provider = Object.hasOwn(status.capabilities, cap) ? status.capabilities[cap] : undefined;
+          return provider !== undefined && status.bricks.some((x) => x.name === provider && x.enabled)
+            ? `${cap} from ${provider} (optional)`
+            : `${cap} (optional, not provided)`;
+        })
         .join(", "),
       // What `remove` would refuse it for, from the CLI's own check, so the UI can say so before trying.
       removeBlockedBy: removeRefusals(project, b.name).map((i) => ({ code: i.code, message: i.message })),

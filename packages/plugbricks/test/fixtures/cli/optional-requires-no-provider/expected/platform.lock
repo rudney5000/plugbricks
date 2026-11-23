@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "app-opt": {
+      "integrity": "sha256-6d88d0d33125d7f9825a3b08493ca3e2186dac435ba991bdc5c2e83ce869d180",
+      "provides": [],
+      "requires": {
+        "database": {
+          "optional": true,
+          "timeoutSeconds": 120,
+          "wait": "healthy"
+        }
+      },
+      "source": "bricks/app-opt",
+      "version": "1.0.0",
+      "volumes": []
+    }
+  },
+  "capabilities": {},
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

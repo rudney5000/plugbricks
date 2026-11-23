@@ -1144,7 +1144,14 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D19. Tokens in the data plane: the router requires a JWT when the platform has an `oidc` provider
 
-- **Status:** accepted (2026-11-23), not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
+- **Status:** accepted (2026-11-23), its assumptions verified the same day (below). Point 1 (optional
+  requirements) implemented on 2026-11-23: `optional` in the manifest's `requires`, an optional requirement
+  recorded in the lock without a provider (`{ "optional": true, wait, timeoutSeconds }`, the lock schema
+  refusing one with both or neither), resolved by `buildPlan`, ignored by the refusals of `add`, `remove`,
+  `disable` and `enable`, and shown by `status` as wired, not provided, or provider disabled. Tested by the
+  CLI scenarios `optional-requires-no-provider`, `optional-requires-provider-later`,
+  `optional-requires-provider-gone`, `lock-requirement-both` and `lock-requirement-neither`. Points 2 to 7
+  not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
   an enabled brick provides `oidc`) and B1 (each service gets its own Keycloak client through the
   `provides` / `requires` wiring), over A2 (always require one) and B2 (one service account shared by all).
 - **Context:** since D17 a web page of another site cannot call the router (CORS), but any program on the
@@ -1203,10 +1210,24 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
      send. `PUBLIC_GRAPHQL_URL` and the router's origins (D17) stay for pages that sign their users in.
   7. **The admin finds the issuer** when `--issuer` is not given and an enabled brick provides `oidc`
      (its web origin plus `issuerPath`); `--issuer` still wins.
-- **To verify first, before building on it:** that a token obtained at the provider's address inside the
-  platform (`http://keycloak-app:8080/…`) carries the issuer the browser sees (`KC_HOSTNAME`, D18), which the
-  router will require; that the router accepts Keycloak's real tokens with the audience mapper; and how long
-  one `kcadm.sh` provision takes.
+- **Verified before building on it** (2026-11-23, Docker 29.8.0: the D18 image of Keycloak and its
+  PostgreSQL on one network, Keycloak's service named `keycloak-app`, `KC_HOSTNAME=http://127.0.0.1:18092`;
+  the pinned router on the same network; a `node:22.23.5-alpine` container asking for tokens from inside it):
+  - **The issuer is the browser's, whatever address the token is asked at.** A `client_credentials` token
+    asked at `http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token` carried
+    `iss=http://127.0.0.1:18092/realms/plugbricks`, `alg` RS256, and expired in 300 s. A wrong secret got
+    `401 unauthorized_client`.
+  - **The audience mapper works:** the client created with it got `aud=["plugbricks-router","account"]`, one
+    created without it `aud="account"`.
+  - **The router accepts Keycloak's real tokens, configured as point 4 says** (JWKS at
+    `http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs`, issuer
+    `http://127.0.0.1:18092/realms/plugbricks`, audience `plugbricks-router`, RS256, required): `{ __typename }`
+    answered 200 with the `orders-web` token, and 401 with no token, with the token without the audience,
+    and with a string that is not a JWT.
+  - **Provision with `kcadm.sh`** (log in to the master realm with the brick's administrator, look the client
+    up by `clientId`, create it with a service account, its secret and the audience mapper, or set its secret
+    again when it exists) took 21 s, 17 s and, run again on an existing client, 16 s: most of it is the JVM of
+    `kcadm.sh` starting. The second run found the client and changed nothing else.
 - **Tests planned:** CLI scenarios with golden files (optional requirement with and without provider,
   provider added after the consumer, router file present only with a provider); end to end on Docker
   Compose with Keycloak: no token 401, `orders-web`'s own token 200 and its page listing the orders, a

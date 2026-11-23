@@ -1,0 +1,10 @@
+{
+  "description": "a brick that requires a capability optionally is added and rendered without a provider: nothing injected, nothing waits (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/app-opt"], "stdout": "Added app-opt 1.0.0" },
+    { "run": ["status"], "stdout": "app-opt 1.0.0  optionally requires database (no provider: not wired)" },
+    { "run": ["generate"] }
+  ],
+  "expectRaw": { "platform.lock": "\"database\": {\n          \"optional\": true," }
+}

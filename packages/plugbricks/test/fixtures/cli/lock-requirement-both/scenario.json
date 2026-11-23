@@ -1,0 +1,56 @@
+{
+  "description": "a lock requirement with both a provider and optional is refused (D19)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/app-opt"
+      ]
+    },
+    {
+      "mutate": {
+        "patchJson": {
+          "file": "platform.lock",
+          "set": {
+            "bricks": {
+              "app-opt": {
+                "integrity": "sha256-6d88d0d33125d7f9825a3b08493ca3e2186dac435ba991bdc5c2e83ce869d180",
+                "provides": [],
+                "requires": {
+                  "database": {
+                    "optional": true,
+                    "provider": "postgres",
+                    "wait": "healthy",
+                    "timeoutSeconds": 120
+                  }
+                },
+                "source": "bricks/app-opt",
+                "version": "1.0.0",
+                "volumes": []
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "exit": 1,
+      "codes": [
+        "PLATFORM_FILE_INVALID",
+        "SCHEMA_VIOLATION",
+        "SCHEMA_VIOLATION",
+        "SCHEMA_VIOLATION"
+      ]
+    }
+  ]
+}

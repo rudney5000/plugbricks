@@ -1,0 +1,15 @@
+{
+  "description": "the provider of an optional requirement can be disabled and removed: the brick then runs without it (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "bricks/app-opt"] },
+    { "run": ["disable", "postgres"], "stdout": "Disabled postgres" },
+    { "run": ["status"], "stdout": "app-opt 1.0.0  optionally requires database (postgres is disabled: not wired)" },
+    { "run": ["enable", "app-opt"], "stdout": "Enabled app-opt" },
+    { "run": ["enable", "postgres"] },
+    { "run": ["remove", "postgres"] },
+    { "run": ["status"], "stdout": "app-opt 1.0.0  optionally requires database (no provider: not wired)" },
+    { "run": ["generate"] }
+  ]
+}

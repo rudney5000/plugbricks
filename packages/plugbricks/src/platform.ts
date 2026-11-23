@@ -69,6 +69,10 @@ export interface VolumeRef {
   name: string;
 }
 
+export type LockedRequirement = { wait: "healthy" | "started"; timeoutSeconds: number } & (
+  { provider: string; optional?: undefined } | { optional: true; provider?: undefined }
+);
+
 export interface LockedBrick {
   version: string;
   source: string;
@@ -76,7 +80,8 @@ export interface LockedBrick {
   tags?: string[];
   integrity: string;
   provides: string[];
-  requires: Record<string, { provider: string; wait: "healthy" | "started"; timeoutSeconds: number }>;
+  /** A requirement records its provider; an optional one (D19) records none, the plan resolves it. */
+  requires: Record<string, LockedRequirement>;
   volumes: { service: string; name: string; retention: "retain" | "delete" }[];
 }
 
@@ -254,7 +259,7 @@ interface Manifest {
   tags?: string[];
   services: { name: string; port: number; volumes?: { name: string; retention?: "retain" | "delete" }[] }[];
   provides?: Record<string, { provision: { command: string[]; scripts?: string } }>;
-  requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number }>;
+  requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number; optional?: boolean }>;
   subgraph?: { service: string; schema: string; path?: string };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
@@ -525,7 +530,11 @@ function checkRuntimeNames(project: Project, name: string, manifest: BrickManife
     changed = false;
     for (const [b, m] of [...manifests]) {
       const requires = (b === name ? entry : project.lock.bricks[b]).requires;
-      if (Object.keys(m.requires ?? {}).some((cap) => !manifests.has(requires[cap]?.provider))) {
+      const unplannable = (cap: string) => {
+        const r = requires[cap];
+        return r?.optional ? false : !manifests.has(r?.provider ?? "");
+      };
+      if (Object.keys(m.requires ?? {}).some(unplannable)) {
         manifests.delete(b);
         changed = true;
       }
@@ -594,14 +603,16 @@ export function addBrick(root: string, brickPath: string): AddResult {
 
   const source = brickSource(project.root, brickDir, m.name);
 
-  const missing = Object.keys(m.requires ?? {})
+  // An optional requirement (D19) needs no provider now: the plan wires it once there is one.
+  const mandatory = Object.keys(m.requires ?? {}).filter((cap) => !m.requires![cap].optional);
+  const missing = mandatory
     .filter((cap) => !lock.capabilities[cap])
     .map((cap) => issue("REQUIRED_CAPABILITY_MISSING", `/requires/${cap}`, { brick: m.name, capability: cap }));
   if (missing.length) throw new PlugbricksError(missing);
 
   // A disabled provider is still installed, but its capability is not deployed: refuse rather than
   // add a consumer that could never start. Enabling the provider is one command away.
-  const disabledProviders = Object.keys(m.requires ?? {})
+  const disabledProviders = mandatory
     .filter((cap) => !isBrickEnabled(platform, lock.capabilities[cap]))
     .map((cap) => issue("PROVIDER_DISABLED", `/requires/${cap}`, { capability: cap, provider: lock.capabilities[cap] }));
   if (disabledProviders.length) throw new PlugbricksError(disabledProviders);
@@ -613,10 +624,10 @@ export function addBrick(root: string, brickPath: string): AddResult {
     integrity,
     provides: Object.keys(m.provides ?? {}).sort(),
     requires: Object.fromEntries(
-      Object.entries(m.requires ?? {}).map(([cap, r]) => [
+      Object.entries(m.requires ?? {}).map(([cap, r]): [string, LockedRequirement] => [
         cap,
         {
-          provider: lock.capabilities[cap],
+          ...(r.optional ? { optional: true as const } : { provider: lock.capabilities[cap] }),
           wait: r.wait ?? MANIFEST_DEFAULTS.wait,
           timeoutSeconds: r.timeoutSeconds ?? MANIFEST_DEFAULTS.timeoutSeconds,
         },
@@ -690,7 +701,7 @@ export function removeRefusals(project: Project, name: string): Issue[] {
   if (!brick) return [];
   const inUse = brick.provides.flatMap((cap) => {
     const consumers = Object.entries(project.lock.bricks)
-      .filter(([other, b]) => other !== name && b.requires[cap])
+      .filter(([other, b]) => other !== name && b.requires[cap] && !b.requires[cap].optional)
       .map(([other]) => `"${other}"`)
       .sort();
     return consumers.length ? [issue("CAPABILITY_IN_USE", "", { brick: name, capability: cap, consumers: consumers.join(", ") })] : [];
@@ -773,7 +784,9 @@ export function setBrickEnabled(root: string, name: string, enabled: boolean): {
   if (!enabled) {
     const inUse = brick.provides.flatMap((cap) => {
       const consumers = Object.entries(lock.bricks)
-        .filter(([other, b]) => other !== name && isBrickEnabled(platform, other) && b.requires[cap] !== undefined)
+        .filter(
+          ([other, b]) => other !== name && isBrickEnabled(platform, other) && b.requires[cap] !== undefined && !b.requires[cap].optional,
+        )
         .map(([other]) => `"${other}"`)
         .sort();
       return consumers.length ? [issue("CAPABILITY_IN_USE", "", { brick: name, capability: cap, consumers: consumers.join(", ") })] : [];
@@ -788,7 +801,7 @@ export function setBrickEnabled(root: string, name: string, enabled: boolean): {
     if (extenders.length) throw new PlugbricksError([issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })]);
   } else {
     const blocked = Object.entries(brick.requires).flatMap(([cap, r]) =>
-      isBrickEnabled(platform, r.provider) ? [] : [issue("PROVIDER_DISABLED", "", { capability: cap, provider: r.provider })],
+      r.optional || isBrickEnabled(platform, r.provider) ? [] : [issue("PROVIDER_DISABLED", "", { capability: cap, provider: r.provider })],
     );
     if (blocked.length) throw new PlugbricksError(blocked);
   }
