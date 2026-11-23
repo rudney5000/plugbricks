@@ -21,6 +21,10 @@
     "database": {
       "wait": "healthy",
       "timeoutSeconds": 120
+    },
+    "oidc": {
+      "optional": true,
+      "timeoutSeconds": 300
     }
   },
   "subgraph": {

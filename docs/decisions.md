@@ -1277,8 +1277,18 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `WEB_PORT_MISSING` for a provider without a webPort), and `OIDC_ISSUER`, `OIDC_JWKS_URL`, `OIDC_AUDIENCE`
   injected by the Keycloak brick. Tested by the golden files of `router-requires-token` and
   `keycloak-provides-oidc`, and the scenarios `add-provider-origin-in-service-env` and
-  `provider-origin-without-webport`; the propagate rule itself was run on the pinned router (below). Points 3 and
-  4 not built. Chosen by Dedy on 2026-11-23: B (the router propagates the token,
+  `provider-origin-without-webport`; the propagate rule itself was run on the pinned router (below). Step 2
+  (point 3) implemented on 2026-11-23: `src/auth.ts` in `apis/orders` and `apis/shipping` (the same file), with
+  `jose` 6.2.16 pinned (MIT, no dependency; 6.2.18 was five days old, so the version before it, two weeks old,
+  was taken), `createApp` taking the check as an option (401 with `WWW-Authenticate: Bearer` on `/graphql`
+  without a valid token, `/health` open, the caller in the GraphQL context), and `orders` and `shipping`
+  requiring `oidc` optionally (300 s). Tested by `test/auth.test.ts` in each API (a valid token; refused: none,
+  malformed, `Basic`, expired, another issuer, another audience, no audience, no `sub`, another key,
+  `alg: none`; the server's 401, a forged `X-User-Sub` refused, `/health` open), their full suites still
+  passing, and in `e2e-oidc` with Keycloak: through the router `orders-web`'s token creates an order (passed on
+  by the router, checked again by `orders`), and from a container of the platform calling `orders-app`
+  directly, past the router, no token and a forged `X-User-Sub` both get 401, a valid token 200. Point 4
+  (`createdBy`) not built. Chosen by Dedy on 2026-11-23: B (the router propagates the token,
   every API verifies it) over A (the router sets identity headers from the token's claims, the APIs trust them).
 - **Context:** since D19 the router lets a request through only with a valid token, but the subgraphs behind it do
   not know who called, and they answer anything that reaches them: they are not published (D9), yet any container

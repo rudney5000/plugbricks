@@ -79,6 +79,12 @@ services:
     image: plugbricks-example/orders:0.1.0
     environment:
       DATABASE_URL: "postgres://orders:${PB_POSTGRES__ORDERS__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders"
+      OIDC_AUDIENCE: plugbricks-router
+      OIDC_CLIENT_ID: orders
+      OIDC_CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS__CLIENT_SECRET:?missing secret; run plugbricks generate}"
+      OIDC_ISSUER: http://127.0.0.1:8080/realms/plugbricks
+      OIDC_JWKS_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs
+      OIDC_TOKEN_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token
     healthcheck:
       test:
         - CMD
@@ -91,6 +97,8 @@ services:
       start_period: "0s"
     depends_on:
       orders-provision-database:
+        condition: service_completed_successfully
+      orders-provision-oidc:
         condition: service_completed_successfully
     restart: unless-stopped
   orders-provision-database:
@@ -112,6 +120,27 @@ services:
         read_only: true
     depends_on:
       orders-wait-database:
+        condition: service_completed_successfully
+    restart: "no"
+  orders-provision-oidc:
+    image: plugbricks-example/keycloak:0.1.0
+    entrypoint:
+      - /bin/bash
+      - /provision/create-client.sh
+    environment:
+      ADMIN_PASSWORD: "${PB_KEYCLOAK__ADMIN_PASSWORD:?missing secret; run plugbricks generate}"
+      AUDIENCE: plugbricks-router
+      CLIENT_ID: orders
+      CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS__CLIENT_SECRET:?missing secret; run plugbricks generate}"
+      KEYCLOAK_URL: http://keycloak-app:8080
+      REALM: plugbricks
+    volumes:
+      - type: bind
+        source: "../../.platform/bricks/keycloak/provision"
+        target: /provision
+        read_only: true
+    depends_on:
+      orders-wait-oidc:
         condition: service_completed_successfully
     restart: "no"
   orders-wait-database:
@@ -136,6 +165,25 @@ services:
       PB_WAIT_TIMEOUT: "120"
     depends_on:
       postgres-db:
+        condition: service_started
+    restart: "no"
+  orders-wait-oidc:
+    image: plugbricks-example/keycloak:0.1.0
+    entrypoint:
+      - /bin/sh
+      - "-c"
+      - "deadline=$$(( $$(date +%s) + PB_WAIT_TIMEOUT ))\nuntil \"$$@\" >/dev/null 2>&1; do\n  if [ \"$$(date +%s)\" -ge \"$$deadline\" ]; then\n    echo \"plugbricks: WAIT_TIMEOUT: gave up waiting for $$PB_WAIT_FOR after $${PB_WAIT_TIMEOUT}s\" >&2\n    exit 124\n  fi\n  sleep \"$$PB_WAIT_INTERVAL\"\ndone\necho \"plugbricks: $$PB_WAIT_FOR is ready\""
+      - plugbricks-wait
+    command:
+      - bash
+      - "-c"
+      - "exec 3<>/dev/tcp/keycloak-app/8080 && printf 'GET /realms/plugbricks/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"
+    environment:
+      PB_WAIT_FOR: "oidc from keycloak-app (for orders)"
+      PB_WAIT_INTERVAL: "2"
+      PB_WAIT_TIMEOUT: "300"
+    depends_on:
+      keycloak-app:
         condition: service_started
     restart: "no"
   orders-web-app:
