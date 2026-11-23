@@ -1,0 +1,18 @@
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+
+type Order @key(fields: "id") {
+  id: ID!
+  total: Float!
+  status: String!
+}
+
+type Query {
+  "Newest first. limit is between 1 and 500."
+  orders(limit: Int! = 100): [Order!]!
+  order(id: ID!): Order
+}
+
+type Mutation {
+  "Creates an order with status pending. total must be between 0 and 9999999999.99."
+  createOrder(total: Float!): Order!
+}

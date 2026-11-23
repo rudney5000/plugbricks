@@ -1066,7 +1066,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   requests addressed to its loopback name and its own `WEB_ORIGIN` (the brick's `webPort`), with no
   foreign `Origin`; `orders-web` still calls the router with **its own** service-account token, so
   anyone who can reach it on this machine reads the orders. Carrying the user's own token is a later
-  decision; this step adds no user login.
+  decision; this step adds no user login. When the router refuses that token (a reset realm, rotated keys),
+  `orders-web` drops it and asks for a new one, once, instead of failing until it expires (`TokenSource.invalidate`).
 
 ---
 
@@ -1147,7 +1148,15 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   webPort had to be changed in `platform.json` (true of every web brick, D17). Since 2026-11-23 `up` on
   Docker Compose reports it as `HOST_PORT_BUSY`, naming the port, what the platform publishes there and the
   `platform.json` field to change (`composeBusyPorts`, scenarios `up-compose-web-port-busy` and
-  `up-compose-router-port-busy`; run against a real port held by another platform).
+  `up-compose-router-port-busy`; run against a real port held by another platform). A port held by a program
+  of the host, which Docker reports as "listen tcp4 127.0.0.1:<port>: bind: address already in use", is
+  reported the same way (scenario `up-compose-host-port-busy`, Docker's wording reproduced, not run against a
+  real program). The realm has `sslRequired: external` (plain HTTP only from loopback and private addresses,
+  which the browser on this machine and the containers are) and brute-force protection (a temporary lockout
+  after 10 failures); a realm imported before keeps its old settings until it is changed in the console. The
+  provision task refuses a client of the consumer's name it did not create (public, with a browser sign-in or
+  without a service account), restores the audience mapper of one it did, and removes its kcadm session folder
+  on exit; both paths are run against the real Keycloak of `e2e-oidc`.
 
 ---
 
@@ -1272,7 +1281,13 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   token of another audience 401, the router starting only after Keycloak is ready. Not on k3d, as D18.
 - **Limits:** every request through the router then needs a token, the end-to-end tests' included; the
   subgraphs do not see who called (the router does not forward the token: a later decision); a client
-  created for a consumer is not deleted when that consumer is removed.
+  created for a consumer is not deleted when that consumer is removed. The router's wait for its provider is
+  an init container on Kubernetes: `up` reports its timeout (exit 124) as `WAIT_TIMEOUT` after the first
+  rollout slice, as for a service's waits (scenario `up-k8s-router-oidc-wait-timeout`). On Docker Compose,
+  `--wait-timeout` gives the router the provider's chain plus its own start, also when no service waits for
+  the provider (scenario `up-compose-router-oidc-wait`). A `WEB_PORT_MISSING` says what needs the webPort
+  (an env of the brick, what a provider injects into a consumer, or the router's issuer), and offers
+  "add it again" only for a brick that declares `web`.
 
 ---
 
@@ -1344,7 +1359,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   k3d, as D18.
 - **Limits:** the tokens of D19 live 300 s; a request is checked once at each hop, not again during it. A service
   of the platform holding a valid token (its own, from its client) can still call any API with it: what it may do
-  there is authorization, a later decision (scopes or roles per field).
+  there is authorization, a later decision (scopes or roles per field). The APIs check their OIDC configuration
+  before they touch the database, accept the `Bearer` scheme in any case (RFC 7235), and refuse to start on a
+  partial configuration.
 
 ---
 

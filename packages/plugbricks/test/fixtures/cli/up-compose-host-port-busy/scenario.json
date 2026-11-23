@@ -1,0 +1,20 @@
+{
+  "description": "a webPort held by a program of the host (not a container) is reported as HOST_PORT_BUSY too, with the platform.json field to change",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/orders-web"] },
+    {
+      "run": ["up"],
+      "exit": 1,
+      "codes": ["HOST_PORT_BUSY"],
+      "stderr": "error HOST_PORT_BUSY at platform.json#/bricks/orders-web/webPort: port 8080 on 127.0.0.1",
+      "fake": [
+        {
+          "match": " up --detach",
+          "status": 1,
+          "stderr": "Error response from daemon: driver failed programming external connectivity on endpoint demo-orders-web-app-1 (56d0b8f0ad16): failed to bind port 127.0.0.1:8080/tcp: Error starting userland proxy: listen tcp4 127.0.0.1:8080: bind: address already in use"
+        }
+      ]
+    }
+  ]
+}

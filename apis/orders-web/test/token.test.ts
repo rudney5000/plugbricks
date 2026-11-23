@@ -41,6 +41,17 @@ describe("the token for the router (D19)", () => {
     expect(await tokens.get()).toBe("t1");
   });
 
+  it("forgets a token the router refused, and keeps a newer one", async () => {
+    const e = endpoint([{ body: { access_token: "t1", expires_in: 300 } }, { body: { access_token: "t2", expires_in: 300 } }]);
+    const tokens = new TokenSource("http://kc/token", "orders-web", "s", e.http);
+    expect(await tokens.get()).toBe("t1");
+    tokens.invalidate("t1");
+    expect(await tokens.get()).toBe("t2");
+    tokens.invalidate("t1");
+    expect(await tokens.get()).toBe("t2");
+    expect(e.calls).toHaveLength(2);
+  });
+
   it("is absent when the platform has no oidc provider", () => {
     expect(TokenSource.fromEnv({})).toBeUndefined();
     expect(TokenSource.fromEnv({ OIDC_TOKEN_URL: "u", OIDC_CLIENT_ID: "i", OIDC_CLIENT_SECRET: "s" })?.clientId).toBe("i");

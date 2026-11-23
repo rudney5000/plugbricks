@@ -1,0 +1,24 @@
+{
+  "description": "docker compose up --wait gives the router the time of its oidc provider's chain plus its own start, even when no service waits for that provider: the router starts only once it is healthy (D19)",
+  "steps": [
+    {
+      "run": ["init", "--name", "demo"]
+    },
+    {
+      "run": ["add", "examples/postgres"]
+    },
+    {
+      "run": ["add", "examples/keycloak"]
+    },
+    {
+      "run": ["add", "bricks/catalog"]
+    },
+    {
+      "run": ["up"],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 720"
+      ]
+    }
+  ]
+}

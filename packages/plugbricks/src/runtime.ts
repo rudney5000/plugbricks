@@ -190,11 +190,14 @@ const composeBase = (plan: Plan) => ["compose", "--project-name", plan.platform,
  * Docker then says "Bind for 127.0.0.1:<port> failed: port is already allocated"; this names the platform.json field.
  */
 export function composeBusyPorts(plan: Plan, failure: string): Issue[] {
-  const ports = new Set(
-    [...failure.matchAll(/Bind for (?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\]):(\d+) failed: port is already allocated/g)].map((m) =>
-      Number(m[1]),
-    ),
-  );
+  // Two wordings: another container holds the port ("port is already allocated"), or a program of the host does
+  // ("listen tcp4 127.0.0.1:<port>: bind: address already in use").
+  const host = String.raw`(?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\])`;
+  const patterns = [
+    new RegExp(String.raw`Bind for ${host}:(\d+) failed: port is already allocated`, "g"),
+    new RegExp(String.raw`listen tcp[46]? ${host}:(\d+): bind: address already in use`, "g"),
+  ];
+  const ports = new Set(patterns.flatMap((re) => [...failure.matchAll(re)].map((m) => Number(m[1]))));
   return [...ports]
     .sort((a, b) => a - b)
     .map((port) => {
@@ -268,8 +271,42 @@ function kubectl(deps: RuntimeDeps, root: string, target: string[], args: string
 
 const kubectlBase = (plan: Plan) => ["--namespace", plan.platform];
 
-/** Wait init containers that exited with the timeout code, from the pods of one service. */
+/** The wait init containers of one Deployment: a service's waits on capabilities, or the router's wait for its oidc provider (D19). */
+function k8sWaits(
+  plan: Plan,
+  name: string,
+): { init: string; consumer: string; capability: string; provider: string; timeoutSeconds: number }[] {
+  if (plan.router?.name === name) {
+    const auth = plan.router.auth;
+    return auth
+      ? [
+          {
+            init: initContainerName("wait", "oidc"),
+            consumer: "router",
+            capability: "oidc",
+            provider: auth.provider,
+            timeoutSeconds: auth.wait.timeoutSeconds,
+          },
+        ]
+      : [];
+  }
+  const s = plan.services.find((x) => x.name === name);
+  if (!s) return [];
+  return plan.requirements
+    .filter((req) => req.consumer === s.brick && req.wait)
+    .map((req) => ({
+      init: initContainerName("wait", req.capability),
+      consumer: req.consumer,
+      capability: req.capability,
+      provider: req.provider,
+      timeoutSeconds: req.wait!.timeoutSeconds,
+    }));
+}
+
+/** Wait init containers that exited with the timeout code, from the pods of one Deployment. */
 function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan: Plan, service: string): Issue[] {
+  const waits = k8sWaits(plan, service);
+  if (!waits.length) return [];
   const r = kubectl(deps, root, target, [
     ...kubectlBase(plan),
     "get",
@@ -287,15 +324,13 @@ function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan
   } catch {
     return [];
   }
-  const s = plan.services.find((x) => x.name === service)!;
-  return plan.requirements.flatMap((req) => {
-    if (req.consumer !== s.brick || !req.wait) return [];
+  return waits.flatMap((w) => {
     const timedOut = pods.some((p) =>
       (p.status?.initContainerStatuses ?? []).some(
         // The current state, or the last one while the container waits to be restarted
         // (CrashLoopBackOff). A 124 followed by a success is history, not the cause.
         (c) =>
-          c.name === initContainerName("wait", req.capability) &&
+          c.name === w.init &&
           (c.state?.terminated?.exitCode === WAIT_TIMEOUT_EXIT ||
             (c.state?.waiting !== undefined && c.lastState?.terminated?.exitCode === WAIT_TIMEOUT_EXIT)),
       ),
@@ -303,10 +338,10 @@ function k8sWaitTimeouts(deps: RuntimeDeps, root: string, target: string[], plan
     return timedOut
       ? [
           issue("WAIT_TIMEOUT", "", {
-            consumer: req.consumer,
-            capability: req.capability,
-            provider: req.provider,
-            timeoutSeconds: String(req.wait.timeoutSeconds),
+            consumer: w.consumer,
+            capability: w.capability,
+            provider: w.provider,
+            timeoutSeconds: String(w.timeoutSeconds),
           }),
         ]
       : [];
@@ -325,15 +360,15 @@ export const ROLLOUT_SLICE_SECONDS = 15;
  */
 function waitForRollout(deps: RuntimeDeps, root: string, target: string[], plan: Plan, name: string): void {
   const total = rolloutTimeout(plan, name);
-  const s = plan.services.find((x) => x.name === name);
-  const waits = s !== undefined && plan.requirements.some((r) => r.consumer === s.brick && r.wait);
+  // A service's waits, or the router's wait for its oidc provider: both are init containers that exit 124.
+  const waits = k8sWaits(plan, name).length > 0;
   const slice = waits ? ROLLOUT_SLICE_SECONDS : total;
   for (let waited = 0; ; waited += slice) {
     const seconds = Math.min(slice, total - waited);
     const args = [...kubectlBase(plan), "rollout", "status", `deployment/${name}`, `--timeout=${seconds}s`];
     const r = kubectl(deps, root, target, args);
     if (r.status === 0) return;
-    const timeouts = s ? k8sWaitTimeouts(deps, root, target, plan, name) : [];
+    const timeouts = waits ? k8sWaitTimeouts(deps, root, target, plan, name) : [];
     if (timeouts.length) throw new PlugbricksError(timeouts);
     const sliceEnded = /timed out waiting/i.test(r.stderr + r.stdout);
     if (!sliceEnded || waited + seconds >= total) throw new PlugbricksError([failed("kubectl", [...target, ...args], r)]);
@@ -350,7 +385,12 @@ export function removedBricksSelector(plan: Plan): string {
 
 /** How long `docker compose up --wait` may take: the longest chain of waits, plus time to pull images and start. */
 function composeWaitTimeout(plan: Plan): number {
-  return Math.max(0, ...plan.services.map((s) => rolloutTimeout(plan, s.name)));
+  const services = plan.services.map((s) => rolloutTimeout(plan, s.name));
+  // The router starts only once its oidc provider is healthy (D19): its chain is the provider's, then its own start.
+  const auth = plan.router?.auth;
+  const provider = auth && plan.services.some((s) => s.name === auth.service) ? rolloutTimeout(plan, auth.service) : 0;
+  const router = plan.router ? provider + 300 : 0;
+  return Math.max(0, router, ...services);
 }
 
 /** How long `up` waits for one Deployment: its own wait timeouts, plus time to pull images and start. */

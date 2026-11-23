@@ -224,6 +224,35 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     expect(provision.stdout).toContain("create-client: created client orders-web in realm plugbricks");
   });
 
+  it("runs its provision task again without harm, and refuses to take over a client it did not create", () => {
+    const compose = (...args: string[]) =>
+      spawnSync(
+        "docker",
+        [
+          "compose",
+          "--project-name",
+          brickProject,
+          "--file",
+          join(project, ".generated/compose/compose.yaml"),
+          "--env-file",
+          join(project, ".secrets/secrets.env"),
+          ...args,
+        ],
+        { encoding: "utf8" },
+      );
+    // Again, as the next up would: the client is ours, so its secret is set again and nothing else changes.
+    const again = compose("run", "--rm", "--no-deps", "orders-web-provision-oidc");
+    expect(again.status, again.stderr).toBe(0);
+    expect(again.stdout).toContain("create-client: client orders-web already in realm plugbricks; its secret set again");
+    expect(again.stdout).not.toContain("had no audience");
+
+    // A consumer named like the admin's public client: refused, and that client stays public (the sign-in test below
+    // still signs in with it).
+    const taken = compose("run", "--rm", "--no-deps", "-e", "CLIENT_ID=plugbricks-admin", "orders-web-provision-oidc");
+    expect(taken.status).toBe(1);
+    expect(taken.stderr).toContain("already has a client plugbricks-admin that plugbricks did not create");
+  });
+
   it("puts the router behind tokens: none 401, another issuer 401, orders-web's 200, and its page through it (D19)", async () => {
     const secrets = readFileSync(join(project, ".secrets/secrets.env"), "utf8");
     const secretOf = (name: string) => new RegExp(`^${name}=(.+)$`, "m").exec(secrets)![1];

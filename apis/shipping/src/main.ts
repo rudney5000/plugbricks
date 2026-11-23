@@ -3,6 +3,18 @@ import { createApp } from "./app.js";
 import { tokenCheckFromEnv } from "./auth.js";
 import { migrate } from "./db.js";
 
+// OIDC_ISSUER, OIDC_JWKS_URL and OIDC_AUDIENCE come with the oidc capability (D20): every request then needs a valid token.
+// Checked first: a partial configuration stops the API before it touches the database.
+const checkToken = (() => {
+  try {
+    return tokenCheckFromEnv(process.env);
+  } catch (e) {
+    console.error(`shipping: ${(e as Error).message}`);
+    process.exit(1);
+  }
+})();
+if (checkToken) console.log(`shipping: requests need a token from ${process.env.OIDC_ISSUER}`);
+
 // DATABASE_URL is injected by plugbricks from the postgres brick. It holds a password: never log it.
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -25,16 +37,6 @@ pool.on("error", (e) => console.error(`shipping: idle database connection lost: 
 const applied = await migrate(pool);
 if (applied.length) console.log(`shipping: applied migrations ${applied.join(", ")}`);
 
-// OIDC_ISSUER, OIDC_JWKS_URL and OIDC_AUDIENCE come with the oidc capability (D20): every request then needs a valid token.
-const checkToken = (() => {
-  try {
-    return tokenCheckFromEnv(process.env);
-  } catch (e) {
-    console.error(`shipping: ${(e as Error).message}`);
-    process.exit(1);
-  }
-})();
-if (checkToken) console.log(`shipping: requests need a token from ${process.env.OIDC_ISSUER}`);
 const server = createApp(pool, checkToken);
 server.listen(port, () => console.log(`shipping: listening on :${port} (/graphql, /health)`));
 

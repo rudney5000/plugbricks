@@ -1,7 +1,10 @@
 {
   "realm": "plugbricks",
   "enabled": true,
-  "sslRequired": "none",
+  "sslRequired": "external",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
   "roles": {
     "realm": [
       {
