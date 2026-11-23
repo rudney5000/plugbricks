@@ -84,7 +84,15 @@ function printDeclared(io: Io, s: StatusResult): void {
       ...(b.enabled ? [] : ["disabled"]),
       ...(b.webPort !== undefined ? [`pages on 127.0.0.1:${b.webPort}`] : []),
       ...(b.provides.length ? [`provides ${b.provides.join(", ")}`] : []),
-      ...Object.entries(b.requires).map(([cap, r]) => `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`),
+      ...Object.entries(b.requires).map(([cap, r]) => {
+        if (!r.optional) return `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`;
+        // An optional requirement (D19) is wired to the current provider, when there is one and it is enabled.
+        const provider = Object.hasOwn(s.capabilities, cap) ? s.capabilities[cap] : undefined;
+        const enabled = provider !== undefined && s.bricks.some((x) => x.name === provider && x.enabled);
+        if (provider === undefined) return `optionally requires ${cap} (no provider: not wired)`;
+        if (!enabled) return `optionally requires ${cap} (${provider} is disabled: not wired)`;
+        return `optionally requires ${cap} from ${provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`;
+      }),
     ];
     io.stdout(`  ${b.name} ${b.version}${parts.length ? `  ${parts.join("; ")}` : ""}`);
   }

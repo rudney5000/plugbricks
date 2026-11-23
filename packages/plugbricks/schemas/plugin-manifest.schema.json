@@ -96,6 +96,11 @@
           "maximum": 900,
           "default": 120,
           "description": "How long the consumer waits for the provider before giving up. Docker Compose: the driver stops waiting and fails with WAIT_TIMEOUT. Kubernetes: the wait initContainer itself exits non-zero after timeoutSeconds, the pod ends in Init:Error then CrashLoopBackOff, and `plugbricks status` reports that state as WAIT_TIMEOUT."
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false,
+          "description": "The brick runs without this capability: with no provider installed (or it is disabled) nothing is injected and nothing waits; with one, it is wired like any requirement. Resolved when the plan is built, so a provider added later wires it (D19)."
         }
       }
     },

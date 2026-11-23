@@ -1,0 +1,11 @@
+{
+  "description": "a provider added after the brick that optionally requires its capability wires it: wait, provision and inject (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/app-opt"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["status"], "stdout": "app-opt 1.0.0  optionally requires database from postgres (wait healthy, 120s)" },
+    { "run": ["generate"] }
+  ],
+  "expectRaw": { ".generated/compose/compose.yaml": "      DATABASE_URL: \"postgres://app-opt:" }
+}

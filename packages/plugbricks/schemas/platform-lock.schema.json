@@ -139,10 +139,14 @@
           "additionalProperties": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["provider", "wait", "timeoutSeconds"],
+            "required": ["wait", "timeoutSeconds"],
             "properties": {
               "provider": {
                 "$ref": "#/$defs/brickName"
+              },
+              "optional": {
+                "const": true,
+                "description": "An optional requirement (D19): no provider is recorded; the plan uses the brick that provides the capability when there is one, enabled."
               },
               "wait": {
                 "enum": ["healthy", "started"]
@@ -152,7 +156,23 @@
                 "minimum": 1,
                 "maximum": 900
               }
-            }
+            },
+            "oneOf": [
+              {
+                "required": ["provider"],
+                "properties": {
+                  "provider": true,
+                  "optional": false
+                }
+              },
+              {
+                "required": ["optional"],
+                "properties": {
+                  "optional": true,
+                  "provider": false
+                }
+              }
+            ]
           }
         },
         "volumes": {

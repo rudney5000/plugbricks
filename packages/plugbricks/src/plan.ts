@@ -317,12 +317,21 @@ export function buildPlan(
 
   for (const [brick, m] of [...manifests].sort(([a], [b]) => a.localeCompare(b))) {
     const own = (name: string) => useSecret(brickSecretEnv(brick, name), `${brick}/${name}`);
-    const requires = Object.keys(m.requires ?? {}).sort();
+    // The provider of each requirement. An optional one (D19) records none: it is wired to the brick that
+    // provides the capability now, when that brick is in the plan (installed and enabled), and left out otherwise.
+    const providers = new Map<string, string>();
+    for (const cap of Object.keys(m.requires ?? {}).sort()) {
+      const locked = lock.bricks[brick].requires[cap];
+      const provider = locked.provider ?? (Object.hasOwn(lock.capabilities, cap) ? lock.capabilities[cap] : undefined);
+      if (locked.optional && (provider === undefined || !manifests.has(provider))) continue;
+      providers.set(cap, provider!);
+    }
+    const requires = [...providers.keys()];
     // Variables injected by every required capability; the brick's own env wins on a clash.
     const injected: Record<string, Value> = {};
     for (const cap of requires) {
       const locked = lock.bricks[brick].requires[cap];
-      const provider = locked.provider;
+      const provider = providers.get(cap)!;
       const pm = manifests.get(provider)!;
       const p = pm.provides![cap];
       const providerSvc = pm.services.find((s) => s.name === p.service)!;

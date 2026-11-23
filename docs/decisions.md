@@ -1144,7 +1144,14 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D19. Tokens in the data plane: the router requires a JWT when the platform has an `oidc` provider
 
-- **Status:** accepted (2026-11-23), its assumptions verified the same day (below), not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
+- **Status:** accepted (2026-11-23), its assumptions verified the same day (below). Point 1 (optional
+  requirements) implemented on 2026-11-23: `optional` in the manifest's `requires`, an optional requirement
+  recorded in the lock without a provider (`{ "optional": true, wait, timeoutSeconds }`, the lock schema
+  refusing one with both or neither), resolved by `buildPlan`, ignored by the refusals of `add`, `remove`,
+  `disable` and `enable`, and shown by `status` as wired, not provided, or provider disabled. Tested by the
+  CLI scenarios `optional-requires-no-provider`, `optional-requires-provider-later`,
+  `optional-requires-provider-gone`, `lock-requirement-both` and `lock-requirement-neither`. Points 2 to 7
+  not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
   an enabled brick provides `oidc`) and B1 (each service gets its own Keycloak client through the
   `provides` / `requires` wiring), over A2 (always require one) and B2 (one service account shared by all).
 - **Context:** since D17 a web page of another site cannot call the router (CORS), but any program on the
