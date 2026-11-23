@@ -517,6 +517,22 @@ function buildRouter(
   };
 }
 
+/** The issuer of an oidc provider's tokens: its web origin, which the browser and the tokens use (D18), plus its issuerPath. */
+const oidcIssuer = (webPort: number, issuerPath: string) => `http://127.0.0.1:${webPort}${issuerPath}`;
+
+/**
+ * The issuer of the platform's own oidc provider (D19, point 7): an enabled brick that provides oidc and describes it,
+ * with its webPort. The admin uses it when --issuer is not given. Undefined when there is none.
+ */
+export function platformOidcIssuer(project: Project): { brick: string; issuer: string } | undefined {
+  for (const [brick, m] of loadInstalledBricks(project)) {
+    if (!isBrickEnabled(project.platform, brick) || !m.oidc || !m.provides?.oidc) continue;
+    const webPort = Object.hasOwn(project.platform.bricks, brick) ? project.platform.bricks[brick].webPort : undefined;
+    if (webPort !== undefined) return { brick, issuer: oidcIssuer(webPort, m.oidc.issuerPath) };
+  }
+  return undefined;
+}
+
 /** How long the router waits for its oidc provider on Kubernetes: a first start of Keycloak took about 2 minutes (D18). */
 export const ROUTER_OIDC_WAIT_SECONDS = 300;
 
@@ -535,7 +551,7 @@ function routerAuth(
   const p = m.provides!.oidc;
   const svc = services.find((s) => s.brick === provider && s.service === p.service)!;
   const vars = { "provider.host": svc.name, "provider.port": String(svc.port) };
-  const issuer = `http://127.0.0.1:${webPorts[provider]}${m.oidc!.issuerPath}`;
+  const issuer = oidcIssuer(webPorts[provider], m.oidc!.issuerPath);
   const jwksUrl = `http://${svc.name}:${svc.port}${m.oidc!.jwksPath}`;
   const yaml = toYaml({
     version: "1",
