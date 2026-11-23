@@ -17,6 +17,7 @@ import {
 } from "./platform.js";
 import { MANIFEST_DEFAULTS, PLATFORM_DEFAULTS } from "./schemas.js";
 import { parseTemplate, secretsIn, type Segment, type TemplateContext } from "./templates.js";
+import { toYaml } from "./yaml.js";
 
 /**
  * The plan: everything a driver needs, independent of the runtime. Built from platform.lock and
@@ -51,6 +52,8 @@ export interface BrickManifest {
   subgraph?: { service: string; schema: string; path?: string };
   /** The service that serves web pages (D17). */
   web?: { service: string; path?: string };
+  /** On a web brick that provides oidc: what the router needs to check its tokens (D19). */
+  oidc?: { issuerPath: string; jwksPath: string; audience: string };
   extends?: { plugin: string; entities: string[] }[];
   provides?: Record<
     string,
@@ -148,6 +151,31 @@ export interface PlanRouter {
    * With no web brick, only the router's own origin, which no other page has.
    */
   allowedOrigins: string[];
+  /**
+   * Present when an enabled brick provides oidc (D19): the router then requires a token from that issuer, for that
+   * audience, checked with the provider's keys, and starts only once the provider is ready.
+   */
+  auth?: PlanRouterAuth;
+}
+
+/** The token check of the router (D19), and how it waits for its provider. */
+export interface PlanRouterAuth {
+  provider: string;
+  /** Runtime name of the provider's service, which the router waits for. */
+  service: string;
+  /** The provider's service has a healthcheck: Compose can wait until it is healthy. */
+  healthy: boolean;
+  /** The provider's web origin plus its issuerPath: the issuer its tokens carry (D18). */
+  issuer: string;
+  /** The keys, fetched inside the platform: the provider's service plus its jwksPath. */
+  jwksUrl: string;
+  audience: string;
+  /** Text of router.yaml, the router configuration file named by CONFIG_PATH. */
+  yaml: string;
+  /** sha256 of `yaml`: on the container and the pod, so that a change recreates the router. */
+  yamlSha256: string;
+  /** The provider's ready command, run before the router on Kubernetes (the router cannot start without the keys). */
+  wait: { image: string; exec: string[]; intervalSeconds: number; timeoutSeconds: number };
 }
 
 export interface Plan {
@@ -435,7 +463,7 @@ export function buildPlan(
   for (const v of reservedVolumes) {
     names.add("volume", volumeName(v), `${v.brick}/${v.service}/${v.name}`, `volume of disabled ${v.brick}`, false);
   }
-  const planRouter = router ? buildRouter(manifests, services, router, names) : undefined;
+  const planRouter = router ? buildRouter(manifests, services, router, names, webPorts) : undefined;
   if (names.issues.length) throw new PlugbricksError(names.issues);
 
   return {
@@ -455,6 +483,7 @@ function buildRouter(
   services: PlanService[],
   router: { port: number; readSchema: (brick: string, file: string) => string },
   names: Names,
+  webPorts: Record<string, number>,
 ): PlanRouter | undefined {
   const inputs: SubgraphInput[] = [];
   const subgraphs: PlanRouter["subgraphs"] = [];
@@ -475,6 +504,7 @@ function buildRouter(
   names.add("configmap", `${ROUTER_NAME}-config`, "router", "the router configuration");
   const built = buildRouterConfigFile(inputs);
   if (!built.ok) throw new PlugbricksError(built.issues);
+  const auth = routerAuth(manifests, services, webPorts);
   return {
     name: ROUTER_NAME,
     image: ROUTER_IMAGE,
@@ -483,6 +513,50 @@ function buildRouter(
     configSha256: createHash("sha256").update(built.json).digest("hex"),
     subgraphs: subgraphs.sort((a, b) => a.service.localeCompare(b.service)),
     allowedOrigins: allowedOrigins(router.port, services),
+    ...(auth ? { auth } : {}),
+  };
+}
+
+/** How long the router waits for its oidc provider on Kubernetes: a first start of Keycloak took about 2 minutes (D18). */
+export const ROUTER_OIDC_WAIT_SECONDS = 300;
+
+/** The router's token check (D19), from the enabled brick that provides oidc and describes it; none without one. */
+function routerAuth(
+  manifests: Map<string, BrickManifest>,
+  services: PlanService[],
+  webPorts: Record<string, number>,
+): PlanRouterAuth | undefined {
+  const found = [...manifests].find(([, m]) => m.oidc !== undefined && m.provides?.oidc !== undefined);
+  if (!found) return undefined;
+  const [provider, m] = found;
+  if (webPorts[provider] === undefined) {
+    throw new PlugbricksError([issue("WEB_PORT_MISSING", `platform.json#/bricks/${provider}`, { brick: provider })]);
+  }
+  const p = m.provides!.oidc;
+  const svc = services.find((s) => s.brick === provider && s.service === p.service)!;
+  const vars = { "provider.host": svc.name, "provider.port": String(svc.port) };
+  const issuer = `http://127.0.0.1:${webPorts[provider]}${m.oidc!.issuerPath}`;
+  const jwksUrl = `http://${svc.name}:${svc.port}${m.oidc!.jwksPath}`;
+  const yaml = toYaml({
+    version: "1",
+    authentication: { jwt: { jwks: [{ url: jwksUrl, issuers: [issuer], audiences: [m.oidc!.audience], algorithms: ["RS256"] }] } },
+    authorization: { require_authentication: true },
+  });
+  return {
+    provider,
+    service: svc.name,
+    healthy: svc.healthcheck !== undefined,
+    issuer,
+    jwksUrl,
+    audience: m.oidc!.audience,
+    yaml,
+    yamlSha256: createHash("sha256").update(yaml).digest("hex"),
+    wait: {
+      image: p.ready.image ?? svc.image,
+      exec: p.ready.exec.map((a) => textOf(resolveValue(a, "readyExec", vars, () => ""))),
+      intervalSeconds: p.ready.intervalSeconds ?? MANIFEST_DEFAULTS.readyIntervalSeconds,
+      timeoutSeconds: ROUTER_OIDC_WAIT_SECONDS,
+    },
   };
 }
 

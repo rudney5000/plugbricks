@@ -65,6 +65,9 @@
     "web": {
       "$ref": "#/$defs/web"
     },
+    "oidc": {
+      "$ref": "#/$defs/oidc"
+    },
     "extends": {
       "type": "array",
       "description": "Entities owned by another plugin that this subgraph extends. The resolver activates the owner.",
@@ -74,7 +77,8 @@
     }
   },
   "dependentRequired": {
-    "extends": ["subgraph"]
+    "extends": ["subgraph"],
+    "oidc": ["web", "provides"]
   },
   "$defs": {
     "capabilityName": {
@@ -360,6 +364,26 @@
           "pattern": "^/",
           "default": "/",
           "description": "Entry page, shown by the admin."
+        }
+      }
+    },
+    "oidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issuerPath", "jwksPath", "audience"],
+      "description": "On a web brick that provides oidc: what the router needs to check its tokens (D19). The issuer is the brick's web origin plus issuerPath; the keys are fetched inside the platform at the provider's service plus jwksPath; only tokens for this audience are accepted.",
+      "properties": {
+        "issuerPath": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "jwksPath": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "audience": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

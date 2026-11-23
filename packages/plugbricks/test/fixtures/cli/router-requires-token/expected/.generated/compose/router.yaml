@@ -1,0 +1,13 @@
+version: "1"
+authentication:
+  jwt:
+    jwks:
+      - url: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs
+        issuers:
+          - http://127.0.0.1:8080/realms/plugbricks
+        audiences:
+          - plugbricks-router
+        algorithms:
+          - RS256
+authorization:
+  require_authentication: true

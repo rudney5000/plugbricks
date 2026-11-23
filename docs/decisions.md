@@ -1160,7 +1160,22 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `aud=["plugbricks-router","account"]` and `azp=orders-web`; a second `up` (25 s) ran the provision again,
   which found the client and set its secret again. Tested by the CLI scenario `keycloak-provides-oidc`
   (golden files for both runtimes) and in `e2e-oidc` ("gives a brick that requires oidc its own client").
-  Points 3 to 7 not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
+  Points 3 to 6 (the router requires a token, starts after the provider; `orders-web` sends its own)
+  implemented the same day: the manifest's `oidc` block (`OIDC_NOT_PROVIDED` on a brick that does not provide
+  the capability), `PlanRouter.auth`, `router.yaml` with `CONFIG_PATH` on both runtimes, its hash on the
+  container and the pod, Compose `depends_on` the provider `service_healthy`, a `wait-oidc` init container on
+  Kubernetes (300 s, `ROUTER_OIDC_WAIT_SECONDS`, added to the router's rollout deadline), and in `orders-web`
+  a token cache (`src/token.ts`: renewed 30 s before it expires, one request shared by concurrent callers)
+  and `/api/orders` for its "Refresh". Run on Docker Compose (postgres, keycloak, orders, orders-web): `up`
+  took 188 s, the router started after Keycloak was healthy; through it, `createOrder` without a token got
+  401, with `orders-web`'s token 200, and a real Keycloak token of the master realm 401; `orders-web`'s
+  page listed the order. **Found on the way:** without the shipping brick, the composed schema has no
+  `shipment` on `Order`, and the router refused the page's whole query ("Cannot query field "shipment" on
+  type "Order""), so the page showed no order; it now asks again without that field and shows the shipment
+  unavailable. Tested by the CLI scenario `router-requires-token` (golden files for both runtimes, with
+  `router.yaml`), the unit tests of `apis/orders-web` (token cache, refresh, the fallback), and in
+  `e2e-oidc` ("puts the router behind tokens"); the D17 web brick test without Keycloak still passes. Not
+  on k3d, as D18. Point 7 (the admin finds the issuer) not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
   an enabled brick provides `oidc`) and B1 (each service gets its own Keycloak client through the
   `provides` / `requires` wiring), over A2 (always require one) and B2 (one service account shared by all).
 - **Context:** since D17 a web page of another site cannot call the router (CORS), but any program on the

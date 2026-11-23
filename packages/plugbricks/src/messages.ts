@@ -26,6 +26,7 @@ export const MESSAGES = {
     'ready command of capability "{capability}" must target ${provider.host}, otherwise it probes the waiting container itself',
   TEMPLATE_UNKNOWN: '"{template}" is not a template this field accepts; allowed here: {allowed}',
   PORT_CONFLICT: 'the ports of service "{service}" conflict: {detail}',
+  OIDC_NOT_PROVIDED: 'the "oidc" block describes tokens for the router, but this brick does not provide the "oidc" capability',
   WEB_ENV_RESERVED:
     'service "{service}" serves the pages of this brick and sets {name} in its env; plugbricks sets it (the router\'s address), so remove it from the manifest',
 

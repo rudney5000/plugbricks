@@ -331,8 +331,8 @@ function composeWaitTimeout(plan: Plan): number {
 
 /** How long `up` waits for one Deployment: its own wait timeouts, plus time to pull images and start. */
 function rolloutTimeout(plan: Plan, service: string): number {
-  // The router waits for nothing: time to pull its image and start.
-  if (plan.router?.name === service) return 300;
+  // The router: time to pull its image and start, plus its wait for the oidc provider when it checks tokens (D19).
+  if (plan.router?.name === service) return 300 + (plan.router.auth?.wait.timeoutSeconds ?? 0);
   const s = plan.services.find((x) => x.name === service)!;
   const waits = plan.requirements.filter((r) => r.consumer === s.brick && r.wait).reduce((n, r) => n + r.wait!.timeoutSeconds, 0);
   return waits + 300;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pageHtml, readOrders, rowsHtml } from "../src/page.js";
+import { pageHtml, readOrders, refreshJson, rowsHtml, shipmentNotInSchema } from "../src/page.js";
 
 describe("the orders page", () => {
   it("shows the orders and their shipment when every subgraph answers", () => {
@@ -44,13 +44,29 @@ describe("the orders page", () => {
     expect(rows).toContain("&quot;x&quot;");
   });
 
-  it("gives the browser the router address only when there is one", () => {
+  it("refreshes through its own server, never the router, and gives the browser the router address only when there is one", () => {
     const view = readOrders({ data: { orders: [] } });
     const withRouter = pageHtml(view, "http://127.0.0.1:4000/graphql");
     expect(withRouter).toContain('data-graphql="http://127.0.0.1:4000/graphql"');
-    expect(withRouter).toContain('id="refresh"');
+    expect(withRouter).toContain('fetch("/api/orders")');
+    expect(withRouter).not.toContain("fetch(url");
     const without = pageHtml(view, null);
-    expect(without).not.toContain("<script>");
-    expect(without).not.toContain('id="refresh"');
+    expect(without).toContain('data-graphql=""');
+    expect(without).toContain('id="refresh"');
+  });
+
+  it("answers the refresh with rows already escaped by the server", () => {
+    const answer = JSON.parse(refreshJson(readOrders({ data: { orders: [{ id: "<b>", total: 1, status: "pending", shipment: null }] } })));
+    expect(answer.shippingUnavailable).toBe(false);
+    expect(answer.rows).toContain("#&lt;b&gt;");
+  });
+
+  it("asks again without the shipment when no brick serves it, and shows it unavailable", () => {
+    expect(shipmentNotInSchema({ errors: [{ message: 'Cannot query field "shipment" on type "Order".' }] })).toBe(true);
+    expect(shipmentNotInSchema({ errors: [{ message: "Failed to fetch from Subgraph 'shipping'." }] })).toBe(false);
+    const view = readOrders({ data: { orders: [{ id: "1", total: 42.5, status: "pending" }] } }, true);
+    expect(view.shippingUnavailable).toBe(true);
+    expect(rowsHtml(view)).toContain("#1");
+    expect(rowsHtml(view)).toContain("Unavailable");
   });
 });
