@@ -63,4 +63,6 @@ callback.
 Since D17 a brick can publish its pages on its own loopback port, and since D18 there is a Keycloak brick:
 the same realm, roles and client, built into its image (`apis/keycloak`) **without any user**, its
 console at `http://127.0.0.1:<webPort>/admin/`, its administrator's password generated in
-`.secrets/secrets.env`. The README section "`keycloak`" shows the commands.
+`.secrets/secrets.env`. With it, `plugbricks admin --client-id plugbricks-admin` finds the issuer by itself
+(D19); `--issuer` is for an external Keycloak, as on this page. The README section "`keycloak`" shows the
+commands.

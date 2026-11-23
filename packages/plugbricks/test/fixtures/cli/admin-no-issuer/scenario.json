@@ -1,0 +1,7 @@
+{
+  "description": "the admin without --dev needs an issuer: --issuer, or a brick that provides oidc (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["admin", "--client-id", "plugbricks-admin"], "exit": 1, "codes": ["ADMIN_OIDC_NOT_CONFIGURED"], "unchanged": true }
+  ]
+}
