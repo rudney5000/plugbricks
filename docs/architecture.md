@@ -2,7 +2,7 @@
 
 How plugbricks works, from the files a user writes to the containers that answer a GraphQL request.
 This document grows with the project: each section says whether it describes what is **built** or
-what is **planned**. The reasons behind each choice are in `docs/decisions.md` (D1 to D10); this
+what is **planned**. The reasons behind each choice are in `docs/decisions.md` (D1 to D20); this
 document links to them instead of repeating them.
 
 ## 1. Vocabulary
@@ -46,6 +46,10 @@ flowchart LR
     B --> P
   end
 ```
+
+With a `keycloak` brick and an `orders-web` page (D17, D18), the same data plane also holds the
+platform's identity provider and the shop page: both are web bricks, published on their own loopback
+port. The router then requires a token (D19) and passes it on to the subgraphs (D20).
 
 ## 3. Control plane: from a manifest to running containers (built)
 
@@ -111,19 +115,38 @@ Who talks to whom:
 
 | From | To | Protocol | Credential | Why |
 |---|---|---|---|---|
-| client | router | HTTP, `127.0.0.1:<router.port>` only | none yet | the only published port (D9) |
-| router | `orders-app`, `shipping-app` | GraphQL over HTTP, internal names | none | federated query plan |
+| client | router | HTTP, `127.0.0.1:<router.port>` only | a JWT when an `oidc` provider is enabled (D19), none otherwise | the published GraphQL entry point (D9) |
+| client | `orders-web-app` | HTTP, `127.0.0.1:<webPort>` only | none | the shop page (D17) |
+| router | `orders-app`, `shipping-app` | GraphQL over HTTP, internal names | the caller's `Authorization` header, propagated (D20) | federated query plan |
+| `orders-web-app` | `keycloak-app` | OIDC token endpoint (HTTP) | its own client id and secret | gets a token for the router (D19) |
+| `orders-app`, `shipping-app` | `keycloak-app` | JWKS over HTTP | none | verifies the token it receives (D20) |
 | `orders-app` | `postgres-db` | PostgreSQL | its own role and password, `DATABASE_URL` | its data |
 | `shipping-app` | `postgres-db` | PostgreSQL | its own role and password | its data; refused on the `orders` database |
 | `<consumer>-wait-database` | `postgres-db` | `pg_isready` | none | waits until the database answers |
 | `<consumer>-provision-database` | `postgres-db` | `psql` | superuser password | creates the consumer's role and database, idempotent |
 
+**Web bricks (D17).** A brick may declare the service that serves its pages (`web: { service, path }`).
+`add` gives it a `webPort` in `platform.json`; Compose publishes that service on `127.0.0.1:<webPort>`
+only, Kubernetes keeps a ClusterIP reached with `kubectl port-forward` on the same local port. The router
+accepts browser calls only from the origins of the enabled web bricks, and the service receives
+`GRAPHQL_URL` (the router inside the platform) and `PUBLIC_GRAPHQL_URL` (the browser's view of it).
+`examples/orders-web` is the shop page.
+
+**Tokens (D19, D20).** When an enabled brick provides `oidc` (the `keycloak` brick, D18), the router
+requires a JWT signed by that provider (issuer, audience `plugbricks-router`, RS256, keys from the
+provider) and starts only after it. It forwards `Authorization` to the subgraphs, and each API checks
+the token again with `jose`: a call that reaches an API directly, past the router, without a valid
+token gets 401. Each consumer of `oidc` gets its own confidential client (`OIDC_TOKEN_URL`,
+`OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`); `orders-web` uses it. Without an `oidc` provider, nothing
+changes: no token, no rule.
+
 Rules that hold for every platform:
 
 - **No brick talks to another brick's storage.** Each consumer gets its own role, database and
   password from the provider; shipping knows orders only through the graph.
-- **Only the router is published**, and only on the loopback address (Compose) or as a ClusterIP
-  Service (Kubernetes). No Ingress, NodePort or LoadBalancer.
+- **Only the router and the web bricks' pages are published**, and only on the loopback address
+  (Compose) or as a ClusterIP Service (Kubernetes). No Ingress, NodePort or LoadBalancer (D9, amended
+  by D17).
 - **Secrets never appear on a command line or in `.generated/`.** They live in `.secrets/`, mode 0600,
   and reach containers as environment variables (D6).
 
@@ -168,6 +191,15 @@ API (an `extraPorts` port of the Service). Each consumer gets `AMQP_URL` with it
 `QUEUE_NAME=<its brick name>`, then declares its own queue. `examples/nats` (D13) is a second provider
 of the same capability, with core NATS only: `NATS_URL` and `SUBJECT=<its brick name>`, no accounts and
 no JetStream.
+
+**Optional requirements, and `oidc` (D19).** A requirement may say `"optional": true`: without a
+provider the brick runs as it is; when a provider is added (or enabled) later, the plan wires it. This is
+how `orders-web`, `orders` and `shipping` run with or without Keycloak. `examples/keycloak` provides
+`oidc`: `ready` asks for the realm's discovery document; `provision` creates one confidential client per
+consumer (its own secret, an audience mapper adding `plugbricks-router`); `inject` adds
+`OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_ISSUER`, `OIDC_JWKS_URL` and
+`OIDC_AUDIENCE`. The provider's manifest also carries `oidc: { issuerPath, jwksPath, audience }`, which
+tells the router and the admin where the issuer and the keys are.
 
 ## 6. GraphQL Federation v2 (built)
 
@@ -227,11 +259,20 @@ without listing it in `extends` is not detected.
 |---|---|---|
 | Exposure | only the router and the web bricks' pages, loopback / ClusterIP | D9, D17 |
 | Browser origins | the router accepts only the origins it lists (`CORS_ALLOW_ORIGINS`); any other gets 403 and nothing runs | D17 |
+| Authentication | with an `oidc` provider, the router requires a JWT (issuer, audience, RS256, keys from the provider) and each API checks it again; without one, no token | D19, D20 |
+| Service identity | one confidential OIDC client per consumer, its own secret, injected by `oidc`; the router forwards the caller's token, and APIs never trust an identity header | D19, D20 |
+| Authorization | not built: any valid token may call any field | D20 |
 | Images | pinned to `MAJOR.MINOR` at least, or a digest; the router by digest | `src/image.ts`, `tools.json` |
 | Router | non-root (65532), read-only filesystem, no capability, playground off, telemetry off | D9 |
 | Data | one role and database per consumer; volumes kept unless pruned explicitly | D3, `examples/postgres` |
 | Secrets | random, 0600, never on a command line, never in `.generated/`, never deleted | D6 |
 | Kubernetes | never the current context; `--context` required | D5 |
+
+The token flow, in one line: a caller gets a token from the platform's Keycloak (a user in the browser,
+or a consumer's client credentials); the router validates it and forwards `Authorization`; each API
+validates it again. No token, an invalid one, a wrong issuer or audience, or an expired one: 401 at the
+router, and again at the API. The tokens live 300 s; a service of the platform holding a valid token can
+still call any API: per-field or per-role authorization is not built (D20).
 
 ## 8. The admin (built)
 
@@ -246,7 +287,7 @@ flowchart LR
     S["HTTP server<br/>src/admin/server.ts"] --> UI["UI: React + Vite<br/>Bricks, Router, Audit"]
     S --> API["/api/session, /api/bricks,<br/>/api/actions, /api/audit"]
   end
-  S <-->|"authorization code + PKCE<br/>roles in the ID token"| IDP["OIDC issuer<br/>(external, e.g. Keycloak)"]
+  S <-->|"authorization code + PKCE<br/>roles in the ID token"| IDP["OIDC issuer<br/>(the platform's keycloak brick,<br/>or an external one)"]
   API -->|"read: platformStatus,<br/>statusRuntimeAsync, plan"| FILES["platform.json / lock<br/>.generated/"]
   API -->|"read, no shell, 15 s timeout"| RT["docker compose / kubectl"]
   API -->|"act: child process of the CLI<br/>add, enable, disable, remove, up"| CLI["plugbricks CLI<br/>(takes .platform/lock)"]
@@ -266,8 +307,10 @@ flowchart LR
   BUSY`), and `PLATFORM_BUSY` from the platform lock is reported if a terminal command holds it. There is
   no `--prune-volumes`: deleting data stays a terminal decision.
 - **Who may do what:** sign-in with OIDC (authorization code + PKCE, public or confidential client).
-  `plugbricks-viewer` reads, `plugbricks-admin` reads and acts; no role, no access. `--dev` turns
-  authentication off for local use. Sessions are in memory and end after 8 hours on the server.
+  `plugbricks-viewer` reads, `plugbricks-admin` reads and acts; no role, no access. With an `oidc`
+  provider in the platform, the admin finds its issuer when `--issuer` is absent (D19); `--issuer` still
+  wins, and an external issuer still works (`docs/keycloak.md`). `--dev` turns authentication off for
+  local use. Sessions are in memory and end after 8 hours on the server.
 - **Audit:** every action writes one line when accepted and one when it ends (`Success`, `Refused`,
   `Failed`), with the user, the role, the action id and the duration; never the output, never a secret.
 - **Exposure:** like the router, loopback only. The server listens on `127.0.0.1` and refuses any
@@ -275,10 +318,9 @@ flowchart LR
 
 ## 9. Not built yet
 
-What the admin mockup still shows and the code does not have:
-
-1. **An `oidc` capability.** The Keycloak brick exists (D18), but the admin is still pointed at it by hand
-   (`--issuer`); a capability would let the admin, and the router once it checks tokens, find the issuer.
-2. **Tokens in the data plane:** the router and the API bricks do not check any token today; only the
-   admin signs people in.
-3. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).
+1. **Authorization.** Every valid token may call every field; per-role or per-scope authorization is not
+   built (D20).
+2. **`createdBy`.** D20 point 4: `orders` does not record who created an order yet.
+3. **Keycloak and tokens on Kubernetes.** Their end-to-end tests run on Docker Compose only (D18, D19);
+   the k3d job covers the rest.
+4. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).
