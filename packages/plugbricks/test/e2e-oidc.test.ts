@@ -113,6 +113,7 @@ const compose = spawnSync("docker", ["compose", "version"], { encoding: "utf8" }
 const composeReady = linuxDocker && compose.status === 0;
 const brickProject = "pbtest-kcbrick";
 const webPort = 18091;
+const routerPort = 14110;
 
 describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keycloak the platform runs (D18)", () => {
   const work = join(pkg, ".test-work/oidc-brick");
@@ -126,7 +127,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
   let admin: AdminServer | undefined;
 
   beforeAll(async () => {
-    for (const api of ["keycloak", "orders-web"]) {
+    for (const api of ["keycloak", "orders", "orders-web"]) {
       const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
         encoding: "utf8",
       });
@@ -136,7 +137,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     spawnSync("docker", ["compose", "--project-name", brickProject, "down", "--volumes", "--remove-orphans"], { encoding: "utf8" });
     rmSync(work, { recursive: true, force: true });
     mkdirSync(project, { recursive: true });
-    for (const brick of ["postgres", "keycloak", "orders-web"])
+    for (const brick of ["postgres", "keycloak", "orders", "orders-web"])
       cpSync(join(pkg, "examples", brick), join(project, brick), { recursive: true });
     for (const args of [
       ["init", "--name", brickProject],
@@ -144,6 +145,8 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       ["add", "keycloak"],
       // orders-web requires oidc optionally (D19): with keycloak here, it gets its own client.
       ["add", "orders-web"],
+      // A subgraph, so the platform has a router; with keycloak providing oidc, it requires a token (D19).
+      ["add", "orders"],
     ]) {
       const r = cli(args);
       expect(r.code, `${args.join(" ")}\n${r.out}`).toBe(0);
@@ -153,6 +156,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     expect(platform.bricks.keycloak.webPort, "add gives the first free port from 8080").toBe(8080);
     platform.bricks.keycloak.webPort = webPort;
     platform.bricks["orders-web"].webPort = webPort + 1;
+    platform.router = { port: routerPort };
     writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
     // up returns once the healthcheck passes, which asks for the realm itself: Keycloak's own /health/ready says UP
     // while it is still creating its schema and importing the realm (observed, D18).
@@ -216,6 +220,59 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       },
     );
     expect(provision.stdout).toContain("create-client: created client orders-web in realm plugbricks");
+  });
+
+  it("puts the router behind tokens: none 401, another issuer 401, orders-web's 200, and its page through it (D19)", async () => {
+    const secrets = readFileSync(join(project, ".secrets/secrets.env"), "utf8");
+    const secretOf = (name: string) => new RegExp(`^${name}=(.+)$`, "m").exec(secrets)![1];
+    const tokenAt = async (realm: string, form: Record<string, string>) => {
+      const r = await fetch(`${origin}/realms/${realm}/protocol/openid-connect/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(form),
+      });
+      expect(r.status, `token from realm ${realm}`).toBe(200);
+      return ((await r.json()) as { access_token: string }).access_token;
+    };
+    const graphql = async (query: string, token?: string) => {
+      const r = await fetch(`http://127.0.0.1:${routerPort}/graphql`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ query }),
+      });
+      return { status: r.status, body: (await r.json()) as { data?: { createOrder?: { id: string } } } };
+    };
+
+    // Without a token, nothing runs through the router, not even a read; its health stays open (Kubernetes probes).
+    expect((await graphql("mutation { createOrder(total: 1) { id } }")).status).toBe(401);
+    expect((await graphql("{ orders(limit: 1) { id } }")).status).toBe(401);
+    expect((await fetch(`http://127.0.0.1:${routerPort}/health/ready`)).status).toBe(200);
+    // A real Keycloak token, but from the master realm: another issuer and no audience for the router.
+    const admin = await tokenAt("master", {
+      grant_type: "password",
+      client_id: "admin-cli",
+      username: "admin",
+      password: secretOf("PB_KEYCLOAK__ADMIN_PASSWORD"),
+    });
+    expect((await graphql("{ orders(limit: 1) { id } }", admin)).status).toBe(401);
+    // orders-web's own client: what its server uses. With it an order is created through the router.
+    const own = await tokenAt("plugbricks", {
+      grant_type: "client_credentials",
+      client_id: "orders-web",
+      client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
+    });
+    const created = await graphql("mutation { createOrder(total: 42.5) { id } }", own);
+    expect(created.status).toBe(200);
+    const id = created.body.data!.createOrder!.id;
+
+    // The page, rendered by orders-web's server with its token. No shipping brick here: no shipment field in the
+    // schema, so the page asks without it and shows the shipment unavailable.
+    const page = await (await fetch(`http://127.0.0.1:${webPort + 1}/orders`)).text();
+    expect(page).toContain(`<tr><td>#${id}</td><td>42.50</td>`);
+    expect(page).toContain("Unavailable");
+    // Its "Refresh" asks its own server, never the router.
+    const refreshed = (await (await fetch(`http://127.0.0.1:${webPort + 1}/api/orders`)).json()) as { rows: string };
+    expect(refreshed.rows).toContain(`#${id}`);
   });
 
   it("signs a user created in it into the admin, with the role given there", async () => {

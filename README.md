@@ -333,3 +333,4 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (7c): a Keycloak brick (`examples/keycloak`, image from `apis/keycloak`): the platform's own identity provider for the admin, tested end to end on Docker Compose with a real sign-in (D18).
    - Done (8a): optional requirements, `"optional": true` in a brick's `requires`: without a provider the brick runs as it is, with one it is wired, even when the provider is added later (D19).
    - Done (8b): `examples/keycloak` provides `oidc`: each brick that requires it gets its own confidential client and `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`; `orders-web` requires it optionally (D19).
+   - Done (8c): with a brick that provides `oidc`, the router requires a token of its issuer and audience (`router.yaml`, D19), starts after the provider, and `orders-web` sends its own; without one, nothing changes. Tested end to end on Docker Compose.
