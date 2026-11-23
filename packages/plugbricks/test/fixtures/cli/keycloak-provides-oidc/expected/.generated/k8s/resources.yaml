@@ -305,10 +305,16 @@ spec:
                 secretKeyRef:
                   name: plugbricks-secrets
                   key: PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET
+            - name: OIDC_AUDIENCE
+              value: plugbricks-router
             - name: OIDC_CLIENT_ID
               value: orders-web
             - name: OIDC_CLIENT_SECRET
               value: "$(PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET)"
+            - name: OIDC_ISSUER
+              value: http://127.0.0.1:8080/realms/plugbricks
+            - name: OIDC_JWKS_URL
+              value: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs
             - name: OIDC_TOKEN_URL
               value: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token
           readinessProbe:

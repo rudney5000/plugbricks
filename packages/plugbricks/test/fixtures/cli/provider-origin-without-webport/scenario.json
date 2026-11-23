@@ -1,0 +1,9 @@
+{
+  "description": "a provider that injects ${provider.web.origin} without being a web brick (no webPort) is refused when rendering (D20)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/idp"] },
+    { "run": ["add", "bricks/app"] },
+    { "run": ["generate"], "exit": 1, "codes": ["WEB_PORT_MISSING"], "unchanged": true }
+  ]
+}

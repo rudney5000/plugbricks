@@ -1,0 +1,13 @@
+{
+  "name": "idp",
+  "version": "1.0.0",
+  "services": [{ "name": "app", "image": "nginx:1.27.3-alpine", "port": 8080 }],
+  "provides": {
+    "thing": {
+      "service": "app",
+      "ready": { "exec": ["wget", "-qO-", "http://${provider.host}:${provider.port}/"] },
+      "provision": { "image": "nginx:1.27.3-alpine", "command": ["true"] },
+      "inject": { "THING_ISSUER": "${provider.web.origin}/x" }
+    }
+  }
+}

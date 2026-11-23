@@ -8,7 +8,7 @@
 /** Secret names: lowercase words joined by single underscores, so env var names never collide (see secretEnvName). */
 export const SECRET_NAME = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 
-export type TemplateVar = "provider.host" | "provider.port" | "consumer.name" | "web.origin" | "secrets";
+export type TemplateVar = "provider.host" | "provider.port" | "provider.web.origin" | "consumer.name" | "web.origin" | "secrets";
 
 /** What each templated field may use. Secrets only in environment maps, never in a command line (visible in ps). */
 export const TEMPLATE_CONTEXTS = {
@@ -18,7 +18,8 @@ export const TEMPLATE_CONTEXTS = {
   readyExec: ["provider.host", "provider.port"],
   provisionCommand: ["provider.host", "provider.port", "consumer.name"],
   provisionEnv: ["provider.host", "provider.port", "consumer.name", "secrets"],
-  inject: ["provider.host", "provider.port", "consumer.name", "secrets"],
+  /** provider.web.origin: where the browser reaches a provider that is a web brick, e.g. the issuer of its tokens (D20). */
+  inject: ["provider.host", "provider.port", "provider.web.origin", "consumer.name", "secrets"],
 } as const satisfies Record<string, readonly TemplateVar[]>;
 
 export type TemplateContext = keyof typeof TEMPLATE_CONTEXTS;
