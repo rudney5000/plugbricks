@@ -1150,8 +1150,17 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   refusing one with both or neither), resolved by `buildPlan`, ignored by the refusals of `add`, `remove`,
   `disable` and `enable`, and shown by `status` as wired, not provided, or provider disabled. Tested by the
   CLI scenarios `optional-requires-no-provider`, `optional-requires-provider-later`,
-  `optional-requires-provider-gone`, `lock-requirement-both` and `lock-requirement-neither`. Points 2 to 7
-  not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
+  `optional-requires-provider-gone`, `lock-requirement-both` and `lock-requirement-neither`. Point 2
+  (Keycloak provides `oidc`) implemented the same day: `provides.oidc` in `examples/keycloak` with
+  `provision/create-client.sh`, and `orders-web` requiring `oidc` optionally (300 s). No secret goes on a
+  command line: `kcadm.sh` reads the administrator's password from `KC_CLI_PASSWORD` and the client, with
+  its secret, from standard input (`-f -`). Run on Docker Compose (postgres, keycloak, orders-web): `up`
+  took 176 s, the provision 16 s; with only the variables injected into it, `orders-web` got a token at
+  `http://keycloak-app:8080/…/token` with `iss=http://127.0.0.1:<webPort>/realms/plugbricks`,
+  `aud=["plugbricks-router","account"]` and `azp=orders-web`; a second `up` (25 s) ran the provision again,
+  which found the client and set its secret again. Tested by the CLI scenario `keycloak-provides-oidc`
+  (golden files for both runtimes) and in `e2e-oidc` ("gives a brick that requires oidc its own client").
+  Points 3 to 7 not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
   an enabled brick provides `oidc`) and B1 (each service gets its own Keycloak client through the
   `provides` / `requires` wiring), over A2 (always require one) and B2 (one service account shared by all).
 - **Context:** since D17 a web page of another site cannot call the router (CORS), but any program on the
