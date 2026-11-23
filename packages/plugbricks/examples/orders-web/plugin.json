@@ -11,6 +11,9 @@
       "name": "app",
       "image": "plugbricks-example/orders-web:0.1.0",
       "port": 3000,
+      "env": {
+        "WEB_ORIGIN": "${web.origin}"
+      },
       "healthcheck": {
         "exec": [
           "wget",
