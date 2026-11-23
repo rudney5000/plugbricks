@@ -25,13 +25,14 @@ function resolvers(pool: pg.Pool) {
       order: (_: unknown, args: { id: string }) => findOrder(pool, args.id),
     },
     Mutation: {
-      createOrder: (_: unknown, args: { total: number }) => {
+      createOrder: (_: unknown, args: { total: number }, context: { caller?: Caller }) => {
         if (!Number.isFinite(args.total) || args.total < 0 || args.total > MAX_TOTAL) {
           // A GraphQLError is shown to the client as is; any other error is masked by Yoga.
           throw new GraphQLError(`total must be between 0 and ${MAX_TOTAL}`, { extensions: { code: "BAD_USER_INPUT" } });
         }
         // The numeric(12, 2) column rounds half away from zero; rounding here in floating point would not (1.005).
-        return createOrder(pool, args.total);
+        // Who created it (D20 point 4): the caller of the verified token, never a header the request sets itself.
+        return createOrder(pool, args.total, context.caller?.name ?? null);
       },
     },
     Order: {

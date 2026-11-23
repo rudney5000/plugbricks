@@ -5,7 +5,7 @@ import type { Server } from "node:http";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp, typeDefs } from "../src/app.js";
-import { migrate } from "../src/db.js";
+import { MIGRATIONS, migrate } from "../src/db.js";
 
 // The API alone, against a throwaway PostgreSQL in Docker (port published on 127.0.0.1 only).
 // Skipped, with the reason in the title, where no Linux Docker engine answers.
@@ -147,7 +147,72 @@ describe("orders API", () => {
 
   it.skipIf(!ready)(`applies migrations once, even when run again${why}`, async () => {
     expect(await migrate(pool)).toEqual([]);
-    expect((await pool.query("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n).toBe(1);
+    expect((await pool.query("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n).toBe(MIGRATIONS.length);
+  });
+
+  it.skipIf(!ready)(`upgrades a database created before createdBy, keeping its orders (createdBy null)${why}`, async () => {
+    // The state of an existing platform: only the first migration applied, with an order in it.
+    await pool.query("DROP DATABASE IF EXISTS upgrade_from_v1");
+    await pool.query("CREATE DATABASE upgrade_from_v1");
+    const url = new URL(pool.options.connectionString!);
+    url.pathname = "/upgrade_from_v1";
+    const old = new pg.Pool({ connectionString: url.toString(), max: 2 });
+    try {
+      await old.query("CREATE TABLE schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
+      await old.query(MIGRATIONS[0]);
+      await old.query("INSERT INTO schema_migrations (version) VALUES (1)");
+      await old.query("INSERT INTO orders (total) VALUES (5)");
+      expect(await migrate(old)).toEqual([2]);
+      expect((await old.query('SELECT total::float8 AS total, created_by AS "createdBy" FROM orders')).rows).toEqual([
+        { total: 5, createdBy: null },
+      ]);
+    } finally {
+      await old.end();
+      await pool.query("DROP DATABASE IF EXISTS upgrade_from_v1");
+    }
+  });
+
+  it.skipIf(!ready)(`records who created an order: null without a token check (D20 point 4)${why}`, async () => {
+    const created = await gql("mutation { createOrder(total: 1) { id createdBy } }");
+    expect(created.errors).toBeUndefined();
+    expect(created.data.createOrder.createdBy).toBeNull();
+  });
+
+  it.skipIf(!ready)(`records the verified caller, never an identity header, and serves it on every read (D20 point 4)${why}`, async () => {
+    // A check that knows one token: the caller's name is what the resolver must record.
+    const app = createApp(pool, async (h) =>
+      h === "Bearer good.to.ken" ? { subject: "sub-1", name: "service-account-orders-web" } : null,
+    );
+    await new Promise<void>((r) => app.listen(0, "127.0.0.1", r));
+    const url = `http://127.0.0.1:${(app.address() as AddressInfo).port}/graphql`;
+    const ask = async (query: string, variables?: Record<string, unknown>) =>
+      (await (
+        await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: "Bearer good.to.ken", "x-user-sub": "admin-forged" },
+          body: JSON.stringify({ query, variables }),
+        })
+      ).json()) as { data?: any; errors?: unknown[] }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    try {
+      const created = await ask("mutation { createOrder(total: 2) { id createdBy } }");
+      expect(created.errors).toBeUndefined();
+      expect(created.data.createOrder.createdBy).toBe("service-account-orders-web");
+      const id = created.data.createOrder.id;
+      expect((await ask("query($id: ID!) { order(id: $id) { createdBy } }", { id })).data.order.createdBy).toBe(
+        "service-account-orders-web",
+      );
+      expect((await ask("{ orders(limit: 5) { id createdBy } }")).data.orders).toContainEqual({
+        id,
+        createdBy: "service-account-orders-web",
+      });
+      // Through _entities too, as the router asks when another subgraph refers to the order.
+      const entities = await ask("query($r: [_Any!]!) { _entities(representations: $r) { ... on Order { createdBy } } }", {
+        r: [{ __typename: "Order", id }],
+      });
+      expect(entities.data._entities).toEqual([{ createdBy: "service-account-orders-web" }]);
+    } finally {
+      await new Promise((r) => app.close(r));
+    }
   });
 
   it.skipIf(!ready)(`answers /health with 503 when the database is gone${why}`, async () => {
