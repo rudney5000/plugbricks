@@ -193,8 +193,10 @@ Sign into the console as `admin` with the password `PB_KEYCLOAK__ADMIN_PASSWORD`
 `.secrets/secrets.env`, create the users and give them `plugbricks-admin` or `plugbricks-viewer`, then:
 
 ```bash
-npx plugbricks admin --issuer http://127.0.0.1:<webPort>/realms/plugbricks --client-id plugbricks-admin
+npx plugbricks admin --client-id plugbricks-admin   # the issuer is the keycloak brick's, found in the platform
 ```
+
+`--issuer` still overrides it (an external issuer, `docs/keycloak.md`).
 
 The brick uses `${web.origin}`, the address the browser uses (`http://127.0.0.1:<webPort>`), a template
 allowed only in the env of a web brick's own service. The realm is imported on the first start only, and
@@ -334,3 +336,4 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (8a): optional requirements, `"optional": true` in a brick's `requires`: without a provider the brick runs as it is, with one it is wired, even when the provider is added later (D19).
    - Done (8b): `examples/keycloak` provides `oidc`: each brick that requires it gets its own confidential client and `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`; `orders-web` requires it optionally (D19).
    - Done (8c): with a brick that provides `oidc`, the router requires a token of its issuer and audience (`router.yaml`, D19), starts after the provider, and `orders-web` sends its own; without one, nothing changes. Tested end to end on Docker Compose.
+   - Done (8d): `plugbricks admin` finds the issuer of the platform's own oidc provider when `--issuer` is not given (D19).

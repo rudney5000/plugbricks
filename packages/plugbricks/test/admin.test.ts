@@ -8,6 +8,8 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ActionRecord } from "../src/admin/actions.js";
 import { SESSION_TTL_MS, startAdmin, type AdminOptions, type AdminServer } from "../src/admin/server.js";
 import { main } from "../src/cli.js";
+import { platformOidcIssuer } from "../src/plan.js";
+import { readProject } from "../src/platform.js";
 import type { AsyncExec } from "../src/runtime.js";
 
 const pkg = fileURLToPath(new URL("..", import.meta.url));
@@ -735,5 +737,28 @@ describe("the admin actions", () => {
     });
     expect(wrongOrigin.status).toBe(403);
     expect(fakeRuns()).toEqual([]);
+  });
+});
+
+describe("the admin's issuer, found in the platform (D19)", () => {
+  it("is the issuer of the enabled brick that provides oidc, and none without one", () => {
+    const root = join(pkg, ".test-work/admin-issuer");
+    rmSync(root, { recursive: true, force: true });
+    mkdirSync(root, { recursive: true });
+    cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
+    const rio = { cwd: root, stdout: () => {}, stderr: () => {} };
+    for (const args of [
+      ["init", "--name", "issuer-demo"],
+      ["add", "examples/postgres"],
+    ])
+      expect(main(args, rio), args.join(" ")).toBe(0);
+    expect(platformOidcIssuer(readProject(root))).toBeUndefined();
+
+    expect(main(["add", "examples/keycloak"], rio)).toBe(0);
+    // Its web origin (webPort 8080, from add) plus its issuerPath: the issuer its tokens carry.
+    expect(platformOidcIssuer(readProject(root))).toEqual({ brick: "keycloak", issuer: "http://127.0.0.1:8080/realms/plugbricks" });
+
+    expect(main(["disable", "keycloak"], rio)).toBe(0);
+    expect(platformOidcIssuer(readProject(root))).toBeUndefined();
   });
 });

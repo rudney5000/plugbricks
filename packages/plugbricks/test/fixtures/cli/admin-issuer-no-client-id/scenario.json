@@ -1,0 +1,9 @@
+{
+  "description": "with the platform's own oidc provider the admin finds the issuer, but still needs --client-id (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/keycloak"] },
+    { "run": ["admin"], "exit": 1, "codes": ["ADMIN_OIDC_NOT_CONFIGURED"], "unchanged": true }
+  ]
+}

@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startAdmin, type AdminServer } from "../src/admin/server.js";
 import { main } from "../src/cli.js";
+import { platformOidcIssuer } from "../src/plan.js";
+import { readProject } from "../src/platform.js";
 import { browser, signInThroughKeycloak } from "./helpers/oidc-browser.js";
 
 // Real Keycloak sign-ins into `plugbricks admin`. Both blocks use the admin's port 4100, the redirect URI of the
@@ -323,7 +325,8 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       runtime: "compose",
       port: appPort,
       dev: false,
-      issuer: `${origin}/realms/plugbricks`,
+      // Found in the platform, as `plugbricks admin` does without --issuer (D19): the keycloak brick's issuer.
+      issuer: platformOidcIssuer(readProject(project))!.issuer,
       clientId: "plugbricks-admin",
       uiDir: fakeUi(join(work, "ui")),
       runtimeDeps: { exec: () => ({ status: 0, stdout: "[]", stderr: "" }) },

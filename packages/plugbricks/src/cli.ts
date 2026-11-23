@@ -16,6 +16,7 @@ import {
 } from "./platform.js";
 import { liveStatusText } from "./live.js";
 import { startAdmin } from "./admin/server.js";
+import { platformOidcIssuer } from "./plan.js";
 import { withPlatformLock } from "./lock.js";
 import {
   down,
@@ -247,10 +248,14 @@ export function main(argv: string[], io: Io): number {
           }
           const dev = values.dev === true;
           const clientSecret = process.env.PLUGBRICKS_OIDC_CLIENT_SECRET;
-          // A public client (PKCE, no secret) is enough; a confidential client adds the env secret.
-          if (!dev && (!values.issuer || !values["client-id"])) {
+          // The issuer: --issuer, else the platform's own oidc provider (D19). A public client (PKCE, no secret) is
+          // enough; a confidential client adds the env secret.
+          const found = dev || values.issuer ? undefined : platformOidcIssuer(readProject(root));
+          const issuer = values.issuer ?? found?.issuer;
+          if (!dev && (!issuer || !values["client-id"])) {
             throw new PlugbricksError([issue("ADMIN_OIDC_NOT_CONFIGURED", "")]);
           }
+          if (found) io.stdout(`admin: OIDC issuer ${found.issuer} (from the ${found.brick} brick; --issuer overrides it)`);
           const cliDir = dirname(fileURLToPath(import.meta.url));
           const packagedUi = join(cliDir, "admin", "ui");
           const uiDir =
@@ -270,7 +275,7 @@ export function main(argv: string[], io: Io): number {
             uiDir,
             k8s,
             runtimeDeps: io.runtime,
-            issuer: values.issuer,
+            issuer,
             clientId: values["client-id"],
             clientSecret,
             log: (line) => io.stdout(line),

@@ -1175,7 +1175,12 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   unavailable. Tested by the CLI scenario `router-requires-token` (golden files for both runtimes, with
   `router.yaml`), the unit tests of `apis/orders-web` (token cache, refresh, the fallback), and in
   `e2e-oidc` ("puts the router behind tokens"); the D17 web brick test without Keycloak still passes. Not
-  on k3d, as D18. Point 7 (the admin finds the issuer) not built. Chosen by Dedy on 2026-11-23: A1 (require a token only when
+  on k3d, as D18. Point 7 (the admin finds the issuer) implemented the same day: `platformOidcIssuer` in
+  `src/plan.ts` (the enabled brick that provides `oidc` and describes it, its web origin plus `issuerPath`,
+  the same rule as the router's), used by `plugbricks admin` when `--issuer` is not given and announced on
+  the terminal; `--client-id` stays required. Tested by `admin.test.ts` (present, disabled, absent), the CLI
+  scenarios `admin-no-issuer` and `admin-issuer-no-client-id`, and the real sign-in of `e2e-oidc`, which now
+  uses the issuer found in the platform. **D19 is implemented in full.** Chosen by Dedy on 2026-11-23: A1 (require a token only when
   an enabled brick provides `oidc`) and B1 (each service gets its own Keycloak client through the
   `provides` / `requires` wiring), over A2 (always require one) and B2 (one service account shared by all).
 - **Context:** since D17 a web page of another site cannot call the router (CORS), but any program on the
