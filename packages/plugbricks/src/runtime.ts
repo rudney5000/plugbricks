@@ -184,6 +184,30 @@ const composeBase = (plan: Plan) => ["compose", "--project-name", plan.platform,
  * with the timeout code in `docker compose ps --all`. Both are required, so a wait task left
  * at 124 by an earlier run never hides the real cause of this failure.
  */
+/**
+ * A port the platform publishes that something else on the machine already uses. `add` picks a webPort that this
+ * platform does not use, not one that is free on the machine (D17, D18): another platform, or any program, may hold it.
+ * Docker then says "Bind for 127.0.0.1:<port> failed: port is already allocated"; this names the platform.json field.
+ */
+export function composeBusyPorts(plan: Plan, failure: string): Issue[] {
+  const ports = new Set(
+    [...failure.matchAll(/Bind for (?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\]):(\d+) failed: port is already allocated/g)].map((m) =>
+      Number(m[1]),
+    ),
+  );
+  return [...ports]
+    .sort((a, b) => a - b)
+    .map((port) => {
+      const web = plan.services.find((s) => s.web?.port === port);
+      const field = web ? `bricks.${web.brick}.webPort` : plan.router?.port === port ? "router.port" : undefined;
+      return issue("HOST_PORT_BUSY", field ? `platform.json#/${field.replaceAll(".", "/")}` : "", {
+        port: String(port),
+        what: web ? `the pages of "${web.brick}"` : plan.router?.port === port ? "the router" : "a service of this platform",
+        field: field ?? "the port in platform.json",
+      });
+    });
+}
+
 function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, failure: string): Issue[] {
   const named = plan.requirements.filter((req) => req.wait && failure.includes(`"${req.wait.name}"`));
   if (!named.length) return [];
@@ -374,7 +398,8 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
     const r = run(deps, dir, "docker", args);
     if (r.status !== 0) {
       const timeouts = composeWaitTimeouts(deps, dir, plan, r.stderr + r.stdout);
-      throw new PlugbricksError(timeouts.length ? timeouts : [failed("docker", args, r)]);
+      const busy = composeBusyPorts(plan, r.stderr + r.stdout);
+      throw new PlugbricksError(timeouts.length ? timeouts : busy.length ? busy : [failed("docker", args, r)]);
     }
   } else {
     requireKubectl(deps, dir, target);

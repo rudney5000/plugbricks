@@ -565,11 +565,24 @@ describe("a web brick in front of the router (D17)", () => {
       // An order created and shipped through the router shows on the page, rendered by its server through GRAPHQL_URL.
       const created = await through(routerAt, "createOrder", "mutation { createOrder(total: 42.5) { id } }");
       const id = created.body.data.createOrder.id as string;
-      await through(routerAt, "shipOrder", `mutation { shipOrder(orderId: "${id}", carrier: "dhl") { status } }`);
+      // Checked here, so that a failed mutation is reported as such and not, later, as a page without the shipment.
+      const shipped = await through(routerAt, "shipOrder", `mutation { shipOrder(orderId: "${id}", carrier: "dhl") { status } }`);
+      expect(shipped.body, "shipOrder through the router").toEqual({ data: { shipOrder: { status: "SHIPPED" } } });
       await until("the page", async () => (await page("/health")).status === 200);
-      const html = await (await page()).text();
-      expect(html).toContain(`#${id}`);
-      expect(html).toContain("dhl · SHIPPED");
+      // The page's server calls the router, which calls shipping, at every request: one failed call right after `up`
+      // shows that one page with the shipment "Unavailable" (the k3d test met it, run #86). Read it until it shows the
+      // shipped order, and print the order's last row if it never does.
+      const rowOf = (text: string) => text.match(new RegExp(`<tr><td>#${id}</td>.*?</tr>`))?.[0] ?? "(order not listed)";
+      let html = "";
+      try {
+        await until("the page to show the shipped order", async () => {
+          html = await (await page()).text();
+          return html.includes(`#${id}`) && html.includes("dhl · SHIPPED");
+        });
+      } catch (e) {
+        console.log(`last row of order #${id} on the page: ${rowOf(html)}`);
+        throw e;
+      }
       // The browser is told where the router is (PUBLIC_GRAPHQL_URL).
       expect(html).toContain(`data-graphql="http://127.0.0.1:${routerAt}/graphql"`);
 

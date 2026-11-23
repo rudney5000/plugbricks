@@ -6,7 +6,8 @@ const link = ({ isActive }: { isActive: boolean }) =>
 
 export function Layout({ session }: { session: Session }) {
   return (
-    <div className="min-h-screen">
+    // A column the height of the window: the menu and the page fill what the header leaves, so the menu reaches the bottom.
+    <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between bg-[#0b1729] px-6 py-3 text-white">
         <span className="text-lg font-semibold">
           plugbricks <span className="font-normal text-slate-300">admin</span>
@@ -20,7 +21,7 @@ export function Layout({ session }: { session: Session }) {
           </span>
         </div>
       </header>
-      <div className="flex">
+      <div className="flex flex-1">
         <nav className="w-52 shrink-0 border-r border-slate-200 bg-white p-3">
           <NavLink to="/" end className={link}>
             Bricks
