@@ -1138,7 +1138,10 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   4100; about 600 MB of memory; a first start of about two minutes. `add` picks the first port from 8080
   that this platform does not use, not one that is free on the machine: with another platform's web brick
   already on 8080, `up` failed with "Bind for 127.0.0.1:8080 failed: port is already allocated", and the
-  webPort had to be changed in `platform.json` (true of every web brick, D17).
+  webPort had to be changed in `platform.json` (true of every web brick, D17). Since 2026-11-23 `up` on
+  Docker Compose reports it as `HOST_PORT_BUSY`, naming the port, what the platform publishes there and the
+  `platform.json` field to change (`composeBusyPorts`, scenarios `up-compose-web-port-busy` and
+  `up-compose-router-port-busy`; run against a real port held by another platform).
 
 ---
 
