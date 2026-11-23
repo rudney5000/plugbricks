@@ -264,7 +264,34 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
     });
     const created = await graphql("mutation { createOrder(total: 42.5) { id } }", own);
+    // 200 with data: the router passed the token on, and orders checked it again itself (D20).
     expect(created.status).toBe(200);
+    expect(created.body.data?.createOrder?.id).toBeTruthy();
+
+    // A service of the platform calling orders directly, past the router (D20): no token, or a forged identity
+    // header, gets 401 from orders itself.
+    const direct = (headers: Record<string, string>) => {
+      const r = spawnSync(
+        "docker",
+        [
+          "compose",
+          "--project-name",
+          brickProject,
+          "exec",
+          "-T",
+          "orders-web-app",
+          "node",
+          "-e",
+          `const r = await fetch("http://orders-app:4000/graphql", { method: "POST", headers: ${JSON.stringify({ "content-type": "application/json", ...headers })}, body: JSON.stringify({ query: "{ orders(limit: 1) { id } }" }) }); console.log(r.status);`,
+        ],
+        { encoding: "utf8" },
+      );
+      expect(r.status, r.stderr).toBe(0);
+      return Number(r.stdout.trim().split("\n").pop());
+    };
+    expect(direct({})).toBe(401);
+    expect(direct({ "x-user-sub": "admin-forged" })).toBe(401);
+    expect(direct({ authorization: `Bearer ${own}` })).toBe(200);
     const id = created.body.data!.createOrder!.id;
 
     // The page, rendered by orders-web's server with its token. No shipping brick here: no shipment field in the

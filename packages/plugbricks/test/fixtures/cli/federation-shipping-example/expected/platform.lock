@@ -2,12 +2,17 @@
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
   "bricks": {
     "orders": {
-      "integrity": "sha256-7a2a9fdc5c16e818c5f79134b7178ea51e09035ea75320c42d8b778c7c167c45",
+      "integrity": "sha256-28c51fc5ce599409a7d5ffbfc3f7ef75807035fc984d4cc7dc6b807e1e75c8f4",
       "provides": [],
       "requires": {
         "database": {
           "provider": "postgres",
           "timeoutSeconds": 120,
+          "wait": "healthy"
+        },
+        "oidc": {
+          "optional": true,
+          "timeoutSeconds": 300,
           "wait": "healthy"
         }
       },
@@ -39,12 +44,17 @@
       ]
     },
     "shipping": {
-      "integrity": "sha256-8cb0f9ed17500331bd94916a83301e8887ed50f8df2d95428c1252863827c7d3",
+      "integrity": "sha256-d1697c77690fc680b1a8e52775c230c42cba969ed17c222fa6853e6efd4260a1",
       "provides": [],
       "requires": {
         "database": {
           "provider": "postgres",
           "timeoutSeconds": 120,
+          "wait": "healthy"
+        },
+        "oidc": {
+          "optional": true,
+          "timeoutSeconds": 300,
           "wait": "healthy"
         }
       },

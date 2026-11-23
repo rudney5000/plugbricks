@@ -337,3 +337,4 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (8b): `examples/keycloak` provides `oidc`: each brick that requires it gets its own confidential client and `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`; `orders-web` requires it optionally (D19).
    - Done (8c): with a brick that provides `oidc`, the router requires a token of its issuer and audience (`router.yaml`, D19), starts after the provider, and `orders-web` sends its own; without one, nothing changes. Tested end to end on Docker Compose.
    - Done (8d): `plugbricks admin` finds the issuer of the platform's own oidc provider when `--issuer` is not given (D19).
+   - Done (9a, 9b): with a brick that provides `oidc`, the router passes the token on and `orders` and `shipping` check it themselves (401 without a valid token, even called directly inside the platform) (D20).

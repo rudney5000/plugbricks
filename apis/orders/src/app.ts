@@ -4,6 +4,7 @@ import { buildSubgraphSchema } from "@apollo/subgraph";
 import { GraphQLError, parse } from "graphql";
 import { createYoga } from "graphql-yoga";
 import type pg from "pg";
+import type { Caller, TokenCheck } from "./auth.js";
 import { createOrder, findOrder, listOrders } from "./db.js";
 
 /** The SDL shipped with the brick (examples/orders/schema.graphql holds the same text). */
@@ -44,9 +45,10 @@ function resolvers(pool: pg.Pool) {
  * The HTTP server: GraphQL on /graphql, and /health, which answers 200 only while the database
  * answers (the brick's healthcheck calls it). Nothing else is served.
  */
-export function createApp(pool: pg.Pool): Server {
+export function createApp(pool: pg.Pool, checkToken?: TokenCheck): Server {
   const schema = buildSubgraphSchema([{ typeDefs: parse(typeDefs), resolvers: resolvers(pool) as never }]);
-  const yoga = createYoga({ schema, graphqlEndpoint: "/graphql", landingPage: false, logging: "warn" });
+  // The resolvers find the caller, checked below, in their context (D20); undefined without a token check.
+  const yoga = createYoga<{ caller?: Caller }>({ schema, graphqlEndpoint: "/graphql", landingPage: false, logging: "warn" });
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
     if (path === "/health") {
@@ -56,7 +58,20 @@ export function createApp(pool: pg.Pool): Server {
         .catch(() => res.writeHead(503, { "content-type": "text/plain" }).end("database unavailable\n"));
       return;
     }
-    if (path === "/graphql") return yoga(req, res);
+    if (path === "/graphql") {
+      if (!checkToken) return yoga(req, res);
+      // With the platform's oidc provider (D20): no valid token, no GraphQL, even past the router. /health stays open.
+      checkToken(req.headers.authorization).then((caller) => {
+        if (!caller) {
+          res
+            .writeHead(401, { "content-type": "application/json", "www-authenticate": 'Bearer realm="plugbricks"' })
+            .end(JSON.stringify({ errors: [{ message: "unauthorized" }] }));
+          return;
+        }
+        void yoga(req, res, { caller });
+      });
+      return;
+    }
     res.writeHead(404, { "content-type": "text/plain" }).end("not found\n");
   });
 }

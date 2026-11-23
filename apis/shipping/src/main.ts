@@ -1,5 +1,6 @@
 import pg from "pg";
 import { createApp } from "./app.js";
+import { tokenCheckFromEnv } from "./auth.js";
 import { migrate } from "./db.js";
 
 // DATABASE_URL is injected by plugbricks from the postgres brick. It holds a password: never log it.
@@ -24,7 +25,10 @@ pool.on("error", (e) => console.error(`shipping: idle database connection lost: 
 const applied = await migrate(pool);
 if (applied.length) console.log(`shipping: applied migrations ${applied.join(", ")}`);
 
-const server = createApp(pool);
+// OIDC_ISSUER, OIDC_JWKS_URL and OIDC_AUDIENCE come with the oidc capability (D20): every request then needs a valid token.
+const checkToken = tokenCheckFromEnv(process.env);
+if (checkToken) console.log(`shipping: requests need a token from ${process.env.OIDC_ISSUER}`);
+const server = createApp(pool, checkToken);
 server.listen(port, () => console.log(`shipping: listening on :${port} (/graphql, /health)`));
 
 // docker stop and Kubernetes send SIGTERM: finish the requests in flight, then close the pool.
