@@ -278,7 +278,13 @@ function envContext(m: BrickManifest, service: string): TemplateContext {
 function resolveValue(
   value: string,
   context: TemplateContext,
-  vars: { "provider.host"?: string; "provider.port"?: string; "consumer.name"?: string; "web.origin"?: string },
+  vars: {
+    "provider.host"?: string;
+    "provider.port"?: string;
+    "provider.web.origin"?: string;
+    "consumer.name"?: string;
+    "web.origin"?: string;
+  },
   secret: (name: string) => string,
 ): Value {
   const r = parseTemplate(value, context);
@@ -415,7 +421,14 @@ export function buildPlan(
       names.add("service", provision.name, `${brick}/requires/${cap}`, `provision task of ${brick} for ${cap}`);
       names.add(`container/${brick}`, initContainerName("provision", cap), `provision/${cap}`, `init container of ${brick}`);
       requirements.push({ consumer: brick, capability: cap, provider, providerService: vars["provider.host"], wait, provision });
-      for (const [k, v] of Object.entries(p.inject)) injected[k] = resolveValue(v, "inject", vars, secret);
+      // The provider's web origin (D20), for what a consumer must compare with what the browser sees, e.g. an issuer.
+      const providerOrigin = webPorts[provider] !== undefined ? `http://127.0.0.1:${webPorts[provider]}` : undefined;
+      for (const [k, v] of Object.entries(p.inject)) {
+        if (providerOrigin === undefined && v.includes("${provider.web.origin}")) {
+          throw new PlugbricksError([issue("WEB_PORT_MISSING", `platform.json#/bricks/${provider}`, { brick: provider })]);
+        }
+        injected[k] = resolveValue(v, "inject", { ...vars, "provider.web.origin": providerOrigin }, secret);
+      }
     }
 
     for (const s of m.services) {
@@ -557,6 +570,8 @@ function routerAuth(
     version: "1",
     authentication: { jwt: { jwks: [{ url: jwksUrl, issuers: [issuer], audiences: [m.oidc!.audience], algorithms: ["RS256"] }] } },
     authorization: { require_authentication: true },
+    // The token goes on to every subgraph, which checks it itself (D20): by default the router passes nothing on.
+    headers: { all: { request: [{ op: "propagate", named: "Authorization" }] } },
   });
   return {
     provider,

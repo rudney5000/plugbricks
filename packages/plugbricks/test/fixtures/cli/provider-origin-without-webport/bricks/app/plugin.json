@@ -1,0 +1,6 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "services": [{ "name": "web", "image": "nginx:1.27.3-alpine", "port": 8081 }],
+  "requires": { "thing": {} }
+}

@@ -1,0 +1,7 @@
+{
+  "description": "${provider.web.origin} is refused outside a provider's inject (D20)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/bad-env"], "exit": 1, "codes": ["MANIFEST_INVALID", "TEMPLATE_UNKNOWN"], "unchanged": true }
+  ]
+}

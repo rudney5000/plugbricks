@@ -1272,7 +1272,13 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ## D20. The router passes the token on, and each API checks it itself
 
-- **Status:** accepted (2026-11-23), not built. Chosen by Dedy on 2026-11-23: B (the router propagates the token,
+- **Status:** accepted (2026-11-23). Step 1 (points 1 and 2) implemented the same day: the propagate rule in
+  `router.yaml`, `${provider.web.origin}` in the `inject` context only (`TEMPLATE_UNKNOWN` elsewhere,
+  `WEB_PORT_MISSING` for a provider without a webPort), and `OIDC_ISSUER`, `OIDC_JWKS_URL`, `OIDC_AUDIENCE`
+  injected by the Keycloak brick. Tested by the golden files of `router-requires-token` and
+  `keycloak-provides-oidc`, and the scenarios `add-provider-origin-in-service-env` and
+  `provider-origin-without-webport`; the propagate rule itself was run on the pinned router (below). Points 3 and
+  4 not built. Chosen by Dedy on 2026-11-23: B (the router propagates the token,
   every API verifies it) over A (the router sets identity headers from the token's claims, the APIs trust them).
 - **Context:** since D19 the router lets a request through only with a valid token, but the subgraphs behind it do
   not know who called, and they answer anything that reaches them: they are not published (D9), yet any container

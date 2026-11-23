@@ -11,3 +11,8 @@ authentication:
           - RS256
 authorization:
   require_authentication: true
+headers:
+  all:
+    request:
+      - op: propagate
+        named: Authorization
