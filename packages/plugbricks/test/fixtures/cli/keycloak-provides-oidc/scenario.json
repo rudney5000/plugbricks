@@ -1,0 +1,18 @@
+{
+  "description": "keycloak provides oidc: a brick that requires it gets its own client (wait, provision with kcadm.sh, OIDC_TOKEN_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET), and no secret on a command line (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/keycloak"] },
+    { "run": ["add", "examples/orders-web"] },
+    { "run": ["status"], "stdout": "orders-web 0.1.0  pages on 127.0.0.1:8081; optionally requires oidc from keycloak (wait healthy, 300s)" },
+    {
+      "run": ["generate"],
+      "stdout": "Created 4 secret(s) in .secrets/: PB_KEYCLOAK__ADMIN_PASSWORD, PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET, PB_POSTGRES__KEYCLOAK__CONSUMER_PASSWORD, PB_POSTGRES__SUPERUSER_PASSWORD"
+    },
+    { "run": ["generate", "--runtime", "k8s"] }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "      OIDC_TOKEN_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token\n"
+  }
+}

@@ -126,19 +126,24 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
   let admin: AdminServer | undefined;
 
   beforeAll(async () => {
-    const build = spawnSync("docker", ["build", "--quiet", "--tag", "plugbricks-example/keycloak:0.1.0", join(repo, "apis/keycloak")], {
-      encoding: "utf8",
-    });
-    expect(build.status, build.stderr).toBe(0);
+    for (const api of ["keycloak", "orders-web"]) {
+      const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
+        encoding: "utf8",
+      });
+      expect(build.status, build.stderr).toBe(0);
+    }
     // A project left over by an interrupted run would keep its database and its old passwords.
     spawnSync("docker", ["compose", "--project-name", brickProject, "down", "--volumes", "--remove-orphans"], { encoding: "utf8" });
     rmSync(work, { recursive: true, force: true });
     mkdirSync(project, { recursive: true });
-    for (const brick of ["postgres", "keycloak"]) cpSync(join(pkg, "examples", brick), join(project, brick), { recursive: true });
+    for (const brick of ["postgres", "keycloak", "orders-web"])
+      cpSync(join(pkg, "examples", brick), join(project, brick), { recursive: true });
     for (const args of [
       ["init", "--name", brickProject],
       ["add", "postgres"],
       ["add", "keycloak"],
+      // orders-web requires oidc optionally (D19): with keycloak here, it gets its own client.
+      ["add", "orders-web"],
     ]) {
       const r = cli(args);
       expect(r.code, `${args.join(" ")}\n${r.out}`).toBe(0);
@@ -147,6 +152,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     const platform = JSON.parse(readFileSync(file, "utf8"));
     expect(platform.bricks.keycloak.webPort, "add gives the first free port from 8080").toBe(8080);
     platform.bricks.keycloak.webPort = webPort;
+    platform.bricks["orders-web"].webPort = webPort + 1;
     writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
     // up returns once the healthcheck passes, which asks for the realm itself: Keycloak's own /health/ready says UP
     // while it is still creating its schema and importing the realm (observed, D18).
@@ -165,6 +171,51 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     expect(((await discovery.json()) as { issuer: string }).issuer).toBe(`${origin}/realms/plugbricks`);
     // The console is on the brick's web path.
     expect([200, 302]).toContain((await fetch(`${origin}/admin/`, { redirect: "manual" })).status);
+  });
+
+  it("gives a brick that requires oidc its own client: a token for the router, from inside the platform (D19)", () => {
+    // Only what the platform injected into orders-web: its token endpoint inside the platform, its id and its secret.
+    const asked = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--project-name",
+        brickProject,
+        "exec",
+        "-T",
+        "orders-web-app",
+        "node",
+        "-e",
+        `const { OIDC_TOKEN_URL: url, OIDC_CLIENT_ID: id, OIDC_CLIENT_SECRET: secret } = process.env;
+         const r = await fetch(url, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+           body: new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret }) });
+         const t = await r.json();
+         const c = JSON.parse(Buffer.from(t.access_token.split(".")[1], "base64url"));
+         console.log(JSON.stringify({ status: r.status, url, id, iss: c.iss, aud: c.aud, azp: c.azp }));`,
+      ],
+      { encoding: "utf8" },
+    );
+    expect(asked.status, asked.stderr).toBe(0);
+    const token = JSON.parse(asked.stdout.trim().split("\n").pop()!);
+    expect(token).toMatchObject({
+      status: 200,
+      url: "http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token",
+      id: "orders-web",
+      // The browser's issuer even though the token was asked inside the platform: what the router will require.
+      iss: `${origin}/realms/plugbricks`,
+      azp: "orders-web",
+    });
+    expect(token.aud).toContain("plugbricks-router");
+
+    // The provision task ran once per up and is idempotent; its secret never went on a command line.
+    const provision = spawnSync(
+      "docker",
+      ["compose", "--project-name", brickProject, "logs", "--no-log-prefix", "orders-web-provision-oidc"],
+      {
+        encoding: "utf8",
+      },
+    );
+    expect(provision.stdout).toContain("create-client: created client orders-web in realm plugbricks");
   });
 
   it("signs a user created in it into the admin, with the role given there", async () => {
