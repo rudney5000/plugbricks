@@ -894,7 +894,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     and the same report as `status --runtime` (one generator, two drivers), with each call run as an
     asynchronous child process (no shell, 15 s timeout). Concurrent page loads share one read. The
     brick state is its worst service in the order of `status --runtime`, with the restarts of all of
-    them.
+    them. When the platform cannot be planned (an unreadable copy, a composition error, a missing
+    `webPort`, a name conflict), `/api/bricks` still answers 200: the issues are in `problems`, the
+    router configuration is `null`, and the table shows the bricks with an `unknown` state.
   - **Actions, as the CLI itself:** `POST /api/actions` accepts `add` (a `source` path relative to
     the platform root), `enable`/`disable`/`remove` (a `brick` name) and `up` (no field). The request
     must be `application/json` and at most 16 KiB; the admin role is required (a viewer gets 403, no
@@ -1060,7 +1062,11 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   refused and creates nothing; the same scenario in the k3d job through port-forward.
 - **Limits:** each web brick costs one published port; the origins list follows `webPort`, so a page
   reached through another host name (a tunnel, a LAN address) is refused by the router, which is the
-  point; there is no TLS on these loopback ports, as for the router.
+  point; there is no TLS on these loopback ports, as for the router. Each page server answers only
+  requests addressed to its loopback name and its own `WEB_ORIGIN` (the brick's `webPort`), with no
+  foreign `Origin`; `orders-web` still calls the router with **its own** service-account token, so
+  anyone who can reach it on this machine reads the orders. Carrying the user's own token is a later
+  decision; this step adds no user login.
 
 ---
 
@@ -1318,7 +1324,11 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
      GraphQL request without a valid token (`401`): signature (keys fetched from `OIDC_JWKS_URL`, kept and
      refreshed by the library), issuer, audience, expiry, RS256 only. `/health` stays open. Without
      `OIDC_ISSUER` they behave as today. The check uses `jose`, pinned to an exact version, rather than code of
-     our own: it is the security-sensitive part, and a library that only does that is easier to trust.
+     our own: it is the security-sensitive part, and a library that only does that is easier to trust. A
+     **partial** configuration is refused at start-up: none of the three variables means no check, all three
+     mean a check, and one or two make the API exit non-zero with a message naming the missing variables
+     (never their values). The `Bearer` scheme is case-insensitive (RFC 7235); the router forwards the header
+     unchanged.
   4. **They know who called:** `orders` records on each new order who created it, `createdBy`, from the verified
      token (its `preferred_username`, else its `sub`), and serves it as a nullable field of `Order`. Without a
      token check it stays null. The composed schema changes with that field, so an existing platform reports

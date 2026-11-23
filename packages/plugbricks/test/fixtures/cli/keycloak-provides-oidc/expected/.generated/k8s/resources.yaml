@@ -317,6 +317,8 @@ spec:
               value: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs
             - name: OIDC_TOKEN_URL
               value: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token
+            - name: WEB_ORIGIN
+              value: http://127.0.0.1:8081
           readinessProbe:
             exec:
               command:

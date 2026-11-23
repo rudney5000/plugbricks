@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { fileURLToPath } from "node:url";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
@@ -27,6 +29,11 @@ beforeAll(async () => {
 const valid = { iss: ISSUER, aud: AUDIENCE, sub: "f2c1-uuid", preferred_username: "service-account-orders-web", azp: "orders-web" };
 
 describe("the API's token check (D20)", () => {
+  it("keeps the same auth.ts in orders and shipping", () => {
+    const here = fileURLToPath(new URL("../src/auth.ts", import.meta.url));
+    const shipping = fileURLToPath(new URL("../../shipping/src/auth.ts", import.meta.url));
+    expect(readFileSync(shipping, "utf8")).toBe(readFileSync(here, "utf8"));
+  });
   it("returns the caller of a valid token", async () => {
     expect(await check(`Bearer ${await sign(valid)}`)).toEqual({
       subject: "f2c1-uuid",
@@ -57,12 +64,26 @@ describe("the API's token check (D20)", () => {
     expect(await check(`Bearer ${b64({ alg: "none", typ: "JWT" })}.${b64({ ...valid, exp: now + 300 })}.`)).toBeNull();
   });
 
-  it("is off without the variables of the oidc capability", () => {
+  it("accepts the bearer scheme in any case (RFC 7235)", async () => {
+    expect(await check(`bearer ${await sign(valid)}`)).toMatchObject({ subject: valid.sub, name: "service-account-orders-web" });
+  });
+
+  it("refuses an incomplete oidc configuration instead of serving without a check", () => {
+    const full = { OIDC_ISSUER: ISSUER, OIDC_JWKS_URL: "http://keycloak-app:8080/certs", OIDC_AUDIENCE: AUDIENCE };
     expect(tokenCheckFromEnv({})).toBeUndefined();
-    expect(tokenCheckFromEnv({ OIDC_ISSUER: ISSUER, OIDC_JWKS_URL: "http://keycloak-app:8080/certs" })).toBeUndefined();
-    expect(tokenCheckFromEnv({ OIDC_ISSUER: ISSUER, OIDC_JWKS_URL: "http://keycloak-app:8080/certs", OIDC_AUDIENCE: AUDIENCE })).toBeTypeOf(
-      "function",
-    );
+    expect(tokenCheckFromEnv(full)).toBeTypeOf("function");
+    const partials: [Record<string, string>, string[]][] = [
+      [{ OIDC_ISSUER: ISSUER }, ["OIDC_JWKS_URL", "OIDC_AUDIENCE"]],
+      [{ OIDC_JWKS_URL: full.OIDC_JWKS_URL }, ["OIDC_ISSUER", "OIDC_AUDIENCE"]],
+      [{ OIDC_AUDIENCE: AUDIENCE }, ["OIDC_ISSUER", "OIDC_JWKS_URL"]],
+      [{ OIDC_ISSUER: ISSUER, OIDC_JWKS_URL: full.OIDC_JWKS_URL }, ["OIDC_AUDIENCE"]],
+      [{ OIDC_ISSUER: ISSUER, OIDC_AUDIENCE: AUDIENCE }, ["OIDC_JWKS_URL"]],
+      [{ OIDC_JWKS_URL: full.OIDC_JWKS_URL, OIDC_AUDIENCE: AUDIENCE }, ["OIDC_ISSUER"]],
+    ];
+    for (const [env, missing] of partials) {
+      expect(() => tokenCheckFromEnv(env), JSON.stringify(env)).toThrow(/incomplete OIDC configuration/);
+      expect(() => tokenCheckFromEnv(env), JSON.stringify(env)).toThrow(new RegExp(missing.join(".*")));
+    }
   });
 });
 

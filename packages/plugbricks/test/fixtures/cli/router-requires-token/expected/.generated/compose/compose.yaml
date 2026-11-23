@@ -197,6 +197,7 @@ services:
       OIDC_JWKS_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs
       OIDC_TOKEN_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token
       PUBLIC_GRAPHQL_URL: http://127.0.0.1:4000/graphql
+      WEB_ORIGIN: http://127.0.0.1:8081
     healthcheck:
       test:
         - CMD

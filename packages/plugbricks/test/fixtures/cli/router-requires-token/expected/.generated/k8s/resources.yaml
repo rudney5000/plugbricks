@@ -525,6 +525,8 @@ spec:
               value: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token
             - name: PUBLIC_GRAPHQL_URL
               value: http://127.0.0.1:4000/graphql
+            - name: WEB_ORIGIN
+              value: http://127.0.0.1:8081
           readinessProbe:
             exec:
               command:

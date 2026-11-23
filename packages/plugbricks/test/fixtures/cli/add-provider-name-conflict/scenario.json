@@ -1,0 +1,30 @@
+{
+  "description": "adding the provider of an already-installed optional consumer names that consumer's wait task and refuses the collision",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/app-opt"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/nats"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_NAME_CONFLICT",
+        "RUNTIME_NAME_CONFLICT"
+      ],
+      "unchanged": true
+    }
+  ]
+}

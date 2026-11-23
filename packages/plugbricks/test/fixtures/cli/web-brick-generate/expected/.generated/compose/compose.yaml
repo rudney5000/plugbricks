@@ -69,6 +69,7 @@ services:
     environment:
       GRAPHQL_URL: http://router:3002/graphql
       PUBLIC_GRAPHQL_URL: http://127.0.0.1:4000/graphql
+      WEB_ORIGIN: http://127.0.0.1:8080
     healthcheck:
       test:
         - CMD
