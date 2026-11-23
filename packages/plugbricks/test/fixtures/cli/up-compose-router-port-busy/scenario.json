@@ -1,0 +1,21 @@
+{
+  "description": "a router.port that another program already uses is reported as such",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    {
+      "run": ["up"],
+      "exit": 1,
+      "codes": ["HOST_PORT_BUSY"],
+      "stderr": "change router.port in platform.json",
+      "fake": [
+        {
+          "match": " up --detach",
+          "status": 1,
+          "stderr": "Error response from daemon: driver failed programming external connectivity on endpoint demo-router-1 (aa11): Bind for 127.0.0.1:4000 failed: port is already allocated"
+        }
+      ]
+    }
+  ]
+}

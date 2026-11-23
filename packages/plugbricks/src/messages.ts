@@ -31,6 +31,8 @@ export const MESSAGES = {
     'service "{service}" serves the pages of this brick and sets {name} in its env; plugbricks sets it (the router\'s address), so remove it from the manifest',
 
   // Runtime (generate, up, down).
+  HOST_PORT_BUSY:
+    "port {port} on 127.0.0.1, where this platform publishes {what}, is already used by another program or platform; change {field} in platform.json, then run up again",
   WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
   RUNTIME_NAME_CONFLICT:
     'the {first} and the {second} would both be named "{name}" in the runtime; rename one of the bricks, services, volumes or capabilities',
