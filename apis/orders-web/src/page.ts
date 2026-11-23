@@ -19,6 +19,17 @@ export interface OrdersView {
 /** The query the page sends to the router, from the server (GRAPHQL_URL) and from the browser (PUBLIC_GRAPHQL_URL). */
 export const ORDERS_QUERY = "{ orders(limit: 50) { id total status shipment { carrier status } } }";
 
+/** The same without the shipment: for a platform where no brick serves it (shipping not installed). */
+export const ORDERS_ONLY_QUERY = "{ orders(limit: 50) { id total status } }";
+
+/**
+ * The router refuses a whole query that asks for a field the composed schema does not have: without the shipping
+ * brick there is no `shipment` on Order. Then the page asks again without it, and shows the shipment unavailable.
+ */
+export function shipmentNotInSchema(answer: { errors?: { message: string }[] }): boolean {
+  return (answer.errors ?? []).some((e) => /Cannot query field "shipment"/.test(e.message));
+}
+
 interface GraphqlAnswer {
   data?: { orders?: { id: string; total: number; status: string; shipment?: { carrier: string; status: string } | null }[] } | null;
   errors?: { message: string; path?: (string | number)[] }[];
@@ -28,13 +39,13 @@ interface GraphqlAnswer {
  * Reads the router's answer. A failed shipping subgraph makes the router return the orders with
  * errors whose path ends in "shipment": the orders are still shown, the shipment is marked unavailable.
  */
-export function readOrders(answer: GraphqlAnswer): OrdersView {
+export function readOrders(answer: GraphqlAnswer, withoutShipment = false): OrdersView {
   const orders = answer.data?.orders;
   if (!orders) return { orders: [], shippingUnavailable: false, error: answer.errors?.[0]?.message ?? "no data" };
   const failed = new Set(
     (answer.errors ?? []).filter((e) => e.path?.[0] === "orders" && e.path.includes("shipment")).map((e) => Number(e.path![1])),
   );
-  const anyShipmentError = (answer.errors ?? []).some((e) => !e.path || e.path.includes("shipment"));
+  const anyShipmentError = withoutShipment || (answer.errors ?? []).some((e) => !e.path || e.path.includes("shipment"));
   return {
     orders: orders.map((o, i) => ({
       id: o.id,
@@ -55,7 +66,7 @@ function shipmentCell(o: OrderRow): string {
   return `${escapeHtml(o.shipment.carrier)} · ${escapeHtml(o.shipment.status)}`;
 }
 
-/** The table body, also rebuilt in the browser by the same rules (see BROWSER_SCRIPT). */
+/** The table body; also what /api/orders returns to the page's "Refresh" (see BROWSER_SCRIPT). */
 export function rowsHtml(view: OrdersView): string {
   if (view.error) return `<tr><td colspan="4" class="muted">Orders cannot be read: ${escapeHtml(view.error)}</td></tr>`;
   if (view.orders.length === 0) return '<tr><td colspan="4" class="muted">No order yet.</td></tr>';
@@ -68,34 +79,32 @@ export function rowsHtml(view: OrdersView): string {
 }
 
 /**
- * The browser side: "Refresh" asks the router directly, from the page's own origin, which the router
- * accepts because plugbricks lists it (D17). It applies the same rules as readOrders and rowsHtml.
+ * The browser side: "Refresh" asks this page's own server (/api/orders, same origin), which asks the router with its
+ * token (D19). A browser has no token to send, so it never calls the router itself; the rows come back already
+ * escaped by rowsHtml.
  */
 const BROWSER_SCRIPT = `
-const main = document.querySelector("main");
-const url = main.dataset.graphql;
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 document.querySelector("#refresh").addEventListener("click", async () => {
   const status = document.querySelector("#status");
-  status.textContent = "Asking " + url + " …";
+  status.textContent = "Asking the server …";
   try {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: main.dataset.query }) });
+    const res = await fetch("/api/orders");
     const answer = await res.json();
-    const orders = (answer.data && answer.data.orders) || [];
-    const shipErr = (answer.errors || []).some((e) => !e.path || e.path.includes("shipment"));
-    document.querySelector("#banner").hidden = !shipErr;
-    document.querySelector("tbody").innerHTML = orders.length
-      ? orders.map((o) => "<tr><td>#" + esc(o.id) + "</td><td>" + Number(o.total).toFixed(2) + "</td><td><span class=\\"pill\\">" + esc(o.status) +
-          "</span></td><td>" + (o.shipment ? esc(o.shipment.carrier) + " · " + esc(o.shipment.status) : shipErr ? "<span class=\\"pill warn\\">Unavailable</span>" : "<span class=\\"muted\\">Not shipped</span>") + "</td></tr>").join("")
-      : "<tr><td colspan=\\"4\\" class=\\"muted\\">No order yet.</td></tr>";
-    status.textContent = "Refreshed from the browser at " + new Date().toLocaleTimeString() + " (HTTP " + res.status + ")";
+    document.querySelector("#banner").hidden = !answer.shippingUnavailable;
+    document.querySelector("tbody").innerHTML = answer.rows;
+    status.textContent = "Refreshed at " + new Date().toLocaleTimeString() + " (HTTP " + res.status + ")";
   } catch (e) {
-    status.textContent = "The browser could not reach the router: " + e.message;
+    status.textContent = "The server could not be reached: " + e.message;
   }
 });
 `;
 
-/** The whole page. `publicGraphql` is where the browser sends its own requests; null when there is no router. */
+/** What /api/orders answers: the rows, rendered and escaped by the server, and the shipping banner. */
+export function refreshJson(view: OrdersView): string {
+  return JSON.stringify({ rows: rowsHtml(view), shippingUnavailable: view.shippingUnavailable });
+}
+
+/** The whole page. `publicGraphql` is where the router is for a browser on this machine; null when there is no router. */
 export function pageHtml(view: OrdersView, publicGraphql: string | null): string {
   return `<!doctype html>
 <html lang="en">
@@ -123,20 +132,20 @@ footer{margin-top:16px;font-size:13px;color:var(--muted);line-height:1.6}
 </head>
 <body>
 <header><strong>Shop</strong><span>Orders</span></header>
-<main data-graphql="${escapeHtml(publicGraphql ?? "")}" data-query="${escapeHtml(ORDERS_QUERY)}">
+<main data-graphql="${escapeHtml(publicGraphql ?? "")}">
 <h1>Orders</h1>
 <div id="banner" class="banner"${view.shippingUnavailable ? "" : " hidden"}>Shipping information is temporarily unavailable. Your orders are still shown.</div>
 <table>
 <thead><tr><th>Order</th><th>Total</th><th>Status</th><th>Shipment</th></tr></thead>
 <tbody>${rowsHtml(view)}</tbody>
 </table>
-${publicGraphql ? '<button id="refresh" type="button">Refresh from the browser</button>' : ""}
+<button id="refresh" type="button">Refresh</button>
 <footer>
-<div id="status">Rendered by the server through the router (GRAPHQL_URL).</div>
+<div id="status">Rendered by the server through the router (GRAPHQL_URL), with its own token when the platform checks tokens.</div>
 <div>Served by the <b>orders-web</b> brick. Its data comes from the router${publicGraphql ? ` at <code>${escapeHtml(publicGraphql)}</code>` : ""}: the order fields from <b>orders</b>, the shipment from <b>shipping</b>.</div>
 </footer>
 </main>
-${publicGraphql ? `<script>${BROWSER_SCRIPT}</script>` : ""}
+<script>${BROWSER_SCRIPT}</script>
 </body>
 </html>
 `;
