@@ -73,5 +73,10 @@
   "web": {
     "service": "app",
     "path": "/admin/"
+  },
+  "oidc": {
+    "issuerPath": "/realms/plugbricks",
+    "jwksPath": "/realms/plugbricks/protocol/openid-connect/certs",
+    "audience": "plugbricks-router"
   }
 }

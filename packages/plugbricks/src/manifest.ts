@@ -53,6 +53,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
     >;
     subgraph?: { service: string };
     web?: { service: string; path?: string };
+    oidc?: { issuerPath: string; jwksPath: string; audience: string };
   };
   const issues: ManifestIssue[] = [];
   const names = new Set<string>();
@@ -108,6 +109,8 @@ export function validateManifest(manifest: unknown): ValidationResult {
   if (m.subgraph && !names.has(m.subgraph.service)) {
     issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: m.subgraph.service }));
   }
+  // The router reads the "oidc" block only from the brick that provides the capability (D19).
+  if (m.oidc && !Object.hasOwn(m.provides ?? {}, "oidc")) issues.push(issue("OIDC_NOT_PROVIDED", "/oidc", {}));
   if (m.web) {
     const web = m.services.find((s) => s.name === m.web!.service);
     if (!web) issues.push(issue("UNKNOWN_SERVICE", "/web/service", { name: m.web.service }));

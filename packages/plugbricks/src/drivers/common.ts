@@ -84,9 +84,17 @@ const ROUTER_ENV: Record<string, string> = {
   TRACING_ENABLED: "false",
 };
 
-/** The router's environment, sorted by name: the fixed variables above and the origins it accepts. */
-export function routerEnv(allowedOrigins: string[]): Record<string, string> {
-  const env = { ...ROUTER_ENV, CORS_ALLOW_ORIGINS: allowedOrigins.join(",") };
+/** router.yaml: the router's configuration file, only when it checks tokens (D19); beside router-config.json. */
+export const ROUTER_AUTH_FILE = "router.yaml";
+export const ROUTER_AUTH_PATH = `${ROUTER_CONFIG_DIR}/${ROUTER_AUTH_FILE}`;
+
+/**
+ * The router's environment, sorted by name: the fixed variables above, the origins it accepts and, when it checks
+ * tokens (D19), CONFIG_PATH to its router.yaml ("Values in the config file have higher priority than environment
+ * variables", logged by the router 0.372.0).
+ */
+export function routerEnv(allowedOrigins: string[], auth = false): Record<string, string> {
+  const env = { ...ROUTER_ENV, CORS_ALLOW_ORIGINS: allowedOrigins.join(","), ...(auth ? { CONFIG_PATH: ROUTER_AUTH_PATH } : {}) };
   return Object.fromEntries(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
 }
 

@@ -1,0 +1,16 @@
+{
+  "description": "with a brick that provides oidc, the router requires a token of its issuer and audience, reads router.yaml (CONFIG_PATH) and starts after the provider (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/keycloak"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/orders-web"] },
+    { "run": ["generate"] },
+    { "run": ["generate", "--runtime", "k8s"] }
+  ],
+  "expectRaw": {
+    ".generated/compose/router.yaml": "      - url: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs\n        issuers:\n          - http://127.0.0.1:8080/realms/plugbricks\n        audiences:\n          - plugbricks-router\n",
+    ".generated/compose/compose.yaml": "      keycloak-app:\n        condition: service_healthy\n"
+  }
+}

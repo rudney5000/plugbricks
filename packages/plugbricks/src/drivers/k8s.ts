@@ -14,6 +14,7 @@ import {
   escapeDollars,
   PROVISION_MOUNT,
   ROUTER_CONFIG_DIR,
+  ROUTER_AUTH_FILE,
   ROUTER_CONFIG_FILE,
   ROUTER_CONTAINER_PORT,
   routerEnv,
@@ -216,7 +217,13 @@ function routerDocs(r: PlanRouter, plan: Plan): Yaml[] {
   }
   const podLabels = { ...routerMeta(plan, r.name).labels, [SERVICE_LABEL]: r.name };
   return [
-    { apiVersion: "v1", kind: "ConfigMap", metadata: routerMeta(plan, ROUTER_CONFIGMAP), data: { [ROUTER_CONFIG_FILE]: r.config } },
+    {
+      apiVersion: "v1",
+      kind: "ConfigMap",
+      metadata: routerMeta(plan, ROUTER_CONFIGMAP),
+      // Mounted as /config: router.yaml is there too when the router checks tokens (D19).
+      data: { [ROUTER_CONFIG_FILE]: r.config, ...(r.auth ? { [ROUTER_AUTH_FILE]: r.auth.yaml } : {}) },
+    },
     {
       apiVersion: "v1",
       kind: "Service",
@@ -236,15 +243,38 @@ function routerDocs(r: PlanRouter, plan: Plan): Yaml[] {
         selector: { matchLabels: { [SERVICE_LABEL]: r.name } },
         template: {
           // The router reads its configuration once, at start; a changed hash restarts the pod.
-          metadata: { labels: podLabels, annotations: { "plugbricks/router-config-sha256": r.configSha256 } },
+          metadata: {
+            labels: podLabels,
+            annotations: {
+              "plugbricks/router-config-sha256": r.configSha256,
+              ...(r.auth ? { "plugbricks/router-auth-sha256": r.auth.yamlSha256 } : {}),
+            },
+          },
           spec: {
             securityContext: { seccompProfile: { type: "RuntimeDefault" } },
+            // The router cannot start without its oidc provider's keys (D19): wait for the provider first, with its
+            // ready command in its own image, as a consumer of the capability would.
+            initContainers: r.auth
+              ? [
+                  {
+                    name: initContainerName("wait", "oidc"),
+                    image: r.auth.wait.image,
+                    command: ["/bin/sh", "-c", escapeDollars(WAIT_SCRIPT), WAIT_ARGV0],
+                    args: r.auth.wait.exec.map(escapeDollars),
+                    env: [
+                      { name: "PB_WAIT_FOR", value: `oidc from ${r.auth.service} (for the router)` },
+                      { name: "PB_WAIT_INTERVAL", value: String(r.auth.wait.intervalSeconds) },
+                      { name: "PB_WAIT_TIMEOUT", value: String(r.auth.wait.timeoutSeconds) },
+                    ],
+                  },
+                ]
+              : undefined,
             containers: [
               {
                 name: r.name,
                 image: r.image,
                 ports: [{ name: "graphql", containerPort: ROUTER_CONTAINER_PORT }],
-                env: Object.entries(routerEnv(r.allowedOrigins)).map(([name, value]) => ({ name, value })),
+                env: Object.entries(routerEnv(r.allowedOrigins, r.auth !== undefined)).map(([name, value]) => ({ name, value })),
                 readinessProbe: {
                   httpGet: { path: ROUTER_READY_PATH, port: ROUTER_CONTAINER_PORT },
                   periodSeconds: 5,
