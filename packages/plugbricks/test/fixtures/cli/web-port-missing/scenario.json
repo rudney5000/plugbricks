@@ -12,6 +12,12 @@
         }
       }
     },
-    { "run": ["generate"], "exit": 1, "codes": ["WEB_PORT_MISSING"], "unchanged": true }
+    {
+      "run": ["generate"],
+      "exit": 1,
+      "codes": ["WEB_PORT_MISSING"],
+      "unchanged": true,
+      "stderr": "has no webPort in platform.json, but its service \"app\" uses ${web.origin} (KC_HOSTNAME); add it again (add gives a web brick a webPort)"
+    }
   ]
 }

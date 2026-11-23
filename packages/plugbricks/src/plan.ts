@@ -158,6 +158,19 @@ export interface PlanRouter {
   auth?: PlanRouterAuth;
 }
 
+/**
+ * WEB_PORT_MISSING, saying what needs the brick's web origin. `add` gives a webPort only to a brick that declares
+ * `web`; for any other brick, adding it again cannot help, so the only fix offered is the field in platform.json.
+ */
+function webPortMissing(brick: string, m: BrickManifest | undefined, use: string): Issue {
+  const field = `bricks.${brick}.webPort`;
+  return issue("WEB_PORT_MISSING", `platform.json#/bricks/${brick}`, {
+    brick,
+    use,
+    fix: m?.web ? `add it again (add gives a web brick a webPort), or set ${field} in platform.json` : `set ${field} in platform.json`,
+  });
+}
+
 /** The token check of the router (D19), and how it waits for its provider. */
 export interface PlanRouterAuth {
   provider: string;
@@ -425,7 +438,9 @@ export function buildPlan(
       const providerOrigin = webPorts[provider] !== undefined ? `http://127.0.0.1:${webPorts[provider]}` : undefined;
       for (const [k, v] of Object.entries(p.inject)) {
         if (providerOrigin === undefined && v.includes("${provider.web.origin}")) {
-          throw new PlugbricksError([issue("WEB_PORT_MISSING", `platform.json#/bricks/${provider}`, { brick: provider })]);
+          throw new PlugbricksError([
+            webPortMissing(provider, manifests.get(provider), `"${brick}" is given \${provider.web.origin} (${k})`),
+          ]);
         }
         injected[k] = resolveValue(v, "inject", { ...vars, "provider.web.origin": providerOrigin }, secret);
       }
@@ -441,7 +456,7 @@ export function buildPlan(
       for (const [k, v] of Object.entries(s.env ?? {})) {
         const context = envContext(m, s.name);
         if (context === "webServiceEnv" && webOrigin === undefined && v.includes("${web.origin}")) {
-          throw new PlugbricksError([issue("WEB_PORT_MISSING", `platform.json#/bricks/${brick}`, { brick })]);
+          throw new PlugbricksError([webPortMissing(brick, m, `its service "${s.name}" uses \${web.origin} (${k})`)]);
         }
         env[k] = resolveValue(v, context, { "web.origin": webOrigin }, own);
       }
@@ -559,7 +574,7 @@ function routerAuth(
   if (!found) return undefined;
   const [provider, m] = found;
   if (webPorts[provider] === undefined) {
-    throw new PlugbricksError([issue("WEB_PORT_MISSING", `platform.json#/bricks/${provider}`, { brick: provider })]);
+    throw new PlugbricksError([webPortMissing(provider, m, "the router checks the tokens of its issuer, which is its web origin (D19)")]);
   }
   const p = m.provides!.oidc;
   const svc = services.find((s) => s.brick === provider && s.service === p.service)!;

@@ -1,0 +1,26 @@
+{
+  "description": "the router's wait for its oidc provider that exited 124 is reported as WAIT_TIMEOUT after the first rollout slice, as a service's wait is (D19)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/keycloak"] },
+    { "run": ["add", "examples/orders"] },
+    {
+      "run": ["up", "--runtime", "k8s", "--context", "test-cluster"],
+      "exit": 1,
+      "codes": ["WAIT_TIMEOUT"],
+      "stderr": "error WAIT_TIMEOUT: \"router\" gave up waiting for capability \"oidc\" from \"keycloak\" after 300s",
+      "fake": [
+        {
+          "match": "rollout status deployment/router --timeout=15s",
+          "status": 1,
+          "stderr": "error: timed out waiting for the condition"
+        },
+        {
+          "match": "get pods --selector plugbricks/service=router",
+          "stdout": "{\"items\": [{\"status\": {\"initContainerStatuses\": [{\"name\": \"wait-oidc\", \"state\": {\"waiting\": {\"reason\": \"CrashLoopBackOff\"}}, \"lastState\": {\"terminated\": {\"exitCode\": 124}}}]}}]}"
+        }
+      ]
+    }
+  ]
+}

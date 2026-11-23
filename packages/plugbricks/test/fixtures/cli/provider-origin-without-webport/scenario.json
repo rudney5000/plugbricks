@@ -4,6 +4,12 @@
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "bricks/idp"] },
     { "run": ["add", "bricks/app"] },
-    { "run": ["generate"], "exit": 1, "codes": ["WEB_PORT_MISSING"], "unchanged": true }
+    {
+      "run": ["generate"],
+      "exit": 1,
+      "codes": ["WEB_PORT_MISSING"],
+      "unchanged": true,
+      "stderr": "brick \"idp\" has no webPort in platform.json, but \"app\" is given ${provider.web.origin} (THING_ISSUER); set bricks.idp.webPort in platform.json"
+    }
   ]
 }

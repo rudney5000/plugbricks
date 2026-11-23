@@ -67,7 +67,7 @@ export const MESSAGES = {
   PLATFORM_FILE_INVALID: "{file} does not match its schema; see the issues below",
   LOCK_MISSING: 'platform.lock is missing in {dir}; it is written by "plugbricks init"',
   LOCK_OUT_OF_SYNC: 'platform.json and platform.lock disagree on brick "{brick}"; {detail}',
-  WEB_PORT_MISSING: 'brick "{brick}" uses ${web.origin} but has no webPort in platform.json; add it again, or give it a webPort there',
+  WEB_PORT_MISSING: 'brick "{brick}" has no webPort in platform.json, but {use}; {fix}',
   WEB_PORT_CONFLICT: 'webPort {port} of brick "{brick}" is already used by {other}; give it another port in platform.json',
   LOCK_INCONSISTENT: "platform.lock lists volume {volume} {detail}; fix the lock before going further",
 
