@@ -18,7 +18,8 @@ export type TokenCheck = (authorization: string | undefined) => Promise<Caller |
 
 export function tokenCheck(o: { issuer: string; audience: string; keys: JWTVerifyGetKey }): TokenCheck {
   return async (authorization) => {
-    const token = /^Bearer ([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/.exec(authorization ?? "")?.[1];
+    // RFC 7235: the scheme is case-insensitive; the router passes the header on unchanged.
+    const token = /^Bearer ([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/i.exec(authorization ?? "")?.[1];
     if (!token) return null;
     try {
       // RS256 only (as the router, D19): no "none", no symmetric algorithm with the public key as secret.
@@ -45,6 +46,12 @@ export function tokenCheck(o: { issuer: string; audience: string; keys: JWTVerif
  */
 export function tokenCheckFromEnv(env: NodeJS.ProcessEnv): TokenCheck | undefined {
   const { OIDC_ISSUER: issuer, OIDC_JWKS_URL: jwks, OIDC_AUDIENCE: audience } = env;
-  if (!issuer || !jwks || !audience) return undefined;
+  // None set: no provider, no check, as before.
+  if (!issuer && !jwks && !audience) return undefined;
+  // Some set: refuse to start rather than silently serve without a check. Never print a value.
+  if (!issuer || !jwks || !audience) {
+    const missing = [!issuer && "OIDC_ISSUER", !jwks && "OIDC_JWKS_URL", !audience && "OIDC_AUDIENCE"].filter(Boolean).join(", ");
+    throw new Error(`incomplete OIDC configuration: missing ${missing}; set all three or none`);
+  }
   return tokenCheck({ issuer, audience, keys: createRemoteJWKSet(new URL(jwks)) });
 }

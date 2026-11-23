@@ -26,7 +26,14 @@ const applied = await migrate(pool);
 if (applied.length) console.log(`orders: applied migrations ${applied.join(", ")}`);
 
 // OIDC_ISSUER, OIDC_JWKS_URL and OIDC_AUDIENCE come with the oidc capability (D20): every request then needs a valid token.
-const checkToken = tokenCheckFromEnv(process.env);
+const checkToken = (() => {
+  try {
+    return tokenCheckFromEnv(process.env);
+  } catch (e) {
+    console.error(`orders: ${(e as Error).message}`);
+    process.exit(1);
+  }
+})();
 if (checkToken) console.log(`orders: requests need a token from ${process.env.OIDC_ISSUER}`);
 const server = createApp(pool, checkToken);
 server.listen(port, () => console.log(`orders: listening on :${port} (/graphql, /health)`));
