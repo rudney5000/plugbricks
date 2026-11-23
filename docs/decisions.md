@@ -1267,6 +1267,58 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D20. The router passes the token on, and each API checks it itself
+
+- **Status:** accepted (2026-11-23), not built. Chosen by Dedy on 2026-11-23: B (the router propagates the token,
+  every API verifies it) over A (the router sets identity headers from the token's claims, the APIs trust them).
+- **Context:** since D19 the router lets a request through only with a valid token, but the subgraphs behind it do
+  not know who called, and they answer anything that reaches them: they are not published (D9), yet any container
+  of the platform reaches them by name.
+- **Observed on the router 0.372.0** (2026-11-23, the pinned digest, Docker 29.8.0: a fake subgraph named
+  `orders-app` recording the headers it receives, a local JWKS, an RS256 token signed by the probe; the token check
+  of D19 configured and required):
+  - **By default nothing is passed on:** the subgraph got no `Authorization` and none of the caller's headers
+    (a custom `X-Client` was dropped).
+  - **`headers.all.request: [{ op: propagate, named: Authorization }]`** passed the whole token (`Bearer eyJ…`).
+  - **`[{ op: set, name: X-User-Sub, expression: "request.auth.claims.sub" }]`** is accepted by this version and set
+    the header to the token's `sub`; a caller sending its own `X-User-Sub: admin-forged` through the router saw it
+    replaced by the claim.
+  - **But a container of the platform calling the subgraph directly**, past the router, with
+    `X-User-Sub: admin-forged` and no token, was answered (200), and the subgraph saw `admin-forged`: identity
+    headers prove nothing to a service that cannot tell the router from any other caller. This is why B was chosen.
+- **Decision:**
+  1. **The router propagates `Authorization`** to every subgraph when it checks tokens (D19): one more rule in the
+     `router.yaml` it already renders. Without an `oidc` provider there is no token and no rule.
+  2. **What an API needs to check a token** comes with the `oidc` capability it requires (optionally, D19): the
+     Keycloak brick also injects `OIDC_ISSUER` (the issuer the tokens carry, the provider's web origin plus its
+     realm), `OIDC_JWKS_URL` (its keys, inside the platform) and `OIDC_AUDIENCE` (`plugbricks-router`, the
+     audience of the tokens the router accepts). The issuer needs the provider's web origin in its `inject`, so
+     that context gains `${provider.web.origin}` (`http://127.0.0.1:<the provider's webPort>`); it is refused
+     anywhere else, and for a provider that is not a web brick (`WEB_PORT_MISSING` when it has no webPort).
+  3. **`orders` and `shipping` require `oidc` optionally**, and when `OIDC_ISSUER` is set they refuse every
+     GraphQL request without a valid token (`401`): signature (keys fetched from `OIDC_JWKS_URL`, kept and
+     refreshed by the library), issuer, audience, expiry, RS256 only. `/health` stays open. Without
+     `OIDC_ISSUER` they behave as today. The check uses `jose`, pinned to an exact version, rather than code of
+     our own: it is the security-sensitive part, and a library that only does that is easier to trust.
+  4. **They know who called:** `orders` records on each new order who created it, `createdBy`, from the verified
+     token (its `preferred_username`, else its `sub`), and serves it as a nullable field of `Order`. Without a
+     token check it stays null. The composed schema changes with that field, so an existing platform reports
+     `FEDERATION_CHANGED` until `orders` is added again (D8).
+- **Side effect:** requiring `oidc` gives `orders` and `shipping` their own Keycloak clients too (D19, point 2):
+  unused for now, they are what these services would use to call another API in their own name.
+- **Tests planned:** CLI scenarios with golden files (the propagate rule in `router.yaml`, the new variables, the
+  new template refused elsewhere); unit tests of the check in each API (valid, expired, another issuer, another
+  audience, another key, `alg: none`, missing); end to end on Docker Compose with Keycloak: through the router with
+  `orders-web`'s token an order is created and `createdBy` is `orders-web`'s service account, the order and its
+  shipment are read back across both subgraphs (the token reaches `shipping`'s `_entities` too), and a container of
+  the platform calling `orders-app` directly gets 401 without a token and with a forged identity header. Not on
+  k3d, as D18.
+- **Limits:** the tokens of D19 live 300 s; a request is checked once at each hop, not again during it. A service
+  of the platform holding a valid token (its own, from its client) can still call any API with it: what it may do
+  there is authorization, a later decision (scopes or roles per field).
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
