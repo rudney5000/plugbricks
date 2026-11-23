@@ -271,7 +271,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
         headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ query }),
       });
-      return { status: r.status, body: (await r.json()) as { data?: { createOrder?: { id: string } } } };
+      return { status: r.status, body: (await r.json()) as { data?: { createOrder?: { id: string; createdBy: string | null } } } };
     };
 
     // Without a token, nothing runs through the router, not even a read; its health stays open (Kubernetes probes).
@@ -292,10 +292,12 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       client_id: "orders-web",
       client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
     });
-    const created = await graphql("mutation { createOrder(total: 42.5) { id } }", own);
+    const created = await graphql("mutation { createOrder(total: 42.5) { id createdBy } }", own);
     // 200 with data: the router passed the token on, and orders checked it again itself (D20).
     expect(created.status).toBe(200);
     expect(created.body.data?.createOrder?.id).toBeTruthy();
+    // D20 point 4: orders recorded who created it, from the token it verified: orders-web's service account.
+    expect(created.body.data?.createOrder?.createdBy).toBe("service-account-orders-web");
 
     // A service of the platform calling orders directly, past the router (D20): no token, or a forged identity
     // header, gets 401 from orders itself.
