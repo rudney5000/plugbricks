@@ -1080,7 +1080,11 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `add-web-origin-outside` and `web-port-missing`, and end to end on Docker Compose (`e2e-oidc`, "the
   keycloak brick"): `up` returns once the realm answers, its issuer is `http://127.0.0.1:<webPort>/realms/plugbricks`,
   the realm has no user, a user created with the brick's generated administrator and given
-  `plugbricks-admin` signs into `plugbricks admin` and gets an admin session. Not on k3d (point "Tests").
+  `plugbricks-admin` signs into `plugbricks admin` and gets an admin session. On k3d since 2026-11-23 (`e2e-k8s`, "requires Keycloak's tokens through the router and in orders itself"): the
+  brick, its realm and its clients on a cluster, the issuer reached through a port-forward on its webPort, no token
+  401 through the router, `orders-web`'s token 200 with `createdBy`, a pod calling `orders-app` directly 401
+  without a token and 200 with one, and `orders-web`'s page reading the orders with its own token (about 5 minutes,
+  most of it Keycloak's first start). The sign-in to `plugbricks admin` stays on Docker Compose only.
 - **Context:** the admin signs people in with OIDC against an external issuer (D15, `docs/keycloak.md`).
   The mockup also has the identity provider inside the platform. D17 removed the first obstacle (a brick
   can publish its pages on its own loopback port); what was left unknown is how Keycloak behaves as a
@@ -1139,8 +1143,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   published port); refusal of `${web.origin}` outside a web brick's service; end to end on Docker Compose
   only: `postgres` and `keycloak` up, the discovery document on `127.0.0.1:<webPort>` with that issuer, a
   user created with the bootstrap administrator through Keycloak's admin API, and a real sign-in to
-  `plugbricks admin` with that user (the flow of the D15 test). Not on k3d: the image is large and its first
-  start long; the CI job would grow by minutes, and the local machine cannot run it.
+  `plugbricks admin` with that user (the flow of the D15 test). Not on k3d at first (the image is large and its
+  first start long); the token scenario was added to the k3d job on 2026-11-23 (Status), which grew by about 5
+  minutes for it.
 - **Limits:** the realm file is applied on the first start only; the redirect URI assumes the admin on port
   4100; about 600 MB of memory; a first start of about two minutes. `add` picks the first port from 8080
   that this platform does not use, not one that is free on the machine: with another platform's web brick
@@ -1278,7 +1283,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Tests planned:** CLI scenarios with golden files (optional requirement with and without provider,
   provider added after the consumer, router file present only with a provider); end to end on Docker
   Compose with Keycloak: no token 401, `orders-web`'s own token 200 and its page listing the orders, a
-  token of another audience 401, the router starting only after Keycloak is ready. Not on k3d, as D18.
+  token of another audience 401, the router starting only after Keycloak is ready. On k3d too since 2026-11-23
+  (D18, Status).
 - **Limits:** every request through the router then needs a token, the end-to-end tests' included; the
   subgraphs do not see who called (the router does not forward the token: a later decision); a client
   created for a consumer is not deleted when that consumer is removed. The router's wait for its provider is
@@ -1309,7 +1315,13 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   passing, and in `e2e-oidc` with Keycloak: through the router `orders-web`'s token creates an order (passed on
   by the router, checked again by `orders`), and from a container of the platform calling `orders-app`
   directly, past the router, no token and a forged `X-User-Sub` both get 401, a valid token 200. Point 4
-  (`createdBy`) not built. Chosen by Dedy on 2026-11-23: B (the router propagates the token,
+  (`createdBy`) implemented on 2026-11-23: a second migration of `orders` adds `created_by`, `createOrder` records
+  the verified caller (`preferred_username`, else `sub`, from the token `orders` checked itself, never a header),
+  and `Order.createdBy` is a nullable field of the schema, null without a token check. Tested in `apis/orders`
+  (null without a check, the caller with one and a forged `X-User-Sub` ignored, on every read and through
+  `_entities`, and a database created before the column upgraded with its orders kept), in `e2e-oidc` and on
+  k3d (`createdBy` is `service-account-orders-web` through the router). An existing platform reports
+  `FEDERATION_CHANGED` until `orders` is added again (D8). Chosen by Dedy on 2026-11-23: B (the router propagates the token,
   every API verifies it) over A (the router sets identity headers from the token's claims, the APIs trust them).
 - **Context:** since D19 the router lets a request through only with a valid token, but the subgraphs behind it do
   not know who called, and they answer anything that reaches them: they are not published (D9), yet any container
