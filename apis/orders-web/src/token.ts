@@ -31,6 +31,17 @@ export class TokenSource {
     return this.pending;
   }
 
+  /**
+   * Forgets `token` when it is the one kept: the router refused it (a realm reset, rotated keys), so the next get()
+   * asks for a new one instead of sending it again until it expires. A newer token is kept.
+   */
+  invalidate(token: string): void {
+    if (this.token === token) {
+      this.token = undefined;
+      this.expiresAt = 0;
+    }
+  }
+
   private async ask(): Promise<string> {
     const res = await this.http(this.url, {
       method: "POST",

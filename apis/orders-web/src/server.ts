@@ -39,15 +39,23 @@ export function createOrdersWebServer(o: OrdersWebOptions): Server {
   async function loadOrders(): Promise<OrdersView> {
     if (!o.graphql) return { orders: [], shippingUnavailable: false, error: "no router: this platform serves no subgraph" };
     try {
-      const authorization: Record<string, string> = o.tokens ? { authorization: `Bearer ${await o.tokens.get()}` } : {};
-      const ask = async (query: string) => {
+      const once = async (query: string) => {
+        const token = o.tokens ? await o.tokens.get() : undefined;
         const res = await fetch(o.graphql!, {
           method: "POST",
-          headers: { "content-type": "application/json", ...authorization },
+          headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ query }),
           signal: AbortSignal.timeout(5000),
         });
-        return { status: res.status, answer: await res.json() };
+        return { status: res.status, token, answer: res.status === 401 ? undefined : await res.json() };
+      };
+      // A token the router refuses is dropped and a new one asked for, once: a reset realm or rotated keys must not
+      // leave the page broken until the old token expires.
+      const ask = async (query: string) => {
+        const first = await once(query);
+        if (first.status !== 401 || !o.tokens || !first.token) return first;
+        o.tokens.invalidate(first.token);
+        return once(query);
       };
       let { status, answer } = await ask(ORDERS_QUERY);
       if (status === 401) return { orders: [], shippingUnavailable: false, error: "the router refused this server's token (401)" };

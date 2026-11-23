@@ -2,6 +2,7 @@ import { createServer as createHttpServer, request, type IncomingHttpHeaders, ty
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createOrdersWebServer } from "../src/server.js";
+import { TokenSource } from "../src/token.js";
 
 interface Answer {
   status: number;
@@ -92,5 +93,53 @@ describe("the orders page server", () => {
     const answer = await ask(webPort, "/orders", { host: `127.0.0.1:${webPort}` });
     expect(answer.headers["x-frame-options"]).toBe("DENY");
     expect(answer.headers["referrer-policy"]).toBe("no-referrer");
+  });
+});
+
+describe("the orders page server with a token the router refuses", () => {
+  /** A router that accepts only `accepted`, and a token endpoint that hands out t1, then t2, … */
+  async function setup(accepted: string | null) {
+    const seen: (string | undefined)[] = [];
+    const r = createHttpServer((req, res) => {
+      seen.push(req.headers.authorization);
+      if (accepted === null || req.headers.authorization !== `Bearer ${accepted}`) {
+        res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ errors: [{ message: "unauthorized" }] }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ data: { orders: [] } }));
+    });
+    await new Promise<void>((ok) => r.listen(0, "127.0.0.1", ok));
+    let issued = 0;
+    const http = (async () => new Response(JSON.stringify({ access_token: `t${++issued}`, expires_in: 300 }))) as typeof fetch;
+    const tokens = new TokenSource("http://kc/token", "orders-web", "s", http);
+    const port = await freePort();
+    const graphql = `http://127.0.0.1:${(r.address() as AddressInfo).port}/graphql`;
+    const w = createOrdersWebServer({ graphql, publicGraphql: graphql, tokens, webOrigin: `http://127.0.0.1:${port}` });
+    await new Promise<void>((ok) => w.listen(port, "127.0.0.1", ok));
+    return { seen, port, issued: () => issued, close: () => (w.close(), r.close()) };
+  }
+
+  it("drops the refused token and succeeds with a new one, at once", async () => {
+    const s = await setup("t2");
+    try {
+      const answer = await ask(s.port, "/api/orders", { host: `127.0.0.1:${s.port}` });
+      expect(answer.status).toBe(200);
+      expect(answer.body).not.toContain("401");
+      expect(s.seen).toEqual(["Bearer t1", "Bearer t2"]);
+      expect(s.issued()).toBe(2);
+    } finally {
+      s.close();
+    }
+  });
+
+  it("tries a new token only once, then says the router refused it", async () => {
+    const s = await setup(null);
+    try {
+      const answer = await ask(s.port, "/api/orders", { host: `127.0.0.1:${s.port}` });
+      expect(answer.body).toContain("refused this server&#39;s token (401)");
+      expect(s.seen).toEqual(["Bearer t1", "Bearer t2"]);
+    } finally {
+      s.close();
+    }
   });
 });
