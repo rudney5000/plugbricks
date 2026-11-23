@@ -1,0 +1,36 @@
+{
+  "description": "once a web brick with a webPort is installed, adding a brick whose runtime names collide is still refused",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/keycloak"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bricks/shop"
+      ],
+      "exit": 1,
+      "codes": [
+        "RUNTIME_NAME_CONFLICT",
+        "RUNTIME_NAME_CONFLICT"
+      ],
+      "unchanged": true
+    }
+  ]
+}

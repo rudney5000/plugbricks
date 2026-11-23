@@ -541,9 +541,17 @@ function checkRuntimeNames(project: Project, name: string, manifest: BrickManife
     }
   }
   if (!manifests.has(name)) return;
-  const lock: Lock = { ...project.lock, bricks: { ...project.lock.bricks, [name]: entry } };
+  // The plan must see the wiring the new brick adds: its capabilities resolve the optional requirements of
+  // installed consumers (D19), and its webPort (or the one it will get) resolves ${web.origin} (D17, D18).
+  // Without them buildPlan throws WEB_PORT_MISSING before the name checks, and the catch below swallows it.
+  const capabilities = { ...project.lock.capabilities };
+  for (const cap of Object.keys(manifest.provides ?? {})) capabilities[cap] = name;
+  const webPorts: Record<string, number> = {};
+  for (const [brick, b] of Object.entries(project.platform.bricks)) if (b.webPort !== undefined) webPorts[brick] = b.webPort;
+  if (manifest.web) webPorts[name] = nextWebPort(project.platform);
+  const lock: Lock = { ...project.lock, capabilities, bricks: { ...project.lock.bricks, [name]: entry } };
   try {
-    buildPlan(project.platform.name, lock, manifests, () => []);
+    buildPlan(project.platform.name, lock, manifests, () => [], undefined, undefined, webPorts);
   } catch (e) {
     if (!(e instanceof PlugbricksError)) throw e;
     const naming = e.issues.filter((i) => i.code === "RUNTIME_NAME_CONFLICT" || i.code === "RUNTIME_NAME_INVALID");

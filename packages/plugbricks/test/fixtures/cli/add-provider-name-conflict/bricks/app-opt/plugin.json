@@ -1,0 +1,11 @@
+{
+  "name": "app-opt",
+  "version": "0.1.0",
+  "description": "Scenario brick: an optional queue consumer whose own service is named like its wait task.",
+  "services": [
+    { "name": "wait-queue", "image": "redis:7.4.1-alpine", "port": 6379 }
+  ],
+  "requires": {
+    "queue": { "optional": true, "timeoutSeconds": 60 }
+  }
+}
