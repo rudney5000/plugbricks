@@ -280,6 +280,30 @@ describe("the admin server", () => {
     expect(await (await fetch(`${base}/router`)).text()).toContain("admin ui");
   });
 
+  it("still answers the table when the platform cannot be planned", async () => {
+    const brokenRoot = join(pkg, ".test-work/admin-broken");
+    rmSync(brokenRoot, { recursive: true, force: true });
+    mkdirSync(brokenRoot, { recursive: true });
+    cpSync(join(pkg, "examples"), join(brokenRoot, "examples"), { recursive: true });
+    const rio = { cwd: brokenRoot, stdout: () => {}, stderr: () => {} };
+    for (const args of [
+      ["init", "--name", "broken-demo"],
+      ["add", "examples/postgres"],
+      ["add", "examples/orders"],
+    ]) {
+      expect(main(args, rio), args.join(" ")).toBe(0);
+    }
+    // A brick whose installed copy cannot be read: platformStatus reports it, planProject throws.
+    writeFileSync(join(brokenRoot, ".platform", "bricks", "orders", "plugin.json"), "{ not json");
+    const { base } = await start({ root: brokenRoot });
+    const res = await fetch(`${base}/api/bricks`);
+    expect(res.status).toBe(200);
+    const view = (await res.json()) as { problems: { code: string }[]; router: unknown; bricks: unknown[] };
+    expect(view.problems.some((p) => ["BRICK_UNREADABLE", "BRICK_MODIFIED", "MANIFEST_INVALID"].includes(p.code))).toBe(true);
+    expect(view.router).toBeNull();
+    expect(view.bricks).toHaveLength(2);
+  });
+
   it("serves the router configuration and the composed schema", async () => {
     const routerRoot = join(pkg, ".test-work/admin-router");
     rmSync(routerRoot, { recursive: true, force: true });

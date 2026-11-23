@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { extname, join, resolve, sep } from "node:path";
 import type { Configuration } from "openid-client";
 import { ActionRunner, validateAction } from "./actions.js";
-import { issue } from "../issues.js";
+import { issue, type Issue } from "../issues.js";
 import { SEVERITY } from "../live.js";
 import { platformStatus, PlugbricksError, readProject, removeRefusals } from "../platform.js";
 import { planProject } from "../plan.js";
@@ -475,44 +475,77 @@ type BricksView = Awaited<ReturnType<typeof bricksView>>;
 
 async function bricksView(o: AdminOptions) {
   const status = platformStatus(o.root);
-  const live = await statusRuntimeAsync(o.root, o.runtime, status.problems, { ...o.runtimeDeps, k8s: o.k8s ?? o.runtimeDeps?.k8s });
   const project = readProject(o.root);
-  const plan = planProject(project);
-  const manifests = loadInstalledBricks(project);
+  const problems: Issue[] = [...status.problems];
+  const addProblems = (issues: Issue[]) => {
+    for (const i of issues) if (!problems.some((p) => p.code === i.code && p.path === i.path)) problems.push(i);
+  };
+  // Reading the plan or the runtime may fail (an unreadable copy, a composition error, a missing webPort, a name
+  // conflict). The table still answers: the issues go to `problems`, and the router configuration is null.
+  let live: Awaited<ReturnType<typeof statusRuntimeAsync>> | null = null;
+  let plan: ReturnType<typeof planProject> | null = null;
+  let manifests: ReturnType<typeof loadInstalledBricks> = new Map();
+  try {
+    live = await statusRuntimeAsync(o.root, o.runtime, status.problems, { ...o.runtimeDeps, k8s: o.k8s ?? o.runtimeDeps?.k8s });
+  } catch (e) {
+    if (e instanceof RuntimeUnavailableError) throw e;
+    if (e instanceof PlugbricksError) addProblems(e.issues);
+    else throw e;
+  }
+  try {
+    plan = planProject(project);
+  } catch (e) {
+    if (e instanceof PlugbricksError) addProblems(e.issues);
+    else throw e;
+  }
+  try {
+    manifests = loadInstalledBricks(project);
+  } catch (e) {
+    if (e instanceof PlugbricksError) addProblems(e.issues);
+    else throw e;
+  }
+  const router = plan?.router;
   // The composed SDL is inside the router configuration (engineConfig.graphqlSchema); the plan is the
   // source of truth for the hash, the size and the file the runtime reads.
-  const routerConfig = plan.router
+  const routerConfig = router
     ? {
-        sha256: plan.router.configSha256,
-        size: Buffer.byteLength(plan.router.config, "utf8"),
+        sha256: router.configSha256,
+        size: Buffer.byteLength(router.config, "utf8"),
         source: `.generated/${o.runtime}/router-config.json`,
-        federatedSdl: federatedSdlOf(plan.router.config),
+        federatedSdl: federatedSdlOf(router.config),
         composition: {
-          subgraphs: plan.router.subgraphs.length,
+          subgraphs: router.subgraphs.length,
           extendedEntities: [
             ...new Set(
               [...manifests]
-                .filter(([brick]) => plan.router!.subgraphs.some((s) => s.brick === brick))
+                .filter(([brick]) => router.subgraphs.some((s) => s.brick === brick))
                 .flatMap(([, m]) => (m.extends ?? []).flatMap((e) => e.entities)),
             ),
           ].sort(),
         },
       }
     : null;
-  const liveBricks = new Map(live.bricks.map((b) => [b.name, b]));
+  const liveBricks = new Map((live?.bricks ?? []).map((b) => [b.name, b]));
+  const planned = live !== null;
   const bricks = status.bricks.map((b) => {
     const m = manifests.get(b.name);
     const services = liveBricks.get(b.name)?.services ?? [];
     // The same order as status --runtime: the brick shows its worst service, and the restarts of all of them.
     const worst = [...services].sort((a, x) => SEVERITY[x.state] - SEVERITY[a.state])[0];
+    let removeBlockedBy: { code: string; message: string }[] = [];
+    try {
+      removeBlockedBy = removeRefusals(project, b.name).map((i) => ({ code: i.code, message: i.message }));
+    } catch {
+      // An unreadable copy can stop the refusal check too; the problem is already in `problems`.
+    }
     return {
       name: b.name,
       version: b.version,
       tags: b.tags ?? [],
       enabled: b.enabled,
       deployed: services.some((s) => s.deployed),
-      state: worst?.state ?? (b.enabled ? "not deployed" : "stopped"),
-      reason: worst?.reason ?? (b.enabled ? null : "disabled in platform.json"),
+      state: worst?.state ?? (b.enabled ? (planned ? "not deployed" : "unknown") : "stopped"),
+      reason: worst?.reason ?? (b.enabled ? (planned ? null : "the platform cannot be planned") : "disabled in platform.json"),
       restarts: services.reduce((n, s) => n + s.restarts, 0),
       port: m?.services[0]?.port ?? null,
       subgraph: m?.subgraph !== undefined,
@@ -530,7 +563,7 @@ async function bricksView(o: AdminOptions) {
         })
         .join(", "),
       // What `remove` would refuse it for, from the CLI's own check, so the UI can say so before trying.
-      removeBlockedBy: removeRefusals(project, b.name).map((i) => ({ code: i.code, message: i.message })),
+      removeBlockedBy,
     };
   });
   const summary = {
@@ -542,7 +575,7 @@ async function bricksView(o: AdminOptions) {
   return {
     platform: status.name,
     runtime: o.runtime,
-    router: live.router
+    router: live?.router
       ? {
           state: live.router.state,
           address: live.router.address,
@@ -554,6 +587,6 @@ async function bricksView(o: AdminOptions) {
       : null,
     summary,
     bricks,
-    problems: status.problems,
+    problems,
   };
 }
