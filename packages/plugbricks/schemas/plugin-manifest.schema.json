@@ -78,7 +78,7 @@
     "dependencies": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Plugins this plugin needs to work, besides the capabilities it requires and the entities it extends: for example a web plugin that reads its data through the router needs the API plugin that serves it. Informational: the admin shows these links in its Dependencies tab; plugbricks does not install, order or protect them (a capability in requires does).",
+      "description": "Plugins this plugin needs to work, besides the capabilities it requires and the entities it extends: for example a web plugin that reads its data through the router needs the API plugin that serves it. The admin shows these links in its Dependencies tab, and remove refuses a plugin that an installed plugin lists here (DEPENDENCY_IN_USE); plugbricks does not install them or order startup by them (a capability in requires does).",
       "items": {
         "$ref": "#/$defs/dependency"
       }

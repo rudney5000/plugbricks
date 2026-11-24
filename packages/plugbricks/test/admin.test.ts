@@ -418,6 +418,16 @@ describe("the admin server", () => {
     const without = await needs();
     expect(without["orders-web"]).toEqual(["orders declared: the page reads its orders from the orders subgraph, through the router"]);
     expect(without.orders).toEqual(["postgres capability: database"]);
+
+    // With shipping gone, only orders-web's declaration protects orders: the admin shows the CLI's refusal.
+    expect(main(["remove", "shipping"], rio)).toBe(0);
+    const view = (await (await fetch(`${base}/api/bricks`)).json()) as {
+      bricks: { name: string; removeBlockedBy: { code: string; message: string }[] }[];
+    };
+    const orders = view.bricks.find((b) => b.name === "orders")!;
+    expect(orders.removeBlockedBy.map((r) => r.code)).toEqual(["DEPENDENCY_IN_USE"]);
+    expect(orders.removeBlockedBy[0].message).toContain('"orders-web"');
+    expect(view.bricks.find((b) => b.name === "orders-web")!.removeBlockedBy).toEqual([]);
   });
 
   it("refuses the API without a session when dev mode is off", async () => {
