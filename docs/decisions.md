@@ -1286,7 +1286,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   token of another audience 401, the router starting only after Keycloak is ready. On k3d too since 2026-11-23
   (D18, Status).
 - **Limits:** every request through the router then needs a token, the end-to-end tests' included; the
-  subgraphs do not see who called (the router does not forward the token: a later decision); a client
+  subgraphs did not see who called when this was written (the router did not forward the token), which D20
+  lifted: the router passes the token on and each API checks it; a client
   created for a consumer is not deleted when that consumer is removed. The router's wait for its provider is
   an init container on Kubernetes: `up` reports its timeout (exit 124) as `WAIT_TIMEOUT` after the first
   rollout slice, as for a service's waits (scenario `up-k8s-router-oidc-wait-timeout`). On Docker Compose,
