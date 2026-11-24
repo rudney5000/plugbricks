@@ -52,6 +52,8 @@ interface Step {
   exit?: number;
   codes?: string[];
   stdout?: string;
+  /** Substring that must not appear in the output (e.g. a warning that must be gone). */
+  notStdout?: string;
   /** Substring expected in the error output. */
   stderr?: string;
   unchanged?: boolean;
@@ -217,6 +219,7 @@ describe("plugbricks CLI scenarios", () => {
       const codes = stderr.map((l) => /^error (\w+)/.exec(l)?.[1]).filter(Boolean);
       expect(codes, detail).toEqual(step.codes ?? []);
       if (step.stdout) expect(stdout.join("\n"), detail).toContain(step.stdout);
+      if (step.notStdout) expect(stdout.join("\n"), detail).not.toContain(step.notStdout);
       if (step.stderr) expect(stderr.join("\n"), detail).toContain(step.stderr);
       // "<kubeconfig>" stands for the absolute path of kube.yaml in the scenario's work folder.
       if (step.commands) expect(ran, detail).toEqual(step.commands.map((c) => c.replaceAll("<kubeconfig>", join(work, "kube.yaml"))));

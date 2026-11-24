@@ -567,6 +567,13 @@ export interface AddResult {
   reattachedVolumes: VolumeRef[];
   /** Volumes of this brick that were pending deletion; adding the brick back cancels that. */
   cancelledDeletions: VolumeRef[];
+  /** Declared dependencies (D21) that are not installed; "add" prints one warning line per name. */
+  missingDependencies: string[];
+}
+
+/** Declared dependencies of `m` that no installed brick provides, sorted (the "add" warning, D21). */
+function missingDeclaredDependencies(m: Manifest, lock: Lock): string[] {
+  return [...new Set((m.dependencies ?? []).map((d) => d.plugin))].filter((dep) => !Object.hasOwn(lock.bricks, dep)).sort();
 }
 
 /**
@@ -595,10 +602,18 @@ export function addBrick(root: string, brickPath: string): AddResult {
   const integrity = brickIntegrity(brickDir, m.name);
 
   const { lock, platform } = project;
+  const missingDependencies = missingDeclaredDependencies(m, lock);
   const installed = lock.bricks[m.name];
   if (installed) {
     if (installed.integrity === integrity) {
-      return { name: m.name, version: m.version, status: "unchanged", reattachedVolumes: [], cancelledDeletions: [] };
+      return {
+        name: m.name,
+        version: m.version,
+        status: "unchanged",
+        reattachedVolumes: [],
+        cancelledDeletions: [],
+        missingDependencies,
+      };
     }
     fail("BRICK_NAME_CONFLICT", { name: m.name, source: installed.source });
   }
@@ -687,7 +702,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   platform.bricks[m.name] = { source, ...(m.web ? { webPort: nextWebPort(platform) } : {}) };
   setFederation(lock, federation);
   save(project);
-  return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions };
+  return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions, missingDependencies };
 }
 
 // ---------- remove ----------
