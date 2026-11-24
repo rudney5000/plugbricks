@@ -1395,10 +1395,14 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   at a time). The admin shows the same refusal before a removal (`removeBlockedBy`). A name that matches no
   installed brick blocks nothing, so a misspelled declaration is harmless. The way out is the one the message
   gives: remove the brick that declares it first.
-- **What is not:** `add` does not refuse a declared name that is not installed (the panel flags it), `up` does
-  not wait for a declared dependency (only a required capability is waited for), and `disable` does not refuse:
-  disabling `orders` while `orders-web` is enabled is allowed, unlike `EXTENDS_IN_USE`. Whether it should is
-  open; a disabled brick can be enabled again, which `remove` cannot.
+- **`disable` refuses too** (2026-11-24): disabling `orders` is refused with `DEPENDENCY_IN_USE` while an
+  **enabled** brick lists it. A disabled brick does not run, so it does not block; `remove` keeps the stricter
+  rule (disabled dependers included). The message says "cannot disable …; disable them first". `enable` is
+  unchanged.
+- **What is not:** `add` warns, but does not refuse: adding a brick whose declared dependency is not installed
+  succeeds and prints `dependency "orders" is not installed; orders-web will not work without it` (the panel's
+  add action shows the same line, and the dependency graph flags the missing brick). `up` does not wait for a
+  declared dependency (only a required capability is waited for).
 - **The admin:** a click on a brick of the Bricks page opens a panel under the table with two tabs.
   *Dependencies*: the graph of everything the brick needs, transitively (capabilities, extended entities and
   declared links, the optional ones dashed, an arrow labelled with why), the list of those links in words, "needed
@@ -1407,9 +1411,11 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   what it needs, tags, page, and what would refuse its removal. The server sends each brick's direct links
   (`dependsOn`); the graph, the order and "required by" are computed in the browser, from that list.
 - **An optional capability** with no enabled provider is not a link: nothing is wired, so nothing is needed.
-- **Tests:** the manifest (valid example, two refusals with their codes), the scenario
+- **Tests:** the manifest (valid example, two refusals with their codes), the scenarios
   `remove-declared-dependency` (refused, nothing changed, then removed in the right order; it fails when the
-  check is turned off), the server's `dependsOn` and the refusal it shows for each of
+  check is turned off), `disable-declared-dependency` (refused while the declaring brick is enabled, allowed
+  once it is disabled) and `add-declared-dependency-missing` (succeeds with the warning line, silent once the
+  dependency is installed), the server's `dependsOn` and the refusal it shows for each of
   the five example bricks, with and without Keycloak (and a check that it fails when the manifest's links are not
   read), and the graph functions (layers, order, "required by", a missing brick, a cycle).
 - **Not done:** editing `platform.json` from the panel; a registry of plugin versions (the mockup this came from

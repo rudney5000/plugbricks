@@ -69,7 +69,9 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
    `up` stops it. `enable` removes the flag. The same consistency rules as `add` / `remove` apply:
    disabling a provider an enabled brick requires is `CAPABILITY_IN_USE`, disabling an owner an enabled
    brick extends is `EXTENDS_IN_USE`, enabling a consumer of a disabled provider is
-   `PROVIDER_DISABLED`; the federated schema is recomposed on every toggle.
+   `PROVIDER_DISABLED`; the federated schema is recomposed on every toggle. A dependency declared in
+   `dependencies` (D21) that an **enabled** brick lists blocks a disable with `DEPENDENCY_IN_USE` (a disabled
+   declarer does not block); `remove` keeps disabled declarers included.
 
    | | in `platform.json` | `enabled` | rendered and running after `up` | volumes and secrets |
    |---|---|---|---|---|
@@ -204,8 +206,9 @@ tells the router and the admin where the issuer and the keys are.
 
 A capability is not the only way a brick can need another one. `orders-web` reads its orders through the router,
 so it cannot work without `orders`, and no capability says so. A manifest can list such plugins in
-`dependencies` (D21). The admin shows them with the capabilities and the extended entities, and `remove` refuses a
-brick that another declares (`DEPENDENCY_IN_USE`); `up` and `disable` do not act on them.
+`dependencies` (D21). The admin shows them with the capabilities and the extended entities; `remove` refuses a
+brick that another declares (`DEPENDENCY_IN_USE`), `disable` refuses it while the declaring brick is enabled,
+`add` warns when a declared brick is not installed, and `up` does not wait for it.
 
 ## 6. GraphQL Federation v2 (built)
 
