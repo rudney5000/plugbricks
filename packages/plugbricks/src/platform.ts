@@ -701,9 +701,28 @@ export interface RemoveResult {
 
 /** Uninstalls a brick unless another brick still requires a capability it provides. */
 /**
+ * The installed bricks that list `name` in their manifest's `dependencies` (D21), disabled ones included: they
+ * would break when enabled again. A copy that cannot be read is left out; "status" reports it.
+ */
+function declaredDependents(project: Project, name: string): string[] {
+  const found: string[] = [];
+  for (const other of Object.keys(project.lock.bricks).sort()) {
+    if (other === name) continue;
+    try {
+      const m = JSON.parse(readFileSync(join(project.root, BRICKS_DIR, other, "plugin.json"), "utf8")) as Manifest;
+      if ((m.dependencies ?? []).some((d) => d.plugin === name)) found.push(`"${other}"`);
+    } catch {
+      // Unreadable or missing: reported by status, and it cannot be told what it declares.
+    }
+  }
+  return found;
+}
+
+/**
  * Why `remove <name>` would be refused because of other installed bricks, before composition: the
  * capabilities they still require (CAPABILITY_IN_USE), else the entities they still extend
- * (EXTENDS_IN_USE). Empty when nothing depends on it. The admin shows the same list before a removal.
+ * (EXTENDS_IN_USE), else the plugins they declare as dependencies (DEPENDENCY_IN_USE, D21). Empty when nothing
+ * depends on it. The admin shows the same list before a removal.
  */
 export function removeRefusals(project: Project, name: string): Issue[] {
   const brick = installedBrick(project.lock, name);
@@ -723,7 +742,10 @@ export function removeRefusals(project: Project, name: string): Issue[] {
   const extenders = [...manifests]
     .filter(([, other]) => (other.extends ?? []).some((e) => e.plugin === name))
     .map(([other]) => `"${other}"`);
-  return extenders.length ? [issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })] : [];
+  if (extenders.length) return [issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })];
+
+  const dependents = declaredDependents(project, name);
+  return dependents.length ? [issue("DEPENDENCY_IN_USE", "", { brick: name, consumers: dependents.join(", ") })] : [];
 }
 
 export function removeBrick(root: string, name: string): RemoveResult {

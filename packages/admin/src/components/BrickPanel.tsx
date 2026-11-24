@@ -219,8 +219,8 @@ function Dependencies({ bricks, brick }: { bricks: AdminBrick[]; brick: AdminBri
         )}
       </div>
       <p className="text-xs text-slate-500">
-        The order is the one the links give. When you deploy, plugbricks itself waits only for the capabilities a brick requires; a declared
-        link is shown here and is not enforced.
+        The order is the one the links give. When you deploy, plugbricks itself waits only for the capabilities a brick requires. A declared
+        link keeps its target from being removed while this brick is installed.
       </p>
     </div>
   );

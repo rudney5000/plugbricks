@@ -485,7 +485,7 @@ interface DependencyLink {
 
 /**
  * The bricks `name` needs, from what is checked (the providers of its required capabilities, the owners of the
- * entities it extends) and from what its manifest says (`dependencies`, informational). An optional capability
+ * entities it extends) and from what its manifest says (`dependencies`). An optional capability
  * without an enabled provider is left out: nothing is wired. A brick that is needed twice shows once, for the
  * strongest reason: capability, then extends, then declared.
  */

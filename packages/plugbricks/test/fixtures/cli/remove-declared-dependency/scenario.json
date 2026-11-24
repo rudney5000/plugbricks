@@ -1,0 +1,58 @@
+{
+  "description": "orders-web declares that it needs orders (D21), so removing orders is refused while it is installed; removing in the right order works",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ],
+      "exit": 1,
+      "codes": [
+        "DEPENDENCY_IN_USE"
+      ],
+      "unchanged": true,
+      "stderr": "\"orders-web\" declare it in \"dependencies\""
+    },
+    {
+      "run": [
+        "remove",
+        "orders-web"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ]
+    }
+  ],
+  "absent": [
+    ".platform/bricks/orders",
+    ".platform/bricks/orders-web"
+  ]
+}
