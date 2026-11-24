@@ -33,17 +33,17 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.17.0",
-    "@graphql-tools/utils": "12.1.0",
-    "@wundergraph/composition": "0.68.1",
-    "@wundergraph/cosmo-connect": "0.164.0",
-    "@wundergraph/cosmo-shared": "0.50.1",
+    "@graphql-tools/utils": "13.2.2",
+    "@wundergraph/composition": "0.68.2",
+    "@wundergraph/cosmo-connect": "0.165.0",
+    "@wundergraph/cosmo-shared": "0.50.2",
     "ajv": "8.20.0",
-    "graphql": "16.14.2",
-    "openid-client": "6.9.0"
+    "graphql": "17.1.0",
+    "openid-client": "6.9.1"
   },
   "devDependencies": {
-    "@types/node": "22.20.5",
-    "typescript": "5.9.3",
-    "vitest": "2.1.9"
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
   }
 }
