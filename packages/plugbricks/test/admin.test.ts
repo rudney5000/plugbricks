@@ -376,6 +376,50 @@ describe("the admin server", () => {
     expect(err.join("")).toContain("EXTENDS_IN_USE");
   });
 
+  it("tells what each brick needs: its capabilities, the entities it extends, and what its manifest declares", async () => {
+    const root = join(pkg, ".test-work/admin-dependencies");
+    rmSync(root, { recursive: true, force: true });
+    mkdirSync(root, { recursive: true });
+    cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
+    const rio = { cwd: root, stdout: () => {}, stderr: () => {} };
+    for (const args of [
+      ["init", "--name", "needs-demo"],
+      ["add", "examples/postgres"],
+      ["add", "examples/keycloak"],
+      ["add", "examples/orders"],
+      ["add", "examples/shipping"],
+      ["add", "examples/orders-web"],
+    ]) {
+      expect(main(args, rio), args.join(" ")).toBe(0);
+    }
+    const { base } = await start({ root });
+    type Link = { brick: string; kind: string; label: string; optional: boolean; installed: boolean; enabled: boolean };
+    const needs = async () => {
+      const view = (await (await fetch(`${base}/api/bricks`)).json()) as { bricks: { name: string; dependsOn: Link[] }[] };
+      return Object.fromEntries(
+        view.bricks.map((b) => [b.name, b.dependsOn.map((d) => `${d.brick} ${d.kind}${d.optional ? " optional" : ""}: ${d.label}`)]),
+      );
+    };
+
+    // orders-web requires no capability that links it to orders: the manifest says so, and nothing else does.
+    expect(await needs()).toEqual({
+      keycloak: ["postgres capability: database"],
+      orders: ["keycloak capability optional: oidc", "postgres capability: database"],
+      "orders-web": [
+        "keycloak capability optional: oidc",
+        "orders declared: the page reads its orders from the orders subgraph, through the router",
+      ],
+      postgres: [],
+      shipping: ["keycloak capability optional: oidc", "orders extends: Order", "postgres capability: database"],
+    });
+
+    // An optional capability nobody provides is not wired, so it is no dependency.
+    expect(main(["disable", "keycloak"], rio)).toBe(0);
+    const without = await needs();
+    expect(without["orders-web"]).toEqual(["orders declared: the page reads its orders from the orders subgraph, through the router"]);
+    expect(without.orders).toEqual(["postgres capability: database"]);
+  });
+
   it("refuses the API without a session when dev mode is off", async () => {
     const { base } = await start({ dev: false });
     expect((await fetch(`${base}/api/session`)).status).toBe(401);

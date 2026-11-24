@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getBricks } from "../api.js";
 import { allTags, filterByTag, hostsOf, needsDeploy, reachability, summary, tone } from "../lib.js";
+import { BrickPanel } from "../components/BrickPanel.js";
 import { useAction } from "../useAction.js";
 import type { AdminBrick, BricksResponse, Session } from "../types.js";
 
@@ -21,13 +22,21 @@ function Switch({ on, disabled, onToggle, label }: { on: boolean; disabled: bool
   );
 }
 
-function NameCell({ brick }: { brick: AdminBrick }) {
+function NameCell({ brick, selected, onSelect }: { brick: AdminBrick; selected: boolean; onSelect: () => void }) {
   const detail = [brick.provides.length ? `provides ${brick.provides.join(", ")}` : "", brick.requires ? `requires ${brick.requires}` : ""]
     .filter(Boolean)
     .join(" · ");
   return (
     <div>
-      <div className="font-medium text-slate-900">{brick.name}</div>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        title={`Show what ${brick.name} needs`}
+        className="font-medium text-slate-900 hover:text-blue-700 hover:underline"
+      >
+        {brick.name}
+      </button>
       {detail && <div className="text-xs text-slate-500">{detail}</div>}
     </div>
   );
@@ -126,6 +135,7 @@ export function Bricks({ session }: { session: Session }) {
   const [showAdd, setShowAdd] = useState(false);
   const [source, setSource] = useState("");
   const [removing, setRemoving] = useState<AdminBrick | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const cancelRemove = useCallback(() => setRemoving(null), []);
 
   const load = useCallback(() => {
@@ -145,6 +155,8 @@ export function Bricks({ session }: { session: Session }) {
   const rows = useMemo(() => (data ? filterByTag(data.bricks, tag) : []), [data, tag]);
   const counts = useMemo(() => (data ? summary(data.bricks) : { total: 0, healthy: 0, down: 0, stopped: 0 }), [data]);
   const disabled = !canAdmin || busy;
+  // The panel follows the brick by name: it closes when a refresh no longer lists it (removed).
+  const open = data?.bricks.find((b) => b.name === selected) ?? null;
 
   const add = () => {
     if (!source.trim()) return;
@@ -308,9 +320,16 @@ export function Bricks({ session }: { session: Session }) {
           </thead>
           <tbody>
             {rows.map((b) => (
-              <tr key={b.name} className="border-b border-slate-100 last:border-0">
+              <tr
+                key={b.name}
+                onClick={(e) => {
+                  // A click on a button, switch or link does its own thing; only the rest of the row selects.
+                  if (!(e.target as HTMLElement).closest("button, a")) setSelected(b.name);
+                }}
+                className={`cursor-pointer border-b border-slate-100 last:border-0 ${selected === b.name ? "bg-blue-50/60" : "hover:bg-slate-50"}`}
+              >
                 <td className="px-4 py-4">
-                  <NameCell brick={b} />
+                  <NameCell brick={b} selected={selected === b.name} onSelect={() => setSelected(b.name)} />
                 </td>
                 <td className="px-4 py-4 text-slate-700">{b.version}</td>
                 <td className="px-4 py-4">
@@ -365,6 +384,8 @@ export function Bricks({ session }: { session: Session }) {
           </tbody>
         </table>
       </div>
+
+      {open && <BrickPanel bricks={data?.bricks ?? []} brick={open} onClose={() => setSelected(null)} />}
 
       <p className="mt-4 text-xs text-slate-500">
         Enabled is what <code>platform.json</code> asks for. Deployed is what the runtime reports. Actions run the same CLI as a terminal,

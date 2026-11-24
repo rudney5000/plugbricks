@@ -7,8 +7,7 @@ import { ActionRunner, validateAction } from "./actions.js";
 import { issue, type Issue } from "../issues.js";
 import { SEVERITY } from "../live.js";
 import { platformStatus, PlugbricksError, readProject, removeRefusals } from "../platform.js";
-import { planProject } from "../plan.js";
-import { loadInstalledBricks } from "../plan.js";
+import { loadInstalledBricks, planProject, type BrickManifest } from "../plan.js";
 import { RuntimeUnavailableError, statusRuntimeAsync, type AsyncExec, type K8sTarget, type Runtime, type RuntimeDeps } from "../runtime.js";
 
 export interface AdminOptions {
@@ -473,6 +472,47 @@ function readAudit(root: string): unknown[] {
 
 type BricksView = Awaited<ReturnType<typeof bricksView>>;
 
+/** One brick another brick needs, and why: a capability it requires, an entity it extends, or what its manifest declares. */
+interface DependencyLink {
+  brick: string;
+  kind: "capability" | "extends" | "declared";
+  /** The capability, the entities, or the manifest's own description. */
+  label: string;
+  optional: boolean;
+  installed: boolean;
+  enabled: boolean;
+}
+
+/**
+ * The bricks `name` needs, from what is checked (the providers of its required capabilities, the owners of the
+ * entities it extends) and from what its manifest says (`dependencies`, informational). An optional capability
+ * without an enabled provider is left out: nothing is wired. A brick that is needed twice shows once, for the
+ * strongest reason: capability, then extends, then declared.
+ */
+function dependenciesOf(name: string, m: BrickManifest | undefined, status: ReturnType<typeof platformStatus>): DependencyLink[] {
+  const found = new Map<string, DependencyLink>();
+  const rank = { capability: 0, extends: 1, declared: 2 } as const;
+  const add = (brick: string, kind: DependencyLink["kind"], label: string, optional: boolean) => {
+    if (brick === name) return;
+    const known = status.bricks.find((x) => x.name === brick);
+    const link: DependencyLink = { brick, kind, label, optional, installed: known !== undefined, enabled: known?.enabled ?? false };
+    const before = found.get(brick);
+    if (!before) found.set(brick, link);
+    else if (rank[kind] < rank[before.kind]) found.set(brick, { ...link, optional: before.optional && optional });
+  };
+  const locked = status.bricks.find((x) => x.name === name);
+  for (const [cap, r] of Object.entries(locked?.requires ?? {})) {
+    if (!r.optional) add(r.provider, "capability", cap, false);
+    else {
+      const provider = Object.hasOwn(status.capabilities, cap) ? status.capabilities[cap] : undefined;
+      if (provider !== undefined && status.bricks.some((x) => x.name === provider && x.enabled)) add(provider, "capability", cap, true);
+    }
+  }
+  for (const e of m?.extends ?? []) add(e.plugin, "extends", e.entities.join(", "), false);
+  for (const d of m?.dependencies ?? []) add(d.plugin, "declared", d.description ?? "declared in its manifest", false);
+  return [...found.values()].sort((a, b) => a.brick.localeCompare(b.brick));
+}
+
 async function bricksView(o: AdminOptions) {
   const status = platformStatus(o.root);
   const project = readProject(o.root);
@@ -564,6 +604,7 @@ async function bricksView(o: AdminOptions) {
         .join(", "),
       // What `remove` would refuse it for, from the CLI's own check, so the UI can say so before trying.
       removeBlockedBy,
+      dependsOn: dependenciesOf(b.name, m, status),
     };
   });
   const summary = {
