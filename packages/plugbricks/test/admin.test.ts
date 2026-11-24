@@ -39,6 +39,7 @@ beforeAll(() => {
 const log = process.env.PB_FAKE_LOG;
 if (log) appendFileSync(log, JSON.stringify({ argv: process.argv.slice(2), env: process.env }) + String.fromCharCode(10));
 console.log("fake cli started");
+if (process.argv.slice(2).join(" ") === "add examples/orders-web") console.log('  dependency "orders" is not installed; orders-web will not work without it');
 const mode = process.env.PB_FAKE_MODE ?? "ok";
 if (mode === "slow") {
   setTimeout(() => process.exit(0), 700);
@@ -392,7 +393,7 @@ describe("the admin server", () => {
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
     }
-    const { base } = await start({ root });
+    const { base } = await start({ root, ...cliOptions });
     type Link = { brick: string; kind: string; label: string; optional: boolean; installed: boolean; enabled: boolean };
     const needs = async () => {
       const view = (await (await fetch(`${base}/api/bricks`)).json()) as { bricks: { name: string; dependsOn: Link[] }[] };
@@ -428,6 +429,13 @@ describe("the admin server", () => {
     expect(orders.removeBlockedBy.map((r) => r.code)).toEqual(["DEPENDENCY_IN_USE"]);
     expect(orders.removeBlockedBy[0].message).toContain('"orders-web"');
     expect(view.bricks.find((b) => b.name === "orders-web")!.removeBlockedBy).toEqual([]);
+
+    // The add action's output carries the CLI's warning about a declared dependency that is not installed.
+    const added = await postAction(base, { action: "add", source: "examples/orders-web" });
+    expect(added.status).toBe(202);
+    const action = await waitAction(base, JSON.parse(added.body).id);
+    expect(action.state).toBe("succeeded");
+    expect(action.output.join("\n")).toContain('dependency "orders" is not installed; orders-web will not work without it');
   });
 
   it("refuses the API without a session when dev mode is off", async () => {

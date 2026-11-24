@@ -220,6 +220,9 @@ export function main(argv: string[], io: Io): number {
           else io.stdout(`Added ${r.name} ${r.version}`);
           for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);
           for (const v of r.cancelledDeletions) io.stdout(`  cancelled the pending deletion of volume ${vol(v)}`);
+          for (const dep of r.missingDependencies) {
+            io.stdout(`  dependency "${dep}" is not installed; ${r.name} will not work without it`);
+          }
           return 0;
         }
         case "remove": {
