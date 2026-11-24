@@ -1377,6 +1377,39 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D21. `dependencies` in the manifest, and a panel in the admin that shows what a brick needs
+
+- **Status:** accepted and implemented (2026-11-24).
+- **Context:** `orders-web` cannot work without `orders`, which cannot work without PostgreSQL. Only the second
+  link is in the manifests, as the capability `database`. `orders-web` reaches `orders` through the router, a
+  link that is in its code and in no data: `requires` holds only `oidc`, and no capability stands for an API.
+  The admin could not show it, and nothing says that removing `orders` breaks `orders-web`.
+- **Decision:** an optional `dependencies` array in `plugin.json`, `[{ "plugin": "orders", "description": "..." }]`
+  (`plugin` named like `extends.plugin`, `description` at most 200 characters, shown next to the link). The
+  manifest refuses a plugin that lists itself (`SELF_DEPENDENCY`) or lists the same plugin twice
+  (`DUPLICATE_DEPENDENCY`). `examples/orders-web` declares `orders`.
+- **Informational for now.** plugbricks does not install, order, or protect a declared dependency: `add` does not
+  refuse a name that is not installed, `up` does not wait for it, `remove` does not refuse it. A capability in
+  `requires` and an entity in `extends` keep their own, enforced, behaviour. The admin says so under the graph.
+  Whether `remove` should refuse a brick that another declares is left open: it would turn a description into a
+  rule, and a declared name can be missing or misspelled without anything having checked it.
+- **The admin:** a click on a brick of the Bricks page opens a panel under the table with two tabs.
+  *Dependencies*: the graph of everything the brick needs, transitively (capabilities, extended entities and
+  declared links, the optional ones dashed, an arrow labelled with why), the list of those links in words, "needed
+  first, in order" (each brick after its own dependencies), and "required by". A brick that is needed but not
+  installed is drawn flagged, with a warning. *Details*: status, restarts, port, `provides`, `requires`, `extends`,
+  what it needs, tags, page, and what would refuse its removal. The server sends each brick's direct links
+  (`dependsOn`); the graph, the order and "required by" are computed in the browser, from that list.
+- **An optional capability** with no enabled provider is not a link: nothing is wired, so nothing is needed.
+- **Tests:** the manifest (valid example, two refusals with their codes), the server's `dependsOn` for each of
+  the five example bricks, with and without Keycloak (and a check that it fails when the manifest's links are not
+  read), and the graph functions (layers, order, "required by", a missing brick, a cycle).
+- **Not done:** editing `platform.json` from the panel; a registry of plugin versions (the mockup this came from
+  had "Release", "Stored plugins" and "Add version": plugbricks has one installed copy per brick, no registry).
+  The brick integrity hash covers `plugin.json`, so adding the field to an installed brick means `add` again.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

@@ -201,6 +201,11 @@ consumer (its own secret, an audience mapper adding `plugbricks-router`); `injec
 `OIDC_AUDIENCE`. The provider's manifest also carries `oidc: { issuerPath, jwksPath, audience }`, which
 tells the router and the admin where the issuer and the keys are.
 
+A capability is not the only way a brick can need another one. `orders-web` reads its orders through the router,
+so it cannot work without `orders`, and no capability says so. A manifest can list such plugins in
+`dependencies` (D21). The admin shows them with the capabilities and the extended entities; plugbricks does not
+enforce them.
+
 ## 6. GraphQL Federation v2 (built)
 
 Each API brick serves a **subgraph**. Both examples declare Federation 2.5:
@@ -296,7 +301,8 @@ flowchart LR
 ```
 
 - **Pages:** *Bricks* (the table of the mockup: tags, port, subgraph, extends, `enabled` vs `deployed`,
-  runtime state and reason, actions), *Router* (configuration hash and size, source file, composition,
+  runtime state and reason, actions; a click on a brick opens a panel with its dependencies and its details,
+  D21), *Router* (configuration hash and size, source file, composition,
   composed SDL, read-only) and *Audit*.
 - **Reading** uses the same functions as the CLI: `platformStatus`, the plan, and `statusRuntimeAsync`,
   which gives the same report as `status --runtime` without blocking the server. Concurrent page loads
