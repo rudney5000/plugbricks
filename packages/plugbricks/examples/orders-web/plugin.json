@@ -29,6 +29,12 @@
       "timeoutSeconds": 300
     }
   },
+  "dependencies": [
+    {
+      "plugin": "orders",
+      "description": "the page reads its orders from the orders subgraph, through the router"
+    }
+  ],
   "web": {
     "service": "app",
     "path": "/orders"

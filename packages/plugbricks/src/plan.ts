@@ -55,6 +55,8 @@ export interface BrickManifest {
   /** On a web brick that provides oidc: what the router needs to check its tokens (D19). */
   oidc?: { issuerPath: string; jwksPath: string; audience: string };
   extends?: { plugin: string; entities: string[] }[];
+  /** Plugins this one needs besides its capabilities (informational: the admin shows them). */
+  dependencies?: { plugin: string; description?: string }[];
   provides?: Record<
     string,
     {

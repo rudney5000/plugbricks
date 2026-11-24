@@ -41,6 +41,8 @@ export function validateManifest(manifest: unknown): ValidationResult {
   if (schemaProblems.length) return { ok: false, issues: schemaProblems };
 
   const m = manifest as {
+    name: string;
+    dependencies?: { plugin: string }[];
     services: { name: string; image: string; port: number; extraPorts?: { name: string; port: number }[]; env?: Record<string, string> }[];
     provides?: Record<
       string,
@@ -109,6 +111,12 @@ export function validateManifest(manifest: unknown): ValidationResult {
   if (m.subgraph && !names.has(m.subgraph.service)) {
     issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: m.subgraph.service }));
   }
+  const dependencies = new Set<string>();
+  (m.dependencies ?? []).forEach((d, i) => {
+    if (d.plugin === m.name) issues.push(issue("SELF_DEPENDENCY", `/dependencies/${i}/plugin`, { name: d.plugin }));
+    else if (dependencies.has(d.plugin)) issues.push(issue("DUPLICATE_DEPENDENCY", `/dependencies/${i}/plugin`, { name: d.plugin }));
+    dependencies.add(d.plugin);
+  });
   // The router reads the "oidc" block only from the brick that provides the capability (D19).
   if (m.oidc && !Object.hasOwn(m.provides ?? {}, "oidc")) issues.push(issue("OIDC_NOT_PROVIDED", "/oidc", {}));
   if (m.web) {

@@ -263,6 +263,7 @@ interface Manifest {
   subgraph?: { service: string; schema: string; path?: string };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
+  dependencies?: { plugin: string; description?: string }[];
 }
 
 /** Files a manifest points at must ship with the brick. */
