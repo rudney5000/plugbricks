@@ -1,4 +1,4 @@
-import type { AdminBrick, BricksResponse, LiveState, RouterView } from "./types";
+import type { AdminBrick, AdminDependency, BricksResponse, LiveState, RouterView } from "./types";
 
 export function summary(bricks: AdminBrick[]): BricksResponse["summary"] {
   return {
@@ -62,4 +62,109 @@ export function tone(state: LiveState): { dot: string; badge: string } {
     default:
       return { dot: "bg-slate-400", badge: "bg-slate-100 text-slate-600" };
   }
+}
+
+/** A brick in the dependency graph, placed in a column (0 is the brick itself) and a row. */
+export interface GraphNode {
+  name: string;
+  version: string | null;
+  state: LiveState | null;
+  installed: boolean;
+  enabled: boolean;
+  layer: number;
+  row: number;
+}
+
+export interface GraphEdge {
+  from: string;
+  to: string;
+  kind: AdminDependency["kind"];
+  label: string;
+  optional: boolean;
+}
+
+export interface DependencyGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /** What `name` needs, each brick after the ones it needs itself; `name` is not in it. */
+  order: string[];
+}
+
+/**
+ * Everything `name` needs, transitively. A brick is placed one column right of the furthest brick that needs it,
+ * so every arrow points right; a link back to a brick on the way (a cycle) is drawn but does not move anything.
+ * A brick that is needed but not installed is a node too, flagged, with nothing behind it.
+ */
+export function dependencyGraph(bricks: AdminBrick[], name: string): DependencyGraph {
+  const byName = new Map(bricks.map((b) => [b.name, b]));
+  const edges: GraphEdge[] = [];
+  const seen = new Set<string>();
+  const walk = (n: string) => {
+    if (seen.has(n)) return;
+    seen.add(n);
+    for (const d of byName.get(n)?.dependsOn ?? []) {
+      edges.push({ from: n, to: d.brick, kind: d.kind, label: d.label, optional: d.optional });
+      walk(d.brick);
+    }
+  };
+  walk(name);
+
+  const out = new Map<string, string[]>();
+  for (const e of edges) out.set(e.from, [...(out.get(e.from) ?? []), e.to]);
+
+  // Longest distance from `name`, ignoring the links that close a cycle.
+  const layer = new Map<string, number>();
+  const onPath = new Set<string>();
+  const place = (n: string, depth: number) => {
+    if (onPath.has(n)) return;
+    if ((layer.get(n) ?? -1) >= depth) return;
+    layer.set(n, depth);
+    onPath.add(n);
+    for (const next of out.get(n) ?? []) place(next, depth + 1);
+    onPath.delete(n);
+  };
+  place(name, 0);
+
+  const rows = new Map<number, number>();
+  const nodes: GraphNode[] = [...seen]
+    .sort((a, b) => (layer.get(a) ?? 0) - (layer.get(b) ?? 0) || a.localeCompare(b))
+    .map((n) => {
+      const l = layer.get(n) ?? 0;
+      const row = rows.get(l) ?? 0;
+      rows.set(l, row + 1);
+      const b = byName.get(n);
+      return {
+        name: n,
+        version: b?.version ?? null,
+        state: b?.state ?? null,
+        installed: b !== undefined,
+        enabled: b?.enabled ?? false,
+        layer: l,
+        row,
+      };
+    });
+
+  const order: string[] = [];
+  const done = new Set<string>([name]);
+  const visit = (n: string) => {
+    if (done.has(n)) return;
+    done.add(n);
+    for (const next of out.get(n) ?? []) visit(next);
+    order.push(n);
+  };
+  for (const next of out.get(name) ?? []) visit(next);
+  return { nodes, edges, order };
+}
+
+/** The bricks that list `name` among the ones they need, with why. */
+export function requiredBy(
+  bricks: AdminBrick[],
+  name: string,
+): { brick: string; kind: AdminDependency["kind"]; label: string; optional: boolean }[] {
+  return bricks
+    .filter((b) => b.name !== name)
+    .flatMap((b) =>
+      b.dependsOn.filter((d) => d.brick === name).map((d) => ({ brick: b.name, kind: d.kind, label: d.label, optional: d.optional })),
+    )
+    .sort((a, b) => a.brick.localeCompare(b.brick));
 }

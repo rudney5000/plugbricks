@@ -143,5 +143,15 @@
     "code": "PORT_CONFLICT",
     "path": "/services/0/extraPorts/0/port",
     "why": "an extra port reuses the primary port number"
+  },
+  "self-dependency.json": {
+    "code": "SELF_DEPENDENCY",
+    "path": "/dependencies/0/plugin",
+    "why": "a plugin cannot need itself"
+  },
+  "duplicate-dependency.json": {
+    "code": "DUPLICATE_DEPENDENCY",
+    "path": "/dependencies/1/plugin",
+    "why": "the same plugin listed twice, with different descriptions (so uniqueItems does not catch it)"
   }
 }

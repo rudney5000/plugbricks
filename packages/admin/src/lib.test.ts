@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { allTags, filterByTag, hostsOf, needsDeploy, reachability, summary, tone } from "./lib.js";
-import type { AdminBrick, RouterView } from "./types.js";
+import { allTags, dependencyGraph, filterByTag, hostsOf, needsDeploy, reachability, requiredBy, summary, tone } from "./lib.js";
+import type { AdminBrick, AdminDependency, RouterView } from "./types.js";
 
 const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminBrick => ({
   name,
@@ -18,6 +18,7 @@ const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminB
   provides: [],
   requires: "",
   removeBlockedBy: [],
+  dependsOn: [],
 });
 
 const router = (address: string | null, states: AdminBrick["state"][]): RouterView => ({
@@ -70,5 +71,91 @@ describe("the Bricks view helpers", () => {
     expect(tone("healthy").dot).toContain("emerald");
     expect(tone("unhealthy").dot).toContain("red");
     expect(tone("stopped").badge).toContain("slate");
+  });
+});
+
+const dep = (brick: string, kind: AdminDependency["kind"], label: string, extra: Partial<AdminDependency> = {}): AdminDependency => ({
+  brick,
+  kind,
+  label,
+  optional: false,
+  installed: true,
+  enabled: true,
+  ...extra,
+});
+const withDeps = (name: string, dependsOn: AdminDependency[]): AdminBrick => ({ ...brick(name, "healthy", []), dependsOn });
+
+describe("the dependency graph of a brick", () => {
+  // orders-web needs orders (declared); orders needs postgres (capability) and, optionally, keycloak, which needs postgres.
+  const platform = [
+    withDeps("orders-web", [dep("keycloak", "capability", "oidc", { optional: true }), dep("orders", "declared", "reads the orders")]),
+    withDeps("orders", [dep("keycloak", "capability", "oidc", { optional: true }), dep("postgres", "capability", "database")]),
+    withDeps("keycloak", [dep("postgres", "capability", "database")]),
+    withDeps("postgres", []),
+  ];
+
+  it("follows the links to the end: orders-web needs orders, which needs postgres", () => {
+    const g = dependencyGraph(platform, "orders-web");
+    expect(g.nodes.map((n) => [n.name, n.layer])).toEqual([
+      ["orders-web", 0],
+      ["orders", 1],
+      ["keycloak", 2],
+      ["postgres", 3],
+    ]);
+    expect(g.edges.map((e) => `${e.from}>${e.to}${e.optional ? "?" : ""}`).sort()).toEqual([
+      "keycloak>postgres",
+      "orders-web>keycloak?",
+      "orders-web>orders",
+      "orders>keycloak?",
+      "orders>postgres",
+    ]);
+  });
+
+  it("puts a brick right of everything that needs it, so postgres is not beside orders", () => {
+    const g = dependencyGraph(platform, "orders");
+    expect(g.nodes.find((n) => n.name === "postgres")?.layer).toBe(2);
+    expect(g.nodes.find((n) => n.name === "keycloak")?.layer).toBe(1);
+  });
+
+  it("lists what is needed first, each brick after its own dependencies, never the brick itself", () => {
+    expect(dependencyGraph(platform, "orders-web").order).toEqual(["postgres", "keycloak", "orders"]);
+    expect(dependencyGraph(platform, "orders").order).toEqual(["postgres", "keycloak"]);
+    expect(dependencyGraph(platform, "postgres").order).toEqual([]);
+  });
+
+  it("shows a brick with no dependency alone", () => {
+    const g = dependencyGraph(platform, "postgres");
+    expect(g.nodes.map((n) => n.name)).toEqual(["postgres"]);
+    expect(g.edges).toEqual([]);
+  });
+
+  it("flags a needed brick that is not installed, with nothing behind it", () => {
+    const bricks = [withDeps("orders-web", [dep("orders", "declared", "reads the orders", { installed: false, enabled: false })])];
+    const g = dependencyGraph(bricks, "orders-web");
+    expect(g.nodes.find((n) => n.name === "orders")).toMatchObject({
+      installed: false,
+      enabled: false,
+      version: null,
+      state: null,
+      layer: 1,
+    });
+    expect(g.order).toEqual(["orders"]);
+  });
+
+  it("terminates on a cycle and keeps every arrow pointing right but the one that closes it", () => {
+    const bricks = [withDeps("a", [dep("b", "declared", "")]), withDeps("b", [dep("a", "declared", "")])];
+    const g = dependencyGraph(bricks, "a");
+    expect(g.nodes.map((n) => [n.name, n.layer])).toEqual([
+      ["a", 0],
+      ["b", 1],
+    ]);
+    expect(g.order).toEqual(["b"]);
+    expect(g.edges).toHaveLength(2);
+  });
+
+  it("lists who needs a brick and why, both through a capability and through a declared link", () => {
+    expect(requiredBy(platform, "orders")).toEqual([{ brick: "orders-web", kind: "declared", label: "reads the orders", optional: false }]);
+    expect(requiredBy(platform, "postgres").map((r) => r.brick)).toEqual(["keycloak", "orders"]);
+    expect(requiredBy(platform, "orders-web")).toEqual([]);
   });
 });

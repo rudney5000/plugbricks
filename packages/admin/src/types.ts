@@ -1,6 +1,17 @@
 export type LiveState = "healthy" | "starting" | "unhealthy" | "stopped" | "not deployed" | "unknown";
 export type Role = "admin" | "viewer";
 
+/** A brick another one needs: a capability it requires, an entity it extends, or a link its manifest declares. */
+export interface AdminDependency {
+  brick: string;
+  kind: "capability" | "extends" | "declared";
+  /** The capability, the entities, or the manifest's own description. */
+  label: string;
+  optional: boolean;
+  installed: boolean;
+  enabled: boolean;
+}
+
 export interface AdminBrick {
   name: string;
   version: string;
@@ -19,6 +30,8 @@ export interface AdminBrick {
   requires: string;
   /** Why `remove` would be refused (CAPABILITY_IN_USE, EXTENDS_IN_USE), from the CLI's own check. */
   removeBlockedBy: { code: string; message: string }[];
+  /** The bricks this one needs, in name order. */
+  dependsOn: AdminDependency[];
 }
 
 export interface RouterConfig {

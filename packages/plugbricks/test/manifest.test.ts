@@ -51,6 +51,13 @@ describe("example manifests (milestone 1 criterion)", () => {
     }
   });
 
+  it("orders-web declares that it needs orders, which no capability says", () => {
+    const m = load("examples/orders-web/plugin.json");
+    expect(validateManifest(m)).toEqual({ ok: true });
+    expect(m.dependencies.map((d: { plugin: string }) => d.plugin)).toEqual(["orders"]);
+    expect(Object.keys(m.requires)).toEqual(["oidc"]);
+  });
+
   it("postgres keeps its data volume when removed", () => {
     const m = load("examples/postgres/plugin.json");
     expect(m.services[0].volumes[0].retention).toBe("retain");
