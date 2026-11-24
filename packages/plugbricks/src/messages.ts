@@ -81,7 +81,7 @@ export const MESSAGES = {
     'brick "{brick}" extends entity "{entity}" of brick "{owner}", but the subgraph of "{owner}" ({file}) does not define it: an entity is an object type with @key',
   EXTENDS_ENTITY_NOT_DECLARED:
     'brick "{brick}" lists entity "{entity}" in extends, but its own subgraph schema {file} does not declare it: an entity is an object type with @key',
-  DEPENDENCY_IN_USE: 'cannot remove "{brick}": {consumers} declare it in "dependencies"; remove them first',
+  DEPENDENCY_IN_USE: 'cannot {action} "{brick}": {consumers} declare it in "dependencies"; {action} them first',
   EXTENDS_IN_USE: 'cannot remove "{brick}": its entities are still extended by {consumers}',
   FEDERATION_CHANGED:
     "the federated schema of the installed subgraphs (sha256 {actual}) does not match platform.lock ({locked}); a subgraph changed since it was added",

@@ -701,13 +701,15 @@ export interface RemoveResult {
 
 /** Uninstalls a brick unless another brick still requires a capability it provides. */
 /**
- * The installed bricks that list `name` in their manifest's `dependencies` (D21), disabled ones included: they
- * would break when enabled again. A copy that cannot be read is left out; "status" reports it.
+ * The installed bricks that list `name` in their manifest's `dependencies` (D21). `enabledOnly` keeps the ones that
+ * are enabled: `disable` uses it (a disabled brick does not run), while `remove` keeps disabled dependers too (they
+ * would break when enabled again). A copy that cannot be read is left out; "status" reports it.
  */
-function declaredDependents(project: Project, name: string): string[] {
+function declaredDependents(project: Project, name: string, enabledOnly = false): string[] {
   const found: string[] = [];
   for (const other of Object.keys(project.lock.bricks).sort()) {
     if (other === name) continue;
+    if (enabledOnly && !isBrickEnabled(project.platform, other)) continue;
     try {
       const m = JSON.parse(readFileSync(join(project.root, BRICKS_DIR, other, "plugin.json"), "utf8")) as Manifest;
       if ((m.dependencies ?? []).some((d) => d.plugin === name)) found.push(`"${other}"`);
@@ -745,7 +747,7 @@ export function removeRefusals(project: Project, name: string): Issue[] {
   if (extenders.length) return [issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })];
 
   const dependents = declaredDependents(project, name);
-  return dependents.length ? [issue("DEPENDENCY_IN_USE", "", { brick: name, consumers: dependents.join(", ") })] : [];
+  return dependents.length ? [issue("DEPENDENCY_IN_USE", "", { brick: name, consumers: dependents.join(", "), action: "remove" })] : [];
 }
 
 export function removeBrick(root: string, name: string): RemoveResult {
@@ -830,6 +832,11 @@ export function setBrickEnabled(root: string, name: string, enabled: boolean): {
       .map(([other]) => `"${other}"`)
       .sort();
     if (extenders.length) throw new PlugbricksError([issue("EXTENDS_IN_USE", "", { brick: name, consumers: extenders.join(", ") })]);
+    // A declared dependency (D21): only an enabled brick can run, so only it blocks a disable. remove keeps the
+    // stricter rule (disabled dependers included).
+    const dependents = declaredDependents(project, name, true);
+    if (dependents.length)
+      throw new PlugbricksError([issue("DEPENDENCY_IN_USE", "", { brick: name, consumers: dependents.join(", "), action: "disable" })]);
   } else {
     const blocked = Object.entries(brick.requires).flatMap(([cap, r]) =>
       r.optional || isBrickEnabled(platform, r.provider) ? [] : [issue("PROVIDER_DISABLED", "", { capability: cap, provider: r.provider })],
