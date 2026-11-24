@@ -60,7 +60,8 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
    written** (D8); a composition error refuses the add. The brick is copied, and its integrity hash
    goes into `platform.lock`.
 2. **`remove <name>`** runs the same checks for the platform without the brick. It is refused while
-   another brick requires what it provides, or extends one of its entities (`EXTENDS_IN_USE`). Its
+   another brick requires what it provides, extends one of its entities (`EXTENDS_IN_USE`), or lists it in its
+   `dependencies` (`DEPENDENCY_IN_USE`, D21). Its
    volumes are kept by default (`retainedVolumes`, D3); its secrets are always kept (D6).
 3. **`disable <name>` / `enable <name>`**: an installed brick is not necessarily enabled (D14).
    `disable` writes `enabled: false` in `platform.json`; the brick stays installed (its copy, lock
@@ -203,8 +204,8 @@ tells the router and the admin where the issuer and the keys are.
 
 A capability is not the only way a brick can need another one. `orders-web` reads its orders through the router,
 so it cannot work without `orders`, and no capability says so. A manifest can list such plugins in
-`dependencies` (D21). The admin shows them with the capabilities and the extended entities; plugbricks does not
-enforce them.
+`dependencies` (D21). The admin shows them with the capabilities and the extended entities, and `remove` refuses a
+brick that another declares (`DEPENDENCY_IN_USE`); `up` and `disable` do not act on them.
 
 ## 6. GraphQL Federation v2 (built)
 

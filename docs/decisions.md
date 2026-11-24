@@ -1389,11 +1389,16 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   (`plugin` named like `extends.plugin`, `description` at most 200 characters, shown next to the link). The
   manifest refuses a plugin that lists itself (`SELF_DEPENDENCY`) or lists the same plugin twice
   (`DUPLICATE_DEPENDENCY`). `examples/orders-web` declares `orders`.
-- **Informational for now.** plugbricks does not install, order, or protect a declared dependency: `add` does not
-  refuse a name that is not installed, `up` does not wait for it, `remove` does not refuse it. A capability in
-  `requires` and an entity in `extends` keep their own, enforced, behaviour. The admin says so under the graph.
-  Whether `remove` should refuse a brick that another declares is left open: it would turn a description into a
-  rule, and a declared name can be missing or misspelled without anything having checked it.
+- **What is enforced:** `remove` (2026-11-24, at the user's request). `remove orders` is refused with
+  `DEPENDENCY_IN_USE` while an installed brick, disabled ones included, lists `orders` in its `dependencies`; it
+  comes after `CAPABILITY_IN_USE` and `EXTENDS_IN_USE`, which keep their precedence (one category is reported
+  at a time). The admin shows the same refusal before a removal (`removeBlockedBy`). A name that matches no
+  installed brick blocks nothing, so a misspelled declaration is harmless. The way out is the one the message
+  gives: remove the brick that declares it first.
+- **What is not:** `add` does not refuse a declared name that is not installed (the panel flags it), `up` does
+  not wait for a declared dependency (only a required capability is waited for), and `disable` does not refuse:
+  disabling `orders` while `orders-web` is enabled is allowed, unlike `EXTENDS_IN_USE`. Whether it should is
+  open; a disabled brick can be enabled again, which `remove` cannot.
 - **The admin:** a click on a brick of the Bricks page opens a panel under the table with two tabs.
   *Dependencies*: the graph of everything the brick needs, transitively (capabilities, extended entities and
   declared links, the optional ones dashed, an arrow labelled with why), the list of those links in words, "needed
@@ -1402,7 +1407,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   what it needs, tags, page, and what would refuse its removal. The server sends each brick's direct links
   (`dependsOn`); the graph, the order and "required by" are computed in the browser, from that list.
 - **An optional capability** with no enabled provider is not a link: nothing is wired, so nothing is needed.
-- **Tests:** the manifest (valid example, two refusals with their codes), the server's `dependsOn` for each of
+- **Tests:** the manifest (valid example, two refusals with their codes), the scenario
+  `remove-declared-dependency` (refused, nothing changed, then removed in the right order; it fails when the
+  check is turned off), the server's `dependsOn` and the refusal it shows for each of
   the five example bricks, with and without Keycloak (and a check that it fails when the manifest's links are not
   read), and the graph functions (layers, order, "required by", a missing brick, a cycle).
 - **Not done:** editing `platform.json` from the panel; a registry of plugin versions (the mockup this came from
