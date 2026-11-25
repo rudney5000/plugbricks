@@ -15,7 +15,7 @@ when the one before it that it depends on is merged.
 | 2   | ~~Community files (`SECURITY.md`, `CONTRIBUTING.md`, issue templates, `CHANGELOG.md`)~~ | 1              | nothing                                       | docs                              |
 | 3   | ~~`add` by name from `bricks/`; the bricks copied into a new project~~ (done, D25)     | 2, step 1      | nothing                                       | code                              |
 | 4   | ~~The dependencies a brick needs, with confirmation~~ (done, D26)                     | 2, step 2      | step 3                                        | code                              |
-| 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
+| 5   | ~~`plugbricks doctor`~~ (done, D31)                                                   | 2, step 6      | nothing                                       | code                              |
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
 | 7   | External subgraph (a decision first)                                                  | 4, item 1      | nothing                                       | decision, then code               |
 | 8   | ~~`create --kind`~~ (D28), ~~a starter~~ (D30), ~~public images of the examples~~ (D29) | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
@@ -86,6 +86,8 @@ In this order:
    named exists. A newcomer, and a person on a managed machine where some rights are missing, learn from it why
    `up` would fail, instead of reading a Docker error. Today the CLI has `init`, `add`, `remove`, `enable`,
    `disable`, `status`, `generate`, `up`, `down` and `admin`, and nothing of the kind.
+   **Done (D31):** also the ports held by another platform of the same name, and the images that `create` wrote the
+   code of and that are not built yet.
 
 Not verified: how the Compose and Kubernetes drivers treat a missing image today (pull policy); that the
 repository's CI token may publish packages (a repository setting).

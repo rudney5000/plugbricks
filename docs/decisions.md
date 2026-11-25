@@ -1972,6 +1972,37 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done here.** The images must be public for a newcomer's `up` (D29, the owner's step). A starter with Keycloak,
   when the admin sign-in is part of a first run.
 
+## D31. `plugbricks doctor`: what `up` needs, checked without changing anything
+
+- **Status:** implemented (2026-11-26). Step 6 of section 2 of `docs/roadmap.md`.
+- **Context:** when `up` fails, the person reads a Docker or kubectl error: a daemon that does not answer, a port
+  already allocated, an image that cannot be pulled, a context that does not exist. On 2026-11-26 a test platform named
+  `shop` shared, without a word, the Compose project, the containers and the volume of an older platform of the same
+  name in another folder, and a `down` of one stopped the other: nothing said so beforehand.
+- **Decision.** `plugbricks doctor [--runtime compose|k8s] [--context <name>] [--kubeconfig <file>] [--dir <path>]`
+  prints one line per check, `ok`, `warning` or `problem`, with a fix under each warning and problem, and exits 1 when
+  there is a problem (a warning alone exits 0). It is read-only: it writes nothing, takes no platform lock (D16), and
+  every call to a tool is a query. Each check has a stable id (`Check.id` in `src/doctor.ts`), for a JSON report later.
+  - **Always:** the Node version against the `engines` of the package; `platform.json` and `platform.lock` read as
+    every command reads them; `.secrets/` restricted to the user, with the read-only check that `up` relies on (D6).
+    Outside a platform it says where to run it, and still checks the tools.
+  - **Docker Compose:** Docker answers (the first line of its error otherwise) and runs Linux containers; the Compose
+    v2 plugin; **no other platform of the same name** has containers on the machine from another folder (the Compose
+    label `com.docker.compose.project.working_dir`); the ports the platform publishes (`router.port` when it serves a
+    subgraph, the `webPort` of each enabled web brick) are free on 127.0.0.1, or held by this platform when it is
+    already up; the images of the enabled bricks: on the machine, or pulled by `up`, and a warning with the
+    `docker build` command for an image of a brick whose code `create` wrote in `services/` (D28) and that is not built.
+  - **Kubernetes:** `kubectl`; the context named, allowed (the protected contexts of D5 need `--allow-context`) and
+    present in the kubeconfig; the cluster answers `/readyz`; a warning for an image built from `services/`, which the
+    cluster must be given (D28).
+  - **Not checked:** volumes left by an older platform of the same name without containers (Compose labels a volume
+    with its project only, not with a folder); whether an image can be pulled (that needs the network); free disk.
+- **Tested.** `test/doctor.test.ts` with a fake docker and kubectl: each answer and its fix, the order of the checks,
+  the checks left out after a failed one, and nothing written; the CLI scenario `doctor` (the output, the exit codes,
+  `--kind` refused). By hand on this machine: outside a platform, a port held by another program, an image of
+  `create` not built (with its build command), and a second platform of the same name running from another folder,
+  found from the first and not from itself. Kubernetes only with the fake: kubectl is not installed here.
+
 ---
 
 ## Already applied (milestone 2)
