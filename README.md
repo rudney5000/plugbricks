@@ -17,7 +17,8 @@ Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka d
 npm create plugbricks mon-saas      # a new project; its README explains every folder
 cd mon-saas
 npx plugbricks add postgres         # bricks/postgres, shipped in a new project: provides "database"
-npx plugbricks add services/orders-api  # a path: requires "database"
+npx plugbricks create inventory --kind api   # bricks/inventory-api and its code in services/inventory-api (D28)
+docker build -t mon-saas/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .   # the command create prints
 npx plugbricks add rabbitmq         # bricks/rabbitmq: provides "queue" (D11)
 npx plugbricks status               # add --json for machine-readable output
 npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
@@ -34,6 +35,12 @@ A name (`postgres`) adds the brick of the project's `bricks/` folder; a new proj
 `nats` there, the bricks whose images are public. Without such a brick, a name still adds the folder of that name
 where you typed the command; when both exist, `add` refuses and asks for a path (`./postgres` or `bricks/postgres`).
 Anything with a `/` is a path (D25).
+
+`create <name> --kind api` writes a new API from a template and adds it: the brick (`plugin.json`, `schema.graphql`)
+in `bricks/<name>-api`, and its code (TypeScript, GraphQL Yoga, `@apollo/subgraph`), its lock file and its `Dockerfile`
+in `services/<name>-api`, outside the brick, which `add` copies whole. `--kind web` writes a web brick and a Node server
+with no dependency. The image is yours to build, from the project folder, with the command `create` prints; the
+manifest names it `<platform>/<name>-api:0.1.0` (D28).
 
 `add` also proposes what the brick needs from `bricks/`: the providers of what it requires and the bricks it declares
 in `dependencies`, and what those need in turn (`add orders-web` proposes `postgres` and `orders-api`). In a terminal it

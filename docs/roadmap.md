@@ -18,7 +18,7 @@ when the one before it that it depends on is merged.
 | 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
 | 7   | External subgraph (a decision first)                                                  | 4, item 1      | nothing                                       | decision, then code               |
-| 8   | `create --kind`, a starter, public images of the examples                             | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
+| 8   | ~~`create --kind`~~ (done, D28), a starter, public images of the examples             | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
 | 9   | `logs` and `exec`, a development loop, service templates in other languages           | 5              | step 8 for the templates                      | code                              |
 | 10  | `export`: leave plugbricks with plain Compose or Kubernetes files                     | 8, item 1      | nothing                                       | code                              |
 | 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
@@ -67,6 +67,8 @@ In this order:
 3. **`plugbricks create <name> --kind api|web`.** Writes a brick (manifest, schema, image recipe) named `<name>-api`
    or `<name>-web` and registers it. The suffixes are a convention of this command, not a rule: `postgres` and
    `keycloak` are neither. At most a soft warning for a brick that serves a subgraph or a web page and has no suffix.
+   **Done (D28):** the brick in `bricks/`, its code in `services/`; no warning for a name without a suffix (it would
+   warn on `keycloak`).
 4. **A starter.** `npm create plugbricks mon-saas --starter demo` creates the project and adds a chosen set of
    bricks without asking (the person chose the starter); it prints what it did.
 5. **Public images for the application examples**, built and published by a second workflow to GitHub Container

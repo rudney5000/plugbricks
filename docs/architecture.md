@@ -53,6 +53,10 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
 
 ## 3. Control plane: from a manifest to running containers (built)
 
+0. **`create <name> --kind api|web`** (D28) writes a brick from the templates of the package: the brick in
+   `bricks/<name>-<kind>`, the code of its service and its image recipe in `services/<name>-<kind>`, then adds the
+   brick as step 1 does. The person builds the image.
+
 1. **`add <name>` or `add <dir>`** finds the brick (a name is `bricks/<name>` of the project, or the folder of that
    name where the command was typed; both at once are refused, D25), validates the manifest against `schemas/plugin-manifest.schema.json`, checks the
    templates (D6), the image pinning rule, the runtime names, then resolves capabilities: a brick that
