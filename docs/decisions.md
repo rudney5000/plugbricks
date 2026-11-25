@@ -458,7 +458,8 @@ end yet.
   were compared on 2026-11-17, on the same cases (valid pair; the same entity field and the same
   value type with incompatible types; an extension of a type nobody defines; an undefined type; a
   `@key` on a missing field; a syntax error):
-  - `@wundergraph/composition` 0.68.1: Apache-2.0, 116 packages in its production closure.
+  - `@wundergraph/composition` (0.68.1 when compared, 0.68.2 pinned today): Apache-2.0, 116 packages in its
+    production closure.
     Steady-state call 1.3 to 3.2 ms. Errors are plain `Error` objects with a message only, no code,
     and the same problem can appear twice.
   - `@apollo/composition` 2.14.4: **Elastic-2.0**, 3 packages under that licence, 73 packages in
@@ -466,8 +467,9 @@ end yet.
     `EXTENSION_WITH_NO_BASE`, ...). Its output is a supergraph schema for Apollo's router, not
     the configuration the Cosmo router reads.
   - the `wgc` binary 0.133.12: 565 packages, 271 MB, 3.3 s per call: rejected as a dependency.
-- **Decision:** `@wundergraph/composition` 0.68.1, exact version, with `@wundergraph/cosmo-shared`
-  0.50.1 (added now, used from step 4b-3).
+- **Decision:** `@wundergraph/composition` 0.68.2, exact version, with `@wundergraph/cosmo-shared`
+  0.50.2 (added now, used from step 4b-3). Raised from 0.68.1 and 0.50.1 on 2026-11-25 to follow
+  `wgc` 0.133.13 (PR #61); the comparison above was made with 0.68.1.
   1. **One chain.** The router reads a `router-config.json` built from the composition result.
      Checking with one composer and configuring with another would let them disagree. The
      configuration built in process from this library was accepted by the router 0.372.0
@@ -530,22 +532,25 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   federation is involved (a subgraph is being added, or the lock already records one): then `add`
   and `remove` refuse with `BRICK_UNREADABLE`, because composing without it would record a wrong
   hash.
-- **Dependency override.** `@wundergraph/composition` 0.68.1 and `@wundergraph/cosmo-shared` 0.50.1
-  depend on `@graphql-tools/utils` 11.x and 8.x, which have two high advisories (prototype
-  pollution in `mergeDeep` and `mergeIncrementalResult`; fixed in 12.0.1). The root `package.json`
-  therefore overrides it to 12.1.0, the version `@graphql-tools/merge` already uses. The composition
-  code only requires `@graphql-tools/merge`. The router configuration built with `cosmo-shared`
-  and the override is byte-identical to the one built before it (checked on 2026-11-17 on the two
-  subgraphs of the spike). The CI audit of production dependencies passes with it and fails
-  without it. Remove the override when the packages move to a fixed version.
+- **Dependency override.** `@wundergraph/composition` 0.68.2 and `@wundergraph/cosmo-shared` 0.50.2
+  both declare `@graphql-tools/utils` `^12.1.0`, so the override is no longer what keeps the fixed
+  version in the tree; it is left in place (it pins 12.1.0, the version the tree resolves anyway)
+  and removed with the next dependency pass. It was added when 0.68.1 and 0.50.1 asked for 11.x
+  and 8.x, which have two high advisories (prototype pollution in `mergeDeep` and
+  `mergeIncrementalResult`; fixed in 12.0.1). The composition code only requires
+  `@graphql-tools/merge`; `federation.ts` uses `printSchemaWithDirectives` from this package
+  directly, hence the direct dependency in `packages/plugbricks/package.json`. The router
+  configuration built with `cosmo-shared` and the override is byte-identical to the one built
+  before it (checked on 2026-11-17 on the two subgraphs of the spike). The CI audit of production
+  dependencies passes with it and fails without it at the old versions.
 - **Risks:**
   - the router configuration (step 4b-3) reuses about 25 lines of `wgc` (`constructRouterSubgraph`
     in its `router compose` command) with `buildRouterConfig` from `cosmo-shared`: these lines are
     not a public API and can change. A CI job comparing our output with `wgc router compose` (version
     pinned) is the planned protection; until it exists, the equality was checked once, by hand, and
     differs only by `featureFlagConfigs`;
-  - the composer and the router are released independently: 0.68.1 and 0.372.0 are known to work
-    together on the cases of the spike, nothing more;
+  - the composer and the router are released independently: 0.68.2 and 0.372.0 are known to work
+    together (the 2026-11-17 spike, then the `wgc` cross-check of PR #61), nothing more;
   - the schema hash depends on the composer's output: a new composer version that prints another
     schema makes `status` report `FEDERATION_CHANGED` until the bricks are added again.
 
@@ -671,7 +676,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Risks:** the router image is large (145 MB) and comes from ghcr.io, which is not pinned by a
   mirror; the playground variable is deprecated; the telemetry switch is a variable that the router could
   rename (the check is a capture, not a test in CI); the composer version appears in the configuration
-  (`compatibilityVersion: 1:0.68.1`), so a new composer changes the text and the hash of the file.
+  (`compatibilityVersion: 1:0.68.2`), so a new composer changes the text and the hash of the file.
 
 ---
 
@@ -1446,7 +1451,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   platform holding a valid token can call any API and any field, and a field that needs more than "valid token"
   has no way to say so.
 - **Verified while writing this** (2026-11-24, on this machine):
-  - **Composition** (local, the pinned `@wundergraph/composition` **0.68.1**): two subgraphs with
+  - **Composition** (local, the pinned `@wundergraph/composition` **0.68.2**): two subgraphs with
     `extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key", "@requiresScopes",
     "@authenticated"])`, `@requiresScopes(scopes: [["orders:read"]])` on a query field and `@authenticated` on a
     mutation compose successfully; the federated AST keeps both directives, and the sha256 of the federated schema
@@ -1530,7 +1535,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
      change.
   6. **Later B: field scopes.** When a field (or a type) needs finer control than "all queries" or "all mutations",
      the brick's `schema.graphql` gains `@authenticated` and/or `@requiresScopes(scopes: [["orders:read"]])`
-     (the v2.5 `@link` import; the composer 0.68.1 passes them, verified). The router documents their enforcement
+     (the v2.5 `@link` import; the composer passes them, verified with 0.68.1). The router documents their enforcement
      (Router 0.60.0+, JWT authentication; the pinned 0.372.0 is above it) and the APIs must enforce the same
      declarations too, because a direct call bypasses the router: B is a router **and** API change, not a
      router-only one. Keycloak supplies the scopes as client scopes, so they appear in the `scope` claim (verified

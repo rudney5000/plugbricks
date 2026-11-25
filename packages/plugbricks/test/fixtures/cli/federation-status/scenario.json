@@ -18,7 +18,7 @@
       "run": [
         "status"
       ],
-      "stdout": "Federation: sales; composed with @wundergraph/composition 0.68.1"
+      "stdout": "Federation: sales; composed with @wundergraph/composition 0.68.2"
     },
     {
       "mutate": {
@@ -55,7 +55,7 @@
             "federation": {
               "composer": {
                 "name": "@wundergraph/composition",
-                "version": "0.68.1"
+                "version": "0.68.2"
               },
               "routerCompatibilityVersion": "1",
               "subgraphs": [
@@ -86,7 +86,7 @@
             "federation": {
               "composer": {
                 "name": "@wundergraph/composition",
-                "version": "0.68.1"
+                "version": "0.68.2"
               },
               "routerCompatibilityVersion": "1",
               "subgraphs": [

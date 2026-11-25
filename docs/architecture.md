@@ -242,7 +242,7 @@ that intent (D8).
 
 ```mermaid
 flowchart LR
-  S1["orders/schema.graphql"] --> F["federateSubgraphs<br/>@wundergraph/composition 0.68.1"]
+  S1["orders/schema.graphql"] --> F["federateSubgraphs<br/>@wundergraph/composition 0.68.2"]
   S2["shipping/schema.graphql"] --> F
   F -->|"error"| X["add refused<br/>COMPOSITION_FAILED"]
   F -->|"ok"| H["sha256 of the federated schema<br/>→ platform.lock federation"]
