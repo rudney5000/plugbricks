@@ -166,7 +166,10 @@ export function portableRelative(from: string, to: string, p: typeof path = path
 export function brickSource(root: string, brickDir: string, brick: string, p: typeof path = path): string {
   const rel = portableRelative(root, brickDir, p);
   if (rel === undefined) {
-    const drive = p.parse(p.resolve(brickDir)).root.replace(/[\\/]+$/, "");
+    // The separators at the end of the root are cut one by one: a regular expression on a library's string is flagged
+    // as slow on long runs of "/" (CodeQL js/polynomial-redos), and a drive root is two or three characters.
+    let drive = p.parse(p.resolve(brickDir)).root;
+    while (drive.endsWith("/") || drive.endsWith("\\")) drive = drive.slice(0, -1);
     fail("BRICK_PATH_NOT_PORTABLE", {
       brick,
       detail: `its folder is on another drive (${drive}) than the platform; copy the brick under the platform folder`,
