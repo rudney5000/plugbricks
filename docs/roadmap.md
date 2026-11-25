@@ -48,7 +48,7 @@ published (if it does not, `npm create plugbricks` without `@next` would fail un
 ## 2. An easy start for a newcomer
 
 The first thing a person does is `npm create plugbricks`, then adds bricks. Today they have no brick to add: the
-archive carries none, and the application examples (`orders`, `shipping`, `orders-web`, `keycloak`,
+archive carries none, and the application examples (`orders-api`, `shipping-api`, `orders-web`, `keycloak`,
 `queue-consumer`) use images `plugbricks-example/*:0.1.0` that only this repository can build.
 
 In this order:
@@ -57,10 +57,10 @@ In this order:
    `create-plugbricks` copies `postgres`, `rabbitmq` and `nats` (the bricks whose images are public: Docker Hub)
    into a new project. No catalogue to host: the folder is the catalogue, and the person's own bricks live there too.
    **Done (D25):** a name is `bricks/<name>`, or the folder of that name here as before; both at once are refused.
-2. **Adding what a brick needs, with confirmation.** `add orders` proposes the providers of what it requires
-   (`postgres` for `database`) and the dependencies its manifest declares (D21: `orders-web` brings `orders`, and
+2. **Adding what a brick needs, with confirmation.** `add orders-api` proposes the providers of what it requires
+   (`postgres` for `database`) and the dependencies its manifest declares (D21: `orders-web` brings `orders-api`, and
    never the other way round). In a terminal it asks. Without one (a CI, a script) it does not wait: it refuses and
-   prints what it would add and the command to run again, `plugbricks add orders --yes`. `--yes` accepts all and lists
+   prints what it would add and the command to run again, `plugbricks add orders-api --yes`. `--yes` accepts all and lists
    each brick added. When several bricks provide the same capability, the person chooses; nothing is picked silently.
    **Done (D26):** the proposals come from `bricks/`; a brick only declared in `dependencies` is left out without a
    terminal, with the usual warning, instead of refusing.
