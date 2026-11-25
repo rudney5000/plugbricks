@@ -369,7 +369,7 @@ spec:
             - name: REALM
               value: plugbricks
             - name: ROLES
-              value: ""
+              value: "orders:read orders:write"
           volumeMounts:
             - name: scripts-oidc
               mountPath: /provision
@@ -390,6 +390,10 @@ spec:
                 secretKeyRef:
                   name: plugbricks-secrets
                   key: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD
+            - name: AUTHORIZATION_MUTATIONS_ROLE
+              value: orders:write
+            - name: AUTHORIZATION_QUERIES_ROLE
+              value: orders:read
             - name: DATABASE_URL
               value: "postgres://orders:$(PB_POSTGRES__ORDERS__CONSUMER_PASSWORD)@postgres-db:5432/orders"
             - name: OIDC_AUDIENCE
@@ -495,7 +499,7 @@ spec:
             - name: CLIENT_SECRET
               value: "$(PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET)"
             - name: GRANTS
-              value: ""
+              value: orders/orders:read
             - name: KEYCLOAK_URL
               value: http://keycloak-app:8080
             - name: REALM
