@@ -1134,4 +1134,47 @@ describe("Kubernetes driver against a real k3d cluster", () => {
     },
     900_000,
   );
+
+  it.skipIf(!ready)(
+    `runs an API written by create once its image is imported into the cluster (D28)${why}`,
+    async () => {
+      const ns = "pbtest-k8s-create";
+      const work = project(ns, []);
+      expect(cli(work, ["init", "--name", ns]).code).toBe(0);
+      const created = cli(work, ["create", "inventory", "--kind", "api"]);
+      expect(created.code, created.err).toBe(0);
+      const image = `${ns}/inventory-api:0.1.0`;
+      // What create prints: build from the project folder, then import into a local cluster (k3d here).
+      expect(created.out).toContain(`docker build -t ${image} -f services/inventory-api/Dockerfile .`);
+      expect(created.out).toContain(`k3d image import ${image} --cluster <name>`);
+      const build = spawnSync("docker", ["build", "--quiet", "-t", image, "-f", "services/inventory-api/Dockerfile", "."], {
+        cwd: work,
+        encoding: "utf8",
+      });
+      expect(build.status, build.stderr).toBe(0);
+      const imported = spawnSync(k3d, ["image", "import", image, "--cluster", target.ok ? target.cluster : ""], { encoding: "utf8" });
+      expect(imported.status, imported.stderr).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const items = await viaRouter(
+        ns,
+        async (port) => (await through(port, "inventoryItems", "{ inventoryItems { id name } }")).body,
+        "{ inventoryItems { id } }",
+      );
+      expect(items).toEqual({
+        data: {
+          inventoryItems: [
+            { id: "1", name: "first" },
+            { id: "2", name: "second" },
+          ],
+        },
+      });
+      console.log(`k8s: ${image} imported with k3d, inventoryItems answered through the router`);
+
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(names(ns, "deployment")).toEqual([]);
+    },
+    900_000,
+  );
 });

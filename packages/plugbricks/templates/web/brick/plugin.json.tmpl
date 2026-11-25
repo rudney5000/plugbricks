@@ -1,0 +1,21 @@
+{
+  "$schema": "{{schema}}",
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "description": "A web brick created by plugbricks create: its pages are published on 127.0.0.1:<webPort> (platform.json). Its code is in services/{{name}}; build its image from the project folder with: docker build -t {{image}} -f services/{{name}}/Dockerfile .",
+  "tags": ["web"],
+  "services": [
+    {
+      "name": "app",
+      "image": "{{image}}",
+      "port": 3000,
+      "healthcheck": {
+        "exec": ["wget", "-qO-", "http://localhost:3000/health"]
+      }
+    }
+  ],
+  "web": {
+    "service": "app",
+    "path": "/"
+  }
+}

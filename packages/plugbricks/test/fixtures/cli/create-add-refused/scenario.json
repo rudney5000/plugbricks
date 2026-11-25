@@ -1,0 +1,14 @@
+{
+  "description": "when add refuses the brick create wrote (here a composition error with an installed subgraph), create removes what it wrote: bricks/ and services/ are left as they were (D28)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "stock"] },
+    {
+      "run": ["create", "inventory", "--kind", "api"],
+      "exit": 1,
+      "codes": ["COMPOSITION_FAILED", "COMPOSITION_FAILED"],
+      "unchanged": true
+    }
+  ],
+  "absent": ["bricks/inventory-api", "services/inventory-api"]
+}

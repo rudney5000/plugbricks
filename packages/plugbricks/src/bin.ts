@@ -27,6 +27,16 @@ function askLine(question: string): string | undefined {
   }
 }
 
+// A reader that stops early (`plugbricks status | head`) closes the pipe: the next write fails with EPIPE, emitted as an
+// error event that would end the process with a stack trace. The reader has what it wanted; stop quietly instead, with
+// the exit code of the command, as other command-line tools do.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (e: NodeJS.ErrnoException) => {
+    if (e.code !== "EPIPE") throw e;
+    process.exit(process.exitCode ?? 0);
+  });
+}
+
 process.exitCode = main(process.argv.slice(2), {
   cwd: process.cwd(),
   stdout: (line) => process.stdout.write(line + "\n"),

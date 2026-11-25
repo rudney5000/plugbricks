@@ -1856,6 +1856,59 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done here:** the screenshots of the README show the old names; they will be taken again with the next change
   of the admin.
 
+## D28. `plugbricks create <name> --kind api|web`: the brick in `bricks/`, its code in `services/`
+
+- **Status:** implemented (2026-11-26). Step 3 of section 2 of `docs/roadmap.md`, the first part of chantier 8 (the
+  starter and the public images come next).
+- **Context:** a person who wants their own API had to write a manifest, a schema, a service and its image recipe by
+  hand, after the examples of the repository. D27 named the example APIs `-api` and `-web`, the names this command
+  gives.
+- **Decision.**
+  - **Names.** `create inventory --kind api` creates `inventory-api`; a name that already ends with the suffix keeps it
+    (`create shop-web --kind web` creates `shop-web`). The full name follows the brick name rule
+    (`BRICK_CREATE_INVALID_NAME` otherwise). The suffixes are this command's convention, not a rule: `add` gives no
+    warning for a brick without one, which would warn on `keycloak`.
+  - **Two folders.** The brick (`plugin.json`, and `schema.graphql` for an API) goes to `bricks/<name>`, where
+    `add <name>` finds it (D25). The code, its lock file and its image recipe go to `services/<name>`, outside the
+    brick: `add` copies a brick's whole folder and refuses a symbolic link, and a service's folder holds
+    `node_modules` once built on the machine (with links in `.bin`). This is the layout of the repository
+    (`examples/` and `apis/`).
+  - **One schema.** The schema the platform composes is the brick's. The image of an API carries a copy taken at build
+    time: its `Dockerfile` is built from the project folder (`docker build -t <image> -f services/<name>/Dockerfile .`,
+    the line `create` prints), and a `Dockerfile.dockerignore` next to it limits the context to the files it needs.
+  - **What is written.** For an API: a federation v2 subgraph in TypeScript (GraphQL Yoga, `@apollo/subgraph`, the
+    versions of `apis/orders-api`), an entity `<Name>Item @key(fields: "id")` and a field `Query.<name>Items`, both
+    named after the brick so that two created APIs compose (a `Query` field in two subgraphs would need
+    `@shareable`), `/health`, a non-root image. For a web brick: a Node server with no dependency that asks the
+    router `{ __typename }` from the server, through `GRAPHQL_URL`. The image is `<platform>/<name>:0.1.0`, to build;
+    no brick requires anything, so with an `oidc` provider the API checks no token (D20) until its author adds it.
+  - **Templates.** In `packages/plugbricks/templates/<kind>/{brick,service}`, shipped in the package. A file with
+    placeholders ends with `.tmpl` (so that no linter or compiler reads it); `package.json` and `package-lock.json`
+    carry none and get the service's name, so that Dependabot keeps the API template's dependencies current (its own
+    entry in `.github/dependabot.yml`).
+  - **Writing nothing on a refusal.** `create` refuses before writing when the brick is installed
+    (`BRICK_NAME_CONFLICT`) or `bricks/<name>` or `services/<name>` exists (`BRICK_CREATE_TARGET_EXISTS`); when the add
+    itself is refused (a composition error with an installed subgraph, say), it removes what it wrote, the parent
+    folders it created included.
+  - **The project template.** `services/orders-api`, a brick with an image that does not exist, is gone from
+    `create-plugbricks`: `services/` now holds the code of the created services (`services/README.md` says so), its
+    README creates a first API, and `.gitignore` ignores `services/*/dist/`.
+- **Tested.** CLI scenarios `create-api` (golden files; the placeholders filled, nothing left in `.tmpl`),
+  `create-web`, `create-two-apis` (they compose), `create-dir`, `create-refusals` and `create-add-refused` (nothing
+  left after a refused add); the packed package creates a brick from the templates it ships (`dist`); end to end on
+  Docker Compose (`e2e-compose`, "bricks written by create"): an API and a web brick created, their images built with
+  the printed commands, `{ inventoryItems }` answered through the router and the page reading the router.
+- **On Kubernetes (2026-11-26).** The cluster pulls the image itself, so it must be where the cluster can get it.
+  The driver sets no `imagePullPolicy`: Kubernetes takes `IfNotPresent` for a pinned tag, so an image imported into a
+  local cluster (`k3d image import`, `kind load docker-image`) is used as it is, as the k3d job does for the example
+  APIs. `create` prints that step after the build command, and `create --image <ref>` names a registry image in the
+  manifest and the build command from the start (`ghcr.io/acme/inventory-api:0.1.0`), with the pinning rule of any
+  manifest checked before anything is written (`IMAGE_FLOATING_TAG`, `IMAGE_NOT_PINNED`). Tested by the CLI scenario
+  `create-image` and on k3d in CI (`e2e-k8s`, "runs an API written by create"): created, built with the printed
+  command, imported with k3d, answered through the router.
+- **Not done here.** Pushing the image to a registry for the person, and the starter and the public images of the
+  examples (steps 4 and 5).
+
 ---
 
 ## Already applied (milestone 2)

@@ -1,0 +1,12 @@
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+
+"An item of {{name}}. Another subgraph can extend it through its key."
+type {{Type}} @key(fields: "id") {
+  id: ID!
+  name: String!
+}
+
+type Query {
+  {{field}}: [{{Type}}!]!
+}

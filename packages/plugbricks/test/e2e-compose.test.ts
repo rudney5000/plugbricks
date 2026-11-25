@@ -1008,3 +1008,61 @@ describe("the queue capability with NATS", () => {
     300_000,
   );
 });
+
+// "plugbricks create" (D28): what it writes builds and runs as it is. An API and a web brick are created, their images
+// built from the project folder with the command create prints, and the platform answers through the router.
+describe("bricks written by create", () => {
+  const name = "pbtest-create";
+  const routerAt = 14107;
+  const pageAt = 14108;
+
+  it.skipIf(!ready)(
+    `builds the images of a created API and web brick, and serves them through the router${why}`,
+    async () => {
+      const work = project(name, []);
+      expect(cli(work, ["init", "--name", name]).code).toBe(0);
+      const builds: string[] = [];
+      for (const [base, kind] of [
+        ["inventory", "api"],
+        ["shop", "web"],
+      ]) {
+        const r = cli(work, ["create", base, "--kind", kind]);
+        expect(r.code, r.err).toBe(0);
+        builds.push(/^ {2}(docker build .*)$/m.exec(r.out)![1]);
+      }
+      // The command create prints, run as it is from the project folder.
+      for (const line of builds) {
+        const [cmd, ...args] = line.split(" ");
+        const b = spawnSync(cmd, args, { cwd: work, encoding: "utf8" });
+        expect(b.status, `${line}\n${b.stderr}`).toBe(0);
+      }
+      routerPort(work, routerAt);
+      const file = join(work, "platform.json");
+      const platform = JSON.parse(readFileSync(file, "utf8"));
+      platform.bricks["shop-web"].webPort = pageAt;
+      writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      await routerReady(routerAt);
+
+      const items = await through(routerAt, "inventoryItems", "{ inventoryItems { id name } }");
+      expect(items.body).toEqual({
+        data: {
+          inventoryItems: [
+            { id: "1", name: "first" },
+            { id: "2", name: "second" },
+          ],
+        },
+      });
+      // The page's server asks the router itself, through GRAPHQL_URL.
+      await until("the page", async () => (await get(pageAt, "/health")) === 200);
+      const html = await (await fetch(`http://127.0.0.1:${pageAt}/`)).text();
+      expect(html).toContain("<title>shop-web</title>");
+      expect(html).toContain("the router answered 200");
+      console.log(`created bricks: inventoryItems through the router, the page of shop-web read the router`);
+
+      expect(cli(work, ["down"]).code).toBe(0);
+    },
+    600_000,
+  );
+});

@@ -1,0 +1,22 @@
+{
+  "description": "create refuses without writing anything (D28): no --kind or an unknown one (usage), --kind on another command, an invalid name, a brick already installed, and a folder already there in bricks/ or services/",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["create", "inventory"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "stderr": "create needs --kind api or web", "unchanged": true },
+    { "run": ["create", "inventory", "--kind", "db"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "stderr": "(got \"db\")", "unchanged": true },
+    { "run": ["status", "--kind", "api"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "unchanged": true },
+    { "run": ["create", "Inventory", "--kind", "api"], "exit": 1, "codes": ["BRICK_CREATE_INVALID_NAME"], "unchanged": true },
+    { "run": ["create", "inventory", "--kind", "api"] },
+    { "run": ["create", "inventory", "--kind", "api"], "exit": 1, "codes": ["BRICK_NAME_CONFLICT"], "unchanged": true },
+    { "mutate": { "writeText": { "file": "services/catalog-api/notes.txt", "text": "mine" } } },
+    {
+      "run": ["create", "catalog", "--kind", "api"],
+      "exit": 1,
+      "codes": ["BRICK_CREATE_TARGET_EXISTS"],
+      "stderr": "cannot create catalog-api: services/catalog-api already exists; nothing was written",
+      "unchanged": true
+    }
+  ],
+  "absent": ["bricks/catalog-api"],
+  "expectRaw": { "services/catalog-api/notes.txt": "mine" }
+}

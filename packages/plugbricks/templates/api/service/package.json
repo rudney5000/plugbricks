@@ -1,0 +1,24 @@
+{
+  "name": "service",
+  "version": "0.1.0",
+  "description": "A GraphQL subgraph created by plugbricks create.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@apollo/subgraph": "2.17.0",
+    "graphql": "17.1.0",
+    "graphql-yoga": "6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  }
+}
