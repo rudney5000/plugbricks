@@ -4,6 +4,24 @@ What is planned after the work in `README.md` ("Roadmap") and the decisions in `
 built yet unless a line says so. Each chantier says why, what is known, and what is **not verified**. Written on
 2026-11-25; an item leaves this file when a decision (D-number) takes it over.
 
+## Order of work
+
+Recommended order, so that any reader (a person or an AI assistant) knows what comes next. A step starts only
+when the one before it that it depends on is merged.
+
+| # | Chantier | Section | Depends on | Who |
+|---|----------|---------|------------|-----|
+| 1 | First publication to npm | 1 | the owner's accounts and checks | the owner |
+| 2 | `add` by name from `bricks/`; the bricks copied into a new project | 2, step 1 | nothing | code |
+| 3 | The dependencies a brick needs, with confirmation | 2, step 2 | step 2 | code |
+| 4 | Documentation site on GitHub Pages | 3 | steps 2 and 3, for its "Getting started" page | code, and the owner enables Pages |
+| 5 | External subgraph (a decision first) | 4, item 1 | nothing | decision, then code |
+| 6 | `create --kind`, a starter, public images of the examples | 2, steps 3 to 5 | steps 2 and 3 | code |
+| 7 | gRPC through Cosmo Connect (a study), a REST adapter example | 4, items 2 and 3 | step 5 | study, then docs |
+| 8 | What was decided earlier and is not done | 5 | nothing | code or docs |
+
+The newcomer's test (`npm create plugbricks`, then `npm install`) resumes after step 1 and step 2.
+
 ## 1. First publication (prepared: D24)
 
 The workflow, the version (0.1.0), the licence (D23) and the notices are in place. What only the owner can do:
@@ -43,7 +61,28 @@ In this order:
 Not verified: how the Compose and Kubernetes drivers treat a missing image today (pull policy); that the
 repository's CI token may publish packages (a repository setting).
 
-## 3. Bringing existing services in
+## 3. A documentation site on GitHub Pages
+
+For a person who comes to use plugbricks: today the documentation is `README.md` and the decision log, written for
+the people who build it, with no path for a newcomer.
+
+- **Tool.** VitePress, the Markdown files of `docs/` as sources (no copy). Deployed by a workflow to GitHub Pages,
+  with actions pinned by commit SHA as in `ci.yml`. The address, without a domain of the owner's, is
+  `https://<owner>.github.io/plugbricks/` and it carries the GitHub account name.
+- **Pages.** Home (the positioning sentence of the README), Getting started, Writing a brick (the manifest), the
+  capabilities (database, queue, tokens), the admin, Kubernetes, Known limits. The decisions (D1 to D24) go in a
+  separate "Decisions" section, not in the first pages.
+- **Rules.** One source per fact: the site does not copy `decisions.md`. The commands of "Getting started" run in CI,
+  as the CLI scenarios do, so that the guide cannot go stale without a red build.
+- **The owner's part.** Enabling Pages in the repository settings with the source "GitHub Actions". Not done
+  without their agreement; the page is public as soon as it is on.
+- **Why after steps 2 and 3.** "Getting started" cannot be true before `npm create plugbricks` and `add postgres`
+  work end to end, and it would be rewritten when they do. The pages that are already true (positioning, the
+  manifest, the limits) can be written first if the owner wants.
+
+Not verified: that the repository's workflow token may deploy to Pages (a repository setting).
+
+## 4. Bringing existing services in
 
 plugbricks can be added to an existing project (checked on 2026-11-25: `init`, `add` and `generate` in a project with
 its own `package.json`, `.gitignore` and git history touched none of its files; `.generated/` and `.secrets/` ignore
@@ -69,7 +108,7 @@ themselves). What it federates today is a **GraphQL service in Federation v2 tha
 
 Not covered: a federation already run by Apollo (Router or Gateway): plugbricks replaces it, it does not join it.
 
-## 4. Decided earlier, not done
+## 5. Decided earlier, not done
 
 - **README screenshot** (`docs/screenshots/admin-dependencies.png`) is out of date: no optional links, no
   Authorization rows.
@@ -78,9 +117,7 @@ Not covered: a federation already run by Apollo (Router or Gateway): plugbricks 
 - **D22 step B**: a rule per field (`@requiresScopes`) and the router enforcing it too. Only if a real field asks for it.
 - **A Dependabot `ignore` rule** for `graphql` and `@graphql-tools/utils`: the composer needs 16 and 12, and Dependabot
   proposes 17 and 13 again (#62 and #65). Note it in D8.
-- **A documentation site** (VitePress on GitHub Pages) for people who use plugbricks, with the decisions as a separate
-  section. After the examples are stable, and after the licence (done).
 - **Kafka**, deferred.
 - **Taking grants back** in Keycloak when a dependency is removed (D22 limit).
 - **The newcomer's test** (`npm create plugbricks`, then `npm install`) resumes when the packages are published; the
-  frictions found so far are the two 404s and the missing bricks (items 1 and 2).
+  frictions found so far are the two 404s and the missing bricks (sections 1 and 2).
