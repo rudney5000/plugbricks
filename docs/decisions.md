@@ -1909,6 +1909,39 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done here.** Pushing the image to a registry for the person, and the starter and the public images of the
   examples (steps 4 and 5).
 
+## D29. The images of the application examples are published to GitHub Container Registry
+
+- **Status:** implemented (2026-11-26); nothing published until it runs on `main`, and each package then made public
+  by the owner. Step 5 of section 2 of `docs/roadmap.md`.
+- **Context:** the application examples (`orders-api`, `shipping-api`, `orders-web`, `keycloak`, `queue-consumer`)
+  named images `plugbricks-example/<name>:0.1.0` that only a clone of this repository could build. A newcomer could
+  add them and never `up` them; the starter (step 4) needs them to run.
+- **Decision.**
+  - **Names.** `ghcr.io/rudney5000/plugbricks/<name>:<version>`, the shape of the Cosmo router's own image
+    (`ghcr.io/wundergraph/cosmo/router`). They carry the owner's name, as the roadmap said.
+  - **One source.** The example manifests name the images. `packages/plugbricks/scripts/example-images.mjs` lists
+    every image of an example under that registry with the folder of `apis/` it is built from (it fails when the
+    folder has no `Dockerfile`); the workflow and the tests use that list, so the name and the version are written in
+    one place.
+  - **A version is never replaced.** On `main`, the workflow skips an image whose tag is already in the registry; a
+    fix (a dependency with an advisory, say) ships as a new version, written in the manifest. What a published
+    `0.1.0` contains never changes under a project that pinned it.
+  - **The workflow** (`.github/workflows/images.yml`): on a push to `main` that touches `apis/`, the examples, the list
+    or the workflow, and by hand, it builds and pushes; on a pull request it builds only, without logging in. It uses
+    the repository's `GITHUB_TOKEN` with `packages: write`, plain `docker` commands (no third-party action), labels
+    the images with their source, revision and licence, writes the digests to the run summary, and warns when an
+    image cannot be pulled anonymously.
+  - **amd64 only** for now: a Mac with Apple silicon runs them through Docker's emulation. arm64 (native runners, then
+    one multi-platform tag) comes with the first person who needs it.
+  - **The tests build them locally** under the same names (`test/helpers/images.ts`): Docker Compose and a k3d cluster
+    use a local image before pulling one, so the tests need neither the registry nor a published version.
+- **The owner's part.** GitHub creates a package private: after the first run on `main`, make each of the five public
+  (the package's settings, Change visibility). The workflow's last step warns until it is done.
+- **Tested.** `test/example-images.test.ts` (the list, the pinning, no example left on `plugbricks-example/`); the
+  build step of the workflow run as it is, in its pull-request mode, on Docker (the five images built, with their
+  labels); the end-to-end tests on Docker Compose with the images under their new names. The push itself runs only on
+  GitHub.
+
 ---
 
 ## Already applied (milestone 2)

@@ -18,7 +18,7 @@ when the one before it that it depends on is merged.
 | 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
 | 7   | External subgraph (a decision first)                                                  | 4, item 1      | nothing                                       | decision, then code               |
-| 8   | ~~`create --kind`~~ (done, D28), a starter, public images of the examples             | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
+| 8   | ~~`create --kind`~~ (D28), a starter, ~~public images of the examples~~ (D29)         | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
 | 9   | `logs` and `exec`, a development loop, service templates in other languages           | 5              | step 8 for the templates                      | code                              |
 | 10  | `export`: leave plugbricks with plain Compose or Kubernetes files                     | 8, item 1      | nothing                                       | code                              |
 | 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
@@ -75,6 +75,8 @@ In this order:
    Registry (`ghcr.io/<owner>/…`), so that `up` works for a newcomer. Docker downloads them at `up`; a cluster
    needs access to `ghcr.io`. They are public, they carry the owner's name, and they must be rebuilt when a
    dependency has an advisory. The starter above needs them.
+   **Done (D29):** `.github/workflows/images.yml`, `ghcr.io/rudney5000/plugbricks/<name>:<version>`, amd64 only; each
+   package is made public once by the owner.
 
 6. **`plugbricks doctor`.** One read-only command that checks what `up` needs and says what to fix: the Node
    version (`engines`), that Docker answers, that the ports of `platform.json` are free, that the `kubectl` context
