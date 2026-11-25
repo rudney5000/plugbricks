@@ -442,6 +442,51 @@ describe("the admin server", () => {
     expect(action.output.join("\n")).toContain('dependency "orders" is not installed; orders-web will not work without it');
   });
 
+  it("tells what each API asks of a token and what its service account holds, with the CLI's own rules (D22)", async () => {
+    const root = join(pkg, ".test-work/admin-authorization");
+    rmSync(root, { recursive: true, force: true });
+    mkdirSync(root, { recursive: true });
+    cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
+    // shipping is the open one here: it requires oidc and serves a subgraph, but declares no roles.
+    const shipping = join(root, "examples/shipping/plugin.json");
+    const manifest = JSON.parse(readFileSync(shipping, "utf8"));
+    delete manifest.authorization;
+    writeFileSync(shipping, JSON.stringify(manifest, null, 2));
+    const rio = { cwd: root, stdout: () => {}, stderr: () => {} };
+    for (const args of [
+      ["init", "--name", "roles-demo"],
+      ["add", "examples/postgres"],
+      ["add", "examples/keycloak"],
+      ["add", "examples/orders"],
+      ["add", "examples/shipping"],
+      ["add", "examples/orders-web"],
+    ]) {
+      expect(main(args, rio), args.join(" ")).toBe(0);
+    }
+    const { base } = await start({ root, ...cliOptions });
+    type View = { state: string; queries: string | null; mutations: string | null; grants: string[] };
+    const authorization = async () => {
+      const view = (await (await fetch(`${base}/api/bricks`)).json()) as { bricks: { name: string; authorization: View }[] };
+      return Object.fromEntries(view.bricks.map((b) => [b.name, b.authorization]));
+    };
+    const none: View = { state: "none", queries: null, mutations: null, grants: [] };
+
+    expect(await authorization()).toEqual({
+      keycloak: none,
+      postgres: none,
+      orders: { state: "roles", queries: "orders:read", mutations: "orders:write", grants: [] },
+      // No block: any valid token may call it, and the admin says so.
+      shipping: { state: "open", queries: null, mutations: null, grants: [] },
+      // A web brick has no API to protect, but its service account is given the roles of what it reads (queries by
+      // default). shipping declares no roles, so nothing is granted on it.
+      "orders-web": { ...none, grants: ["orders/orders:read"] },
+    });
+
+    // Without the provider nothing is wired: no token, no rule, no grant.
+    expect(main(["disable", "keycloak"], rio)).toBe(0);
+    expect(await authorization()).toEqual({ keycloak: none, postgres: none, orders: none, shipping: none, "orders-web": none });
+  });
+
   it("refuses the API without a session when dev mode is off", async () => {
     const { base } = await start({ dev: false });
     expect((await fetch(`${base}/api/session`)).status).toBe(401);

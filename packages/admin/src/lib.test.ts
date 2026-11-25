@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { allTags, dependencyGraph, filterByTag, hostsOf, needsDeploy, reachability, requiredBy, summary, tone } from "./lib.js";
+import {
+  allTags,
+  dependencyGraph,
+  describeAuthorization,
+  filterByTag,
+  hostsOf,
+  needsDeploy,
+  reachability,
+  requiredBy,
+  summary,
+  tone,
+} from "./lib.js";
 import type { AdminBrick, AdminDependency, RouterView } from "./types.js";
 
 const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminBrick => ({
@@ -19,6 +30,7 @@ const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminB
   requires: "",
   removeBlockedBy: [],
   dependsOn: [],
+  authorization: { state: "none", queries: null, mutations: null, grants: [] },
 });
 
 const router = (address: string | null, states: AdminBrick["state"][]): RouterView => ({
@@ -157,5 +169,20 @@ describe("the dependency graph of a brick", () => {
     expect(requiredBy(platform, "orders")).toEqual([{ brick: "orders-web", kind: "declared", label: "reads the orders", optional: false }]);
     expect(requiredBy(platform, "postgres").map((r) => r.brick)).toEqual(["keycloak", "orders"]);
     expect(requiredBy(platform, "orders-web")).toEqual([]);
+  });
+});
+
+describe("describeAuthorization", () => {
+  it("says what an API asks of a token, and that an open one asks nothing more than a valid token", () => {
+    const base = { queries: null, mutations: null, grants: [] };
+    expect(describeAuthorization({ ...base, state: "none" })).toBe("—");
+    expect(describeAuthorization({ ...base, state: "open" })).toBe("open: any valid token may call it");
+    expect(describeAuthorization({ ...base, state: "roles", queries: "orders:read", mutations: "orders:write" })).toBe(
+      "queries: orders:read; mutations: orders:write",
+    );
+    // A class left out stays at any valid token (D20).
+    expect(describeAuthorization({ ...base, state: "roles", mutations: "orders:write" })).toBe(
+      "queries: any valid token; mutations: orders:write",
+    );
   });
 });
