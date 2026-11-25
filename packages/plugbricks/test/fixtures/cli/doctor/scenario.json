@@ -1,0 +1,35 @@
+{
+  "description": "doctor (D31) prints one line per check, with a fix for each problem, exits 0 with no problem and 1 with one, writes nothing, and takes only the options of a runtime",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    {
+      "run": ["doctor"],
+      "fake": [
+        { "match": "docker version", "stdout": "29.8.0 linux\n" },
+        { "match": "docker compose version", "stdout": "5.8.0\n" }
+      ],
+      "stdout": [
+        "plugbricks doctor (Docker Compose)",
+        "  ok       Docker 29.8.0, Linux containers",
+        "  ok       this platform publishes no port",
+        "  ok       1 image on this machine",
+        "no problem: up has what it needs"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": ["doctor"],
+      "fake": [{ "match": "docker version", "status": 1, "stderr": "Cannot connect to the Docker daemon at unix:///var/run/docker.sock\n" }],
+      "exit": 1,
+      "stdout": [
+        "  problem  Docker does not answer: Cannot connect to the Docker daemon at unix:///var/run/docker.sock",
+        "           fix: start Docker",
+        "1 problem, 0 warnings: up would fail; fix the problems above"
+      ],
+      "notStdout": "Docker Compose 5.8.0",
+      "unchanged": true
+    },
+    { "run": ["doctor", "--kind", "api"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "unchanged": true }
+  ]
+}

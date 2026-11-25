@@ -22,6 +22,7 @@ import { platformOidcIssuer } from "./plan.js";
 import { withPlatformLock } from "./lock.js";
 import { needsOf, type Choice } from "./needs.js";
 import { BRICK_KINDS, createBrick, type BrickKind } from "./create.js";
+import { doctor } from "./doctor.js";
 import {
   down,
   generate,
@@ -61,6 +62,7 @@ Commands:
   enable <name>          Deploy an installed brick again (it was disabled)
   disable <name>         Stop deploying an installed brick; its volumes and secrets are kept
   status [--json]        Show installed bricks, capabilities and retained volumes
+  doctor                 Check what up needs (Node, Docker or kubectl, ports, images) and say what to fix; read-only
   status --runtime <name> [--json]
                          Also read what the runtime really runs (read-only): state, reason, restarts
   generate               Write the runtime files to .generated/<runtime>/ and create missing secrets
@@ -71,7 +73,7 @@ Commands:
 
 Options:
   --runtime <name>       compose (Docker Compose, default) or k8s (Kubernetes)
-  --context <name>       With --runtime k8s (up, down, status): the kubectl context to use (required;
+  --context <name>       With --runtime k8s (up, down, status, doctor): the kubectl context to use (required;
                          the current context is never used)
   --kubeconfig <file>    With --context: the kubeconfig file that defines it (default: kubectl's own)
   --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
@@ -194,7 +196,7 @@ export function main(argv: string[], io: Io): number {
     };
     if (values.name !== undefined) optionFor("name", "init");
     if (values.json !== undefined) optionFor("json", "status");
-    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin");
+    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin", "doctor");
     for (const opt of ["port", "dev", "issuer", "client-id", "ui-dir"] as const) {
       if (values[opt] !== undefined) optionFor(opt, "admin");
     }
@@ -208,7 +210,7 @@ export function main(argv: string[], io: Io): number {
     }
     for (const opt of ["context", "kubeconfig", "allow-context"] as const) {
       if (values[opt] === undefined) continue;
-      optionFor(opt, "up", "down", "status", "admin");
+      optionFor(opt, "up", "down", "status", "admin", "doctor");
       if (runtime !== "k8s") throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies with --runtime k8s` });
     }
     if (values["allow-context"] !== undefined && values["allow-context"] !== values.context) {
@@ -347,6 +349,25 @@ export function main(argv: string[], io: Io): number {
           if (values.image === undefined)
             io.stdout("  To name a registry image from the start, create with --image <registry>/<name>:<version>.");
           return 0;
+        }
+        case "doctor": {
+          only(0, "");
+          // Read-only (D31): no lock, nothing written, every external call a query.
+          const checks = doctor(root, runtime, { exec: io.runtime?.exec, k8s });
+          io.stdout(`plugbricks doctor (${runtime === "k8s" ? "Kubernetes" : "Docker Compose"})`);
+          for (const c of checks) {
+            io.stdout(`  ${c.state.padEnd(8)} ${c.detail}`);
+            if (c.fix) io.stdout(`           fix: ${c.fix}`);
+          }
+          const problems = checks.filter((c) => c.state === "problem").length;
+          const warnings = checks.filter((c) => c.state === "warning").length;
+          const count = (n: number, what: string) => `${n} ${what}${n === 1 ? "" : "s"}`;
+          io.stdout(
+            problems
+              ? `${count(problems, "problem")}, ${count(warnings, "warning")}: up would fail; fix the problems above`
+              : `no problem${warnings ? `, ${count(warnings, "warning")}` : ""}: up has what it needs`,
+          );
+          return problems ? 1 : 0;
         }
         case "remove": {
           only(1, "a brick name");
