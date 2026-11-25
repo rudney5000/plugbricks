@@ -68,7 +68,7 @@ export interface BrickManifest {
       inject: Record<string, string>;
     }
   >;
-  requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number }>;
+  requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number; optional?: boolean }>;
 }
 
 // ---------- plan ----------
@@ -300,6 +300,8 @@ function resolveValue(
     "provider.port"?: string;
     "provider.web.origin"?: string;
     "consumer.name"?: string;
+    "consumer.roles"?: string;
+    "consumer.grants"?: string;
     "web.origin"?: string;
   },
   secret: (name: string) => string,
@@ -366,10 +368,11 @@ export function buildPlan(
   const scripts = new Map<string, PlanScripts>();
   const volumes: PlanVolume[] = [];
 
-  for (const [brick, m] of [...manifests].sort(([a], [b]) => a.localeCompare(b))) {
-    const own = (name: string) => useSecret(brickSecretEnv(brick, name), `${brick}/${name}`);
-    // The provider of each requirement. An optional one (D19) records none: it is wired to the brick that
-    // provides the capability now, when that brick is in the plan (installed and enabled), and left out otherwise.
+  /**
+   * The provider of each requirement of a brick. An optional one (D19) records none: it is wired to the brick that
+   * provides the capability now, when that brick is in the plan (installed and enabled), and left out otherwise.
+   */
+  const wiredProviders = (brick: string, m: BrickManifest): Map<string, string> => {
     const providers = new Map<string, string>();
     for (const cap of Object.keys(m.requires ?? {}).sort()) {
       const locked = lock.bricks[brick].requires[cap];
@@ -377,7 +380,18 @@ export function buildPlan(
       if (locked.optional && (provider === undefined || !manifests.has(provider))) continue;
       providers.set(cap, provider!);
     }
+    return providers;
+  };
+
+  for (const [brick, m] of [...manifests].sort(([a], [b]) => a.localeCompare(b))) {
+    const own = (name: string) => useSecret(brickSecretEnv(brick, name), `${brick}/${name}`);
+    const providers = wiredProviders(brick, m);
     const requires = [...providers.keys()];
+    // D22: the roles this brick's API asks of a token, and the roles its own service account must hold. Only with an
+    // oidc provider in the plan: without one there is no token and nothing to enforce.
+    const roles = providers.has("oidc")
+      ? authorizationRoles(brick, m, manifests, (b) => wiredProviders(b, manifests.get(b)!).has("oidc"))
+      : undefined;
     // Variables injected by every required capability; the brick's own env wins on a clash.
     const injected: Record<string, Value> = {};
     for (const cap of requires) {
@@ -390,6 +404,8 @@ export function buildPlan(
         "provider.host": serviceName(provider, p.service),
         "provider.port": String(providerSvc.port),
         "consumer.name": brick,
+        "consumer.roles": roles?.defined.join(" ") ?? "",
+        "consumer.grants": roles?.granted.join(" ") ?? "",
       };
       const providerOwn = brickSecrets(pm);
       const secret = (name: string) =>
@@ -450,6 +466,13 @@ export function buildPlan(
       }
     }
 
+    // The API reads its own rules from its env (D22): the roles a token needs, per operation class. Next to the OIDC_*
+    // variables of the provider, which also name the client the roles belong to (OIDC_CLIENT_ID).
+    if (roles && m.authorization) {
+      if (m.authorization.queries !== undefined) injected[AUTHORIZATION_ENV.queries] = [m.authorization.queries];
+      if (m.authorization.mutations !== undefined) injected[AUTHORIZATION_ENV.mutations] = [m.authorization.mutations];
+    }
+
     for (const s of m.services) {
       const name = serviceName(brick, s.name);
       names.add("service", name, `${brick}/${s.name}`, `service ${s.name} of ${brick}`);
@@ -507,6 +530,34 @@ export function buildPlan(
     volumes: volumes.sort((a, b) => a.name.localeCompare(b.name)),
     secrets: [...secrets].map(([env, key]) => ({ env, key })).sort((a, b) => a.env.localeCompare(b.env)),
   };
+}
+
+/** The variables an API reads its roles from (D22), set from its "authorization" block when the platform has an oidc provider. */
+export const AUTHORIZATION_ENV = { queries: "AUTHORIZATION_QUERIES_ROLE", mutations: "AUTHORIZATION_MUTATIONS_ROLE" } as const;
+
+/**
+ * What the oidc provider's provision task must know about a brick (D22), sorted and without duplicates.
+ * `defined`: the roles of its own "authorization" block, to create on its own client. `granted`: "<brick>/<role>" for the
+ * role of each operation class that it declares to use ("operations" of a dependency, queries by default), when the
+ * dependency is installed, has a block and is itself wired to an oidc provider (its client exists then, or is created).
+ */
+function authorizationRoles(
+  brick: string,
+  m: BrickManifest,
+  manifests: Map<string, BrickManifest>,
+  hasOidc: (brick: string) => boolean,
+): { defined: string[]; granted: string[] } {
+  const defined = new Set(Object.values(m.authorization ?? {}));
+  const granted = new Set<string>();
+  for (const d of m.dependencies ?? []) {
+    const target = manifests.get(d.plugin);
+    if (d.plugin === brick || !target?.authorization || !hasOidc(d.plugin)) continue;
+    for (const op of d.operations ?? MANIFEST_DEFAULTS.dependencyOperations) {
+      const role = target.authorization[op];
+      if (role !== undefined) granted.add(`${d.plugin}/${role}`);
+    }
+  }
+  return { defined: [...defined].sort(), granted: [...granted].sort() };
 }
 
 /** The router of a platform: its configuration from the subgraphs of the installed bricks, and the services it waits for. */

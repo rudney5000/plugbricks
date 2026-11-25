@@ -28,7 +28,12 @@ function lockFor(manifests: BrickManifest[], waits: Record<string, "healthy" | "
       requires: Object.fromEntries(
         Object.entries(m.requires ?? {}).map(([cap, r]) => [
           cap,
-          { provider: capabilities[cap], wait: waits[m.name] ?? r.wait ?? "healthy", timeoutSeconds: r.timeoutSeconds ?? 120 },
+          {
+            // An optional requirement records no provider (D19): the plan resolves it.
+            ...(r.optional ? { optional: true as const } : { provider: capabilities[cap] }),
+            wait: waits[m.name] ?? r.wait ?? "healthy",
+            timeoutSeconds: r.timeoutSeconds ?? 120,
+          },
         ]),
       ),
       volumes: m.services.flatMap((s) =>
@@ -262,5 +267,106 @@ describe("plan", () => {
     const secret = renderK8sSecret(p, values);
     expect(secret).toContain("stringData:\n  PB_POSTGRES__SHOP__CONSUMER_PASSWORD: c\n  PB_POSTGRES__SUPERUSER_PASSWORD: s\n");
     expect(secret).not.toContain("PB_OLD__X");
+  });
+});
+
+describe("authorization roles (D22)", () => {
+  // A provider of oidc that says in its provision env what it is given, and in inject which client the token is for.
+  const idp: BrickManifest = {
+    name: "idp",
+    version: "1.0.0",
+    services: [{ name: "app", image: "ghcr.io/example/idp:1.0.0", port: 8080 }],
+    provides: {
+      oidc: {
+        service: "app",
+        ready: { exec: ["true", "${provider.host}"] },
+        provision: {
+          image: "ghcr.io/example/idp:1.0.0",
+          command: ["/bin/sh", "/provision/x.sh"],
+          scripts: "provision",
+          env: { CLIENT_ID: "${consumer.name}", ROLES: "${consumer.roles}", GRANTS: "${consumer.grants}" },
+        },
+        inject: { OIDC_CLIENT_ID: "${consumer.name}" },
+      },
+    },
+  };
+  const api = (name: string, authorization?: BrickManifest["authorization"]): BrickManifest => ({
+    ...consumer(name),
+    requires: { oidc: { optional: true } },
+    subgraph: { service: "api", schema: "schema.graphql" },
+    ...(authorization ? { authorization } : {}),
+  });
+  const caller = (dependencies: BrickManifest["dependencies"]): BrickManifest => ({
+    ...consumer("web"),
+    requires: { oidc: { optional: true } },
+    dependencies,
+  });
+  const provisionEnv = (p: ReturnType<typeof plan>, brick: string) =>
+    Object.fromEntries(
+      Object.entries(p.requirements.find((r) => r.consumer === brick)!.provision.env).map(([k, v]) => [
+        k,
+        v.map((x) => (typeof x === "string" ? x : "<secret>")).join(""),
+      ]),
+    );
+  const serviceEnv = (p: ReturnType<typeof plan>, name: string) =>
+    Object.fromEntries(Object.entries(p.services.find((s) => s.name === name)!.env).map(([k, v]) => [k, v.join("")]));
+
+  it("gives the API its roles, and its provision task the roles to create on its client", () => {
+    const p = plan([idp, api("orders", { queries: "orders:read", mutations: "orders:write" })]);
+    expect(serviceEnv(p, "orders-api")).toMatchObject({
+      AUTHORIZATION_QUERIES_ROLE: "orders:read",
+      AUTHORIZATION_MUTATIONS_ROLE: "orders:write",
+      OIDC_CLIENT_ID: "orders",
+    });
+    expect(provisionEnv(p, "orders")).toEqual({ CLIENT_ID: "orders", ROLES: "orders:read orders:write", GRANTS: "" });
+  });
+
+  it("injects only the classes the block names, and nothing when it has no block (D20)", () => {
+    const one = plan([idp, api("shipping", { queries: "shipping:read" })]);
+    expect(Object.keys(serviceEnv(one, "shipping-api")).filter((k) => k.startsWith("AUTHORIZATION_"))).toEqual([
+      "AUTHORIZATION_QUERIES_ROLE",
+    ]);
+    const none = plan([idp, api("orders")]);
+    expect(Object.keys(serviceEnv(none, "orders-api")).filter((k) => k.startsWith("AUTHORIZATION_"))).toEqual([]);
+    expect(provisionEnv(none, "orders")).toMatchObject({ ROLES: "", GRANTS: "" });
+  });
+
+  it("changes nothing without an oidc provider: no variable, no task", () => {
+    const p = plan([api("orders", { queries: "orders:read", mutations: "orders:write" })]);
+    expect(Object.keys(serviceEnv(p, "orders-api")).filter((k) => /^(AUTHORIZATION|OIDC)_/.test(k))).toEqual([]);
+    expect(p.requirements).toEqual([]);
+  });
+
+  it("grants a consumer the roles of the classes it says it uses, queries by default", () => {
+    const orders = api("orders", { queries: "orders:read", mutations: "orders:write" });
+    const shipping = api("shipping", { queries: "shipping:read", mutations: "shipping:write" });
+    const grants = (dependencies: BrickManifest["dependencies"]) =>
+      provisionEnv(plan([idp, orders, shipping, caller(dependencies)]), "web").GRANTS;
+    expect(grants([{ plugin: "orders" }])).toBe("orders/orders:read");
+    expect(grants([{ plugin: "orders", operations: ["mutations"] }])).toBe("orders/orders:write");
+    expect(grants([{ plugin: "shipping" }, { plugin: "orders", operations: ["queries", "mutations"] }])).toBe(
+      "orders/orders:read orders/orders:write shipping/shipping:read",
+    );
+    expect(grants(undefined)).toBe("");
+  });
+
+  it("grants nothing for a dependency that is not installed, has no block, or has no oidc client", () => {
+    const orders = api("orders", { queries: "orders:read" });
+    const open = api("open");
+    const noOidc: BrickManifest = { ...consumer("legacy"), requires: undefined, subgraph: { service: "api", schema: "schema.graphql" } };
+    const grants = (...bricks: BrickManifest[]) =>
+      provisionEnv(
+        plan([idp, ...bricks, caller([{ plugin: "orders" }, { plugin: "open" }, { plugin: "legacy" }, { plugin: "gone" }])]),
+        "web",
+      ).GRANTS;
+    expect(grants(orders, open, noOidc)).toBe("orders/orders:read");
+    expect(grants(open, noOidc)).toBe("");
+  });
+
+  it("a brick that lists itself or a role twice gives each role once", () => {
+    const both = api("orders", { queries: "orders:use", mutations: "orders:use" });
+    expect(provisionEnv(plan([idp, both]), "orders").ROLES).toBe("orders:use");
+    const web = caller([{ plugin: "orders", operations: ["queries", "mutations"] }]);
+    expect(provisionEnv(plan([idp, both, web]), "web").GRANTS).toBe("orders/orders:use");
   });
 });
