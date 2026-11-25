@@ -246,6 +246,9 @@ export function main(argv: string[], io: Io): number {
           const enabled = command === "enable";
           const r = setBrickEnabled(root, args[0], enabled);
           io.stdout(`${enabled ? "Enabled" : "Disabled"} ${r.name}`);
+          for (const dep of r.disabledDependencies) {
+            io.stdout(`  dependency "${dep}" is disabled; ${r.name} will not work until it is enabled`);
+          }
           return 0;
         }
         case "admin": {

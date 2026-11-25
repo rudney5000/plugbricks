@@ -1402,8 +1402,12 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   gives: remove the brick that declares it first.
 - **`disable` refuses too** (2026-11-24): disabling `orders` is refused with `DEPENDENCY_IN_USE` while an
   **enabled** brick lists it. A disabled brick does not run, so it does not block; `remove` keeps the stricter
-  rule (disabled dependers included). The message says "cannot disable …; disable them first". `enable` is
-  unchanged.
+  rule (disabled dependers included). The message says "cannot disable …; disable them first".
+- **`enable` warns** (2026-11-25): enabling a brick whose declared dependency (not an optional one) is installed
+  but disabled succeeds and prints `dependency "orders" is disabled; orders-web will not work until it is
+  enabled`, as `add` does for a dependency that is not installed. It does not refuse: the bricks can then be enabled
+  in any order, and the dependency is only needed when `up` runs. `disable` refuses because it would break a brick
+  that runs now; `enable` only starts one that is not running yet. Scenario `enable-declared-dependency-disabled`.
 - **What is not:** `add` warns, but does not refuse: adding a brick whose declared dependency is not installed
   succeeds and prints `dependency "orders" is not installed; orders-web will not work without it` (the panel's
   add action shows the same line, and the dependency graph flags the missing brick). `up` does not wait for a

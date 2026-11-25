@@ -831,14 +831,18 @@ export interface StatusResult {
  * break an enabled consumer: disabling a capability still required, or enabling a consumer whose
  * provider is disabled. The federated schema is recomposed either way.
  */
-export function setBrickEnabled(root: string, name: string, enabled: boolean): { name: string; enabled: boolean } {
+export function setBrickEnabled(
+  root: string,
+  name: string,
+  enabled: boolean,
+): { name: string; enabled: boolean; disabledDependencies: string[] } {
   const project = readProject(root);
   const { lock, platform } = project;
   const brick = installedBrick(lock, name);
   if (!brick) fail("BRICK_NOT_INSTALLED", { name });
   const entry = Object.hasOwn(platform.bricks, name) ? platform.bricks[name] : undefined;
   if (!entry) fail("BRICK_NOT_INSTALLED", { name });
-  if (enabled === isBrickEnabled(platform, name)) return { name, enabled };
+  if (enabled === isBrickEnabled(platform, name)) return { name, enabled, disabledDependencies: [] };
 
   if (!enabled) {
     const inUse = brick.provides.flatMap((cap) => {
@@ -874,7 +878,22 @@ export function setBrickEnabled(root: string, name: string, enabled: boolean): {
   else entry.enabled = false;
   setFederation(lock, checkFederation(project));
   save(project);
-  return { name, enabled };
+  return { name, enabled, disabledDependencies: enabled ? disabledDeclaredDependencies(project, name) : [] };
+}
+
+/**
+ * The declared dependencies (D21) of `name`, except the optional ones, that are installed but disabled, sorted: "enable"
+ * warns about them, as "add" does about the ones that are not installed. It does not refuse, so the bricks can be enabled
+ * in any order. A copy that cannot be read says nothing; "status" reports it.
+ */
+function disabledDeclaredDependencies(project: Project, name: string): string[] {
+  try {
+    const m = JSON.parse(readFileSync(join(project.root, BRICKS_DIR, name, "plugin.json"), "utf8")) as Manifest;
+    const needed = (m.dependencies ?? []).filter((d) => !d.optional).map((d) => d.plugin);
+    return [...new Set(needed)].filter((dep) => Object.hasOwn(project.lock.bricks, dep) && !isBrickEnabled(project.platform, dep)).sort();
+  } catch {
+    return [];
+  }
 }
 
 export function platformStatus(root: string): StatusResult {

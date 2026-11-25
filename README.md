@@ -139,7 +139,7 @@ needs, transitively: the capabilities it requires, the entities it extends, and 
 bricks needed first, in order, and who requires this one. A brick that is needed but not installed is flagged. *Details*
 gathers status, restarts, port, `provides`, `requires`, `extends` and what would refuse its removal. A declared
 dependency protects its target from `remove` (`DEPENDENCY_IN_USE`), here `orders` while `orders-web` is installed,
-and from `disable` while the declaring brick is enabled; `add` warns when the declared brick is not installed;
+and from `disable` while the declaring brick is enabled; `add` warns when the declared brick is not installed, and `enable` when it is disabled;
 `up` waits only for the capabilities a brick requires. A dependency marked `optional` (here `shipping`, which
 `orders-web` can run without) is shown as optional and protects nothing.
 
