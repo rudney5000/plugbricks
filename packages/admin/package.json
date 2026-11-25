@@ -1,6 +1,6 @@
 {
   "name": "plugbricks-admin",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The plugbricks admin: a local React/Vite UI served by `plugbricks admin`.",
   "type": "module",
   "private": true,

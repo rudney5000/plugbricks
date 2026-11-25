@@ -1721,6 +1721,36 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D24. How the packages are published: 0.1.0, from a tag, by the CI, under `next` first
+
+- **Status:** prepared (2026-11-25), nothing published yet. The first publication is the owner's step: see "Before the
+  first publish" below.
+- **Version.** `plugbricks`, `create-plugbricks` and the admin are `0.1.0`: usable, with a CLI, a manifest and a lock
+  that may still change in a minor version (0.x). `create-plugbricks` asks for `plugbricks` at exactly the same version,
+  and the project it creates does the same, so the two packages are published together, `plugbricks` first.
+- **Where from.** `.github/workflows/publish.yml`, on a tag `v<version>`. It refuses a tag that disagrees with the three
+  versions, and a commit that is not on `main`. It builds the admin, runs the test that packs the package as npm would
+  and runs it from the unpacked archive, then publishes with a **provenance** statement (the package is tied to this
+  repository and this commit). A person's machine needs no right and holds no token. `publishConfig.provenance` is meant
+  to make a local `npm publish` fail too, since npm only generates provenance in a supported CI; that was not
+  tested (a `--dry-run` does not exercise it, and succeeds).
+- **Under `next` first.** The workflow always publishes with `--tag next`: `npm install plugbricks@next`. Promoting a
+  version is a hand step, `npm dist-tag add plugbricks@<version> latest`, once the real
+  `npm create plugbricks@next` has been tried. A published version can be removed within 72 hours only, and its name and
+  number are never reused.
+- **Notices.** The admin bundle contains React and what it depends on (MIT): `prepack` writes
+  `dist/admin/THIRD_PARTY_NOTICES.txt` from the installed packages, and the `dist` test requires it, with `LICENSE` and
+  `NOTICE`, in the archive.
+- **Before the first publish (the owner):** an npm account with two-factor authentication; a token stored as the
+  repository secret `NPM_TOKEN` (a granular token that can publish; while the packages do not exist yet it cannot be
+  limited to them, so narrow it after the first publish, or move to npm's trusted publishing once the packages
+  exist); an `npm` environment in the repository settings, with the owner as a required reviewer, so that no tag
+  publishes without an approval; the names checked again; the employment terms checked (D23).
+- **Not decided here:** the example bricks. The archive does not carry them, so a visitor has nothing to `add`
+  (checklist). `create-plugbricks` copying them into a new project is the next step.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

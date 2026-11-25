@@ -48,12 +48,34 @@ describe("published package", () => {
         "dist/index.d.ts",
         "dist/bin.js",
         "dist/admin/ui/index.html",
+        // The licence, and the notices of the third-party code built into the admin UI (D23).
+        "LICENSE",
+        "NOTICE",
+        "dist/admin/THIRD_PARTY_NOTICES.txt",
         "schemas/plugin-manifest.schema.json",
         "schemas/platform.schema.json",
         "schemas/platform-lock.schema.json",
       ]),
     );
     expect(files.filter((f) => /^(src|test|examples)\//.test(f))).toEqual([]);
+  });
+
+  it("names every package built into the admin UI in its third-party notices", () => {
+    const notices = readFileSync(join(unpacked, "dist", "admin", "THIRD_PARTY_NOTICES.txt"), "utf8");
+    for (const name of [
+      "react",
+      "react-dom",
+      "react-router",
+      "react-router-dom",
+      "scheduler",
+      "cookie",
+      "set-cookie-parser",
+      "tailwindcss",
+    ]) {
+      expect(notices, name).toMatch(new RegExp(`^${name} \\d+\\.\\d+\\.\\d+ \\(MIT\\)$`, "m"));
+    }
+    // The licence text itself is there, not only a name.
+    expect(notices).toContain("Permission is hereby granted, free of charge");
   });
 
   it("validates an example manifest from the built code", () => {
