@@ -310,6 +310,10 @@ The container has Node 22 and access to the host's Docker, so `npm test` runs th
 
 Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `package-lock.json` is committed: always install with `npm ci`.
 
+## License
+
+Apache License 2.0: see `LICENSE` and `NOTICE`. The packages are not published yet; the steps are in `docs/pre-publication-checklist.md`, the reasons for the licence in D23 of `docs/decisions.md`.
+
 ## Roadmap
 
 1. **Manifest schema + examples** — done
