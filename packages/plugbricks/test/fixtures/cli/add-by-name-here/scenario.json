@@ -1,0 +1,9 @@
+{
+  "description": "a name with no brick in bricks/ still adds the folder of that name where the command is typed, as before bricks/ existed (D25); the folder name need not be the brick's",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/nats", "to": "bricks/nats" } } },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "pg" } } },
+    { "run": ["add", "pg"], "stdout": "Added postgres 1.0.0" }
+  ]
+}

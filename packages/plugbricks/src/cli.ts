@@ -5,6 +5,8 @@ import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
 import {
   addBrick,
+  brickByName,
+  isBrickName,
   initPlatform,
   PlugbricksError,
   platformStatus,
@@ -43,6 +45,7 @@ const HELP = `Usage: plugbricks <command> [options]
 
 Commands:
   init [--name <name>]   Create platform.json, platform.lock and .platform/bricks/ here
+  add <name>             Install the brick bricks/<name> of this project (or the folder <name> here)
   add <path>             Install the brick at <path> (a directory with a plugin.json)
   remove <name>          Uninstall a brick
   enable <name>          Deploy an installed brick again (it was disabled)
@@ -213,9 +216,12 @@ export function main(argv: string[], io: Io): number {
           return 0;
         }
         case "add": {
-          only(1, "a brick path");
-          // A relative path is relative to where the user typed the command, not to --dir.
-          const r = addBrick(root, resolve(io.cwd, args[0]));
+          only(1, "a brick name or path");
+          // A name is a brick of the project's bricks/ folder, or a folder of that name here (D25); a path is relative
+          // to where the user typed the command, not to --dir.
+          const arg = args[0];
+          const byName = isBrickName(arg) ? brickByName(root, arg, io.cwd) : undefined;
+          const r = byName ? addBrick(root, byName.dir, { byName: byName.byName }) : addBrick(root, resolve(io.cwd, arg));
           if (r.status === "unchanged") io.stdout(`${r.name} ${r.version} is already installed; nothing changed`);
           else io.stdout(`Added ${r.name} ${r.version}`);
           for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);

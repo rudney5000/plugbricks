@@ -1,0 +1,15 @@
+{
+  "description": "a name whose folder in bricks/ holds a brick of another name is refused (BRICK_NAME_MISMATCH, D25); the same folder added by its path works",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/db" } } },
+    {
+      "run": ["add", "db"],
+      "exit": 1,
+      "codes": ["BRICK_NAME_MISMATCH"],
+      "stderr": "bricks/db/plugin.json is the brick \"postgres\", not \"db\"",
+      "unchanged": true
+    },
+    { "run": ["add", "bricks/db"], "stdout": "Added postgres 1.0.0" }
+  ]
+}

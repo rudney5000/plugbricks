@@ -1,0 +1,16 @@
+{
+  "description": "a name that is both a brick of bricks/ and a brick folder here is refused (BRICK_NAME_AMBIGUOUS, D25): nothing is picked silently; a path then says which one",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "postgres" } } },
+    {
+      "run": ["add", "postgres"],
+      "exit": 1,
+      "codes": ["BRICK_NAME_AMBIGUOUS"],
+      "stderr": "both bricks/postgres and the folder \"postgres\" here hold a brick; write ./postgres or bricks/postgres",
+      "unchanged": true
+    },
+    { "run": ["add", "./postgres"], "stdout": "Added postgres 1.0.0" }
+  ]
+}

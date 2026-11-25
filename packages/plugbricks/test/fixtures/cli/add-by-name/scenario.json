@@ -1,0 +1,11 @@
+{
+  "description": "a bare name adds the brick of the project's bricks/ folder (D25); the lock records bricks/<name> as its source, and adding it again by name changes nothing",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
+    { "mutate": { "copyDir": { "from": "examples/orders", "to": "bricks/orders" } } },
+    { "run": ["add", "postgres"], "stdout": "Added postgres 1.0.0" },
+    { "run": ["add", "orders"], "stdout": "Added orders" },
+    { "run": ["add", "postgres"], "unchanged": true, "stdout": "already installed" }
+  ]
+}
