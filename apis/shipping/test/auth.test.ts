@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from "jose";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
-import { tokenCheck, tokenCheckFromEnv, type TokenCheck } from "../src/auth.js";
+import { tokenCheck, tokenCheckFromEnv, type Authorization, type Caller, type TokenCheck } from "../src/auth.js";
 
 // The token check of D20, with keys made here: what passes and everything that must not.
 const ISSUER = "http://127.0.0.1:8080/realms/plugbricks";
@@ -32,6 +32,7 @@ describe("the API's token check (D20)", () => {
       subject: "f2c1-uuid",
       name: "service-account-orders-web",
       client: "orders-web",
+      roles: {},
     });
     // Without preferred_username the name is the subject.
     expect(await check(`Bearer ${await sign({ ...valid, preferred_username: undefined })}`)).toMatchObject({ name: "f2c1-uuid" });
@@ -86,7 +87,7 @@ describe("the API behind a token check (D20)", () => {
   let close = () => {};
   beforeAll(async () => {
     // A check that knows one token only: the server's behaviour, not the check, is under test here.
-    const server = createApp(pool, async (h) => (h === "Bearer good.to.ken" ? { subject: "s", name: "n" } : null));
+    const server = createApp(pool, async (h) => (h === "Bearer good.to.ken" ? { subject: "s", name: "n", roles: {} } : null));
     await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     close = () => server.close();
@@ -111,5 +112,62 @@ describe("the API behind a token check (D20)", () => {
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ data: { __typename: "Query" } });
     expect((await fetch(`${base}/health`)).status).toBe(200);
+  });
+});
+
+describe("the API with roles (D22)", () => {
+  const rules: Authorization = { client: "shipping", queries: "shipping:read", mutations: "shipping:write" };
+  const calls: string[] = [];
+  const pool = {
+    query: async (sql: string) => {
+      calls.push(sql);
+      return { rows: [] };
+    },
+  } as never;
+  const tokens: Record<string, Caller> = {
+    "Bearer reader.to.ken": { subject: "s", name: "reader", roles: { shipping: ["shipping:read"] } },
+    "Bearer none.to.ken": { subject: "s", name: "norole", roles: {} },
+    // The role of another API, with the right name: it is not this API's role.
+    "Bearer orders.to.ken": { subject: "s", name: "orders-only", roles: { orders: ["shipping:read", "shipping:write"] } },
+  };
+  let base = "";
+  let close = () => {};
+  beforeAll(async () => {
+    const server = createApp(pool, async (h) => tokens[h ?? ""] ?? null, rules);
+    await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    close = () => server.close();
+  });
+  afterAll(() => close());
+
+  const ask = async (query: string, token?: string) => {
+    const r = await fetch(`${base}/graphql`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: token } : {}) },
+      body: JSON.stringify({ query }),
+    });
+    return { status: r.status, body: (await r.json()) as { data?: unknown; errors?: { extensions?: { code?: string } }[] } };
+  };
+  const READ = '{ shipment(orderId: "1") { carrier } }';
+  const WRITE = 'mutation { shipOrder(orderId: "1", carrier: "ups") { carrier } }';
+
+  it("answers 401 without a token, 403 FORBIDDEN without the role, and runs nothing for either", async () => {
+    calls.length = 0;
+    expect((await ask(READ)).status).toBe(401);
+    for (const token of ["Bearer none.to.ken", "Bearer orders.to.ken"]) {
+      const read = await ask(READ, token);
+      expect(read.status, token).toBe(403);
+      expect(read.body.errors?.[0].extensions?.code).toBe("FORBIDDEN");
+      expect((await ask(WRITE, token)).status, token).toBe(403);
+    }
+    expect((await ask(WRITE, "Bearer reader.to.ken")).status).toBe(403);
+    expect(calls).toEqual([]);
+  });
+
+  it("lets the reader read and the federation entry point answer", async () => {
+    expect(await ask(READ, "Bearer reader.to.ken")).toEqual({ status: 200, body: { data: { shipment: null } } });
+    const entities = '{ _entities(representations: [{ __typename: "Order", id: "1" }]) { ... on Order { id } } }';
+    expect((await ask(entities, "Bearer none.to.ken")).status).toBe(403);
+    expect((await ask(entities, "Bearer reader.to.ken")).status).toBe(200);
   });
 });
