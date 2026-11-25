@@ -1,0 +1,59 @@
+{
+  "description": "a brick that only declares a dependency bricks/ has is still added without a terminal (D21, D26): the dependency is left out, with the usual warning and the command that would add it too; add --yes then adds it, for the brick already installed",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "mutate": {
+        "copyDir": {
+          "from": "examples/orders",
+          "to": "bricks/orders"
+        }
+      }
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web"
+      ],
+      "stdout": [
+        "orders-web needs:\n  orders (bricks/orders): declared in the dependencies of orders-web",
+        "  not added; \"plugbricks add examples/orders-web --yes\" adds them too",
+        "Added orders-web",
+        "dependency \"orders\" is not installed"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web",
+        "--yes"
+      ],
+      "stdout": [
+        "Added orders 0.1.0 (declared in the dependencies of orders-web)",
+        "orders-web 0.1.0 is already installed; nothing changed"
+      ],
+      "notStdout": "is not installed"
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web"
+      ],
+      "unchanged": true,
+      "stdout": "already installed",
+      "notStdout": "needs:"
+    }
+  ]
+}

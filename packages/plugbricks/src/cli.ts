@@ -20,6 +20,7 @@ import { liveStatusText } from "./live.js";
 import { startAdmin } from "./admin/server.js";
 import { platformOidcIssuer } from "./plan.js";
 import { withPlatformLock } from "./lock.js";
+import { needsOf, type Choice } from "./needs.js";
 import {
   down,
   generate,
@@ -39,6 +40,11 @@ export interface Io {
   stderr: (line: string) => void;
   /** How generate/up/down run tools and create secrets; tests inject fakes. */
   runtime?: Omit<RuntimeDeps, "log">;
+  /**
+   * Asks the person a question and returns the line they typed, or undefined when there is none (end of input).
+   * Given only when someone can answer: a terminal on both ends (bin.ts). Without it, nothing waits for an answer.
+   */
+  ask?: (question: string) => string | undefined;
 }
 
 const HELP = `Usage: plugbricks <command> [options]
@@ -47,6 +53,7 @@ Commands:
   init [--name <name>]   Create platform.json, platform.lock and .platform/bricks/ here
   add <name>             Install the brick bricks/<name> of this project (or the folder <name> here)
   add <path>             Install the brick at <path> (a directory with a plugin.json)
+                         Either way, what it needs from bricks/ is proposed first (--yes: add it without asking)
   remove <name>          Uninstall a brick
   enable <name>          Deploy an installed brick again (it was disabled)
   disable <name>         Stop deploying an installed brick; its volumes and secrets are kept
@@ -66,6 +73,7 @@ Options:
   --kubeconfig <file>    With --context: the kubeconfig file that defines it (default: kubectl's own)
   --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
+  -y, --yes              With add: also add what the brick needs from bricks/, without asking
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
   -v, --version          Show the version
@@ -143,6 +151,7 @@ export function main(argv: string[], io: Io): number {
           kubeconfig: { type: "string" },
           "allow-context": { type: "string" },
           "prune-volumes": { type: "boolean" },
+          yes: { type: "boolean", short: "y" },
           port: { type: "string" },
           dev: { type: "boolean" },
           issuer: { type: "string" },
@@ -183,6 +192,7 @@ export function main(argv: string[], io: Io): number {
       if (values[opt] !== undefined) optionFor(opt, "admin");
     }
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
+    if (values.yes !== undefined) optionFor("yes", "add");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
       throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
@@ -207,6 +217,72 @@ export function main(argv: string[], io: Io): number {
     if (CHANGING_COMMANDS.has(command)) return withPlatformLock(root, [command, ...args].join(" "), () => run(command));
     return run(command);
 
+    /**
+     * Adds first what the brick at `dir` needs from bricks/ (D26), once the person agreed: in a terminal they are
+     * asked, --yes agrees in advance, and otherwise nothing waits. A brick it cannot do without and that was not agreed
+     * refuses the whole add; one it only declares in "dependencies" is left out, with the usual warning.
+     */
+    function addNeeds(arg: string, dir: string): void {
+      const ask = values.yes ? undefined : io.ask;
+      const choose = ask
+        ? (c: Choice) => {
+            for (let tries = 0; tries < 3; tries++) {
+              const a = ask(
+                `Several bricks of bricks/ provide "${c.capability}", which ${c.consumer} requires: ${c.candidates.join(", ")}. Which one? (empty to cancel)`,
+              )?.trim();
+              if (!a) return undefined;
+              if (c.candidates.includes(a)) return a;
+            }
+            return undefined;
+          }
+        : undefined;
+      const plan = needsOf(readProject(root), dir, choose);
+      if (!plan) return;
+      const again = (brick: string, ...extra: string[]) =>
+        ["plugbricks", "add", brick, ...(values.dir !== undefined ? ["--dir", values.dir] : []), ...extra].join(" ");
+      if (plan.open.length) {
+        throw new PlugbricksError(
+          plan.open.map((c) =>
+            issue("CAPABILITY_PROVIDER_CHOICE", "", {
+              capability: c.capability,
+              brick: c.consumer,
+              folder: "bricks/",
+              candidates: c.candidates.join(", "),
+              command: again(c.candidates[0]),
+            }),
+          ),
+        );
+      }
+      io.stdout(`${plan.brick} needs:`);
+      for (const p of plan.add) io.stdout(`  ${p.name} (bricks/${p.name}): ${p.reason}`);
+      const required = plan.add.filter((p) => p.required).map((p) => p.name);
+      const names = plan.add.map((p) => p.name).join(", ");
+      let agreed = values.yes === true;
+      if (!agreed && ask) agreed = /^(y|yes)$/i.test(ask(`Add ${names} too? [y/N]`)?.trim() ?? "");
+      if (!agreed) {
+        if (required.length) {
+          throw new PlugbricksError([
+            ask
+              ? issue("ADD_NOT_CONFIRMED", "", { brick: plan.brick, bricks: required.join(", ") })
+              : issue("ADD_NEEDS_CONFIRMATION", "", {
+                  brick: plan.brick,
+                  bricks: required.join(", "),
+                  folder: "bricks/",
+                  command: again(arg, "--yes"),
+                }),
+          ]);
+        }
+        io.stdout(`  not added; "${again(arg, "--yes")}" adds them too`);
+        return;
+      }
+      for (const p of plan.add) {
+        const r = addBrick(root, p.dir, { byName: p.name });
+        io.stdout(`Added ${r.name} ${r.version} (${p.reason})`);
+        for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);
+        for (const v of r.cancelledDeletions) io.stdout(`  cancelled the pending deletion of volume ${vol(v)}`);
+      }
+    }
+
     function run(command: string): number {
       switch (command) {
         case "init": {
@@ -221,7 +297,9 @@ export function main(argv: string[], io: Io): number {
           // to where the user typed the command, not to --dir.
           const arg = args[0];
           const byName = isBrickName(arg) ? brickByName(root, arg, io.cwd) : undefined;
-          const r = byName ? addBrick(root, byName.dir, { byName: byName.byName }) : addBrick(root, resolve(io.cwd, arg));
+          const dir = byName ? byName.dir : resolve(io.cwd, arg);
+          addNeeds(arg, dir);
+          const r = addBrick(root, dir, { byName: byName?.byName });
           if (r.status === "unchanged") io.stdout(`${r.name} ${r.version} is already installed; nothing changed`);
           else io.stdout(`Added ${r.name} ${r.version}`);
           for (const v of r.reattachedVolumes) io.stdout(`  re-attached retained volume ${vol(v)}`);

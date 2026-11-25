@@ -51,7 +51,13 @@ interface Step {
   fake?: { match: string; status?: number; stdout?: string; stderr?: string; error?: string }[];
   exit?: number;
   codes?: string[];
-  stdout?: string;
+  /** Substring, or substrings, expected in the output. */
+  stdout?: string | string[];
+  /**
+   * What the person types, one line per question, as in a terminal (D26): with it the step gets an `ask`, without it
+   * none (a CI). The questions go to the output, as bin.ts writes them; every answer must be used.
+   */
+  answers?: string[];
   /** Substring that must not appear in the output (e.g. a warning that must be gone). */
   notStdout?: string;
   /** Substring expected in the error output. */
@@ -208,17 +214,28 @@ describe("plugbricks CLI scenarios", () => {
         const f = step.fake?.find((x) => line.includes(x.match));
         return { status: f?.status ?? 0, stdout: f?.stdout ?? "", stderr: f?.stderr ?? "", ...(f?.error ? { error: f.error } : {}) };
       };
+      const answers = step.answers ? [...step.answers] : undefined;
       const code = main(step.run!, {
         cwd: work,
         stdout: (l) => stdout.push(l),
         stderr: (l) => stderr.push(l),
         runtime: { exec, random },
+        ...(answers
+          ? {
+              ask: (q: string) => {
+                const a = answers.shift();
+                stdout.push(`${q} ${a ?? ""}`);
+                return a;
+              },
+            }
+          : {}),
       });
       const detail = `${label}: plugbricks ${step.run!.join(" ")}\nstdout: ${stdout.join("\n")}\nstderr: ${stderr.join("\n")}\nran: ${ran.join("\n")}`;
       expect(code, detail).toBe(step.exit ?? 0);
       const codes = stderr.map((l) => /^error (\w+)/.exec(l)?.[1]).filter(Boolean);
       expect(codes, detail).toEqual(step.codes ?? []);
-      if (step.stdout) expect(stdout.join("\n"), detail).toContain(step.stdout);
+      for (const want of [step.stdout ?? []].flat()) expect(stdout.join("\n"), detail).toContain(want);
+      if (answers) expect(answers, `${detail}\nanswers left unused`).toEqual([]);
       if (step.notStdout) expect(stdout.join("\n"), detail).not.toContain(step.notStdout);
       if (step.stderr) expect(stderr.join("\n"), detail).toContain(step.stderr);
       // "<kubeconfig>" stands for the absolute path of kube.yaml in the scenario's work folder.

@@ -1,0 +1,12 @@
+{
+  "description": "in a terminal, add asks before adding what the brick needs from bricks/ (D26); yes adds them, then the brick",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
+    {
+      "run": ["add", "examples/orders"],
+      "answers": ["y"],
+      "stdout": ["Add postgres too? [y/N] y", "Added postgres 1.0.0 (provides \"database\" to orders)\nAdded orders 0.1.0"]
+    }
+  ]
+}

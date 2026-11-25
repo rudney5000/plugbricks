@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform.schema.json",
+  "bricks": {
+    "orders": {
+      "source": "bricks/orders"
+    },
+    "orders-web": {
+      "source": "bricks/orders-web",
+      "webPort": 8080
+    },
+    "postgres": {
+      "source": "bricks/postgres"
+    }
+  },
+  "name": "demo",
+  "router": {
+    "port": 4000
+  }
+}

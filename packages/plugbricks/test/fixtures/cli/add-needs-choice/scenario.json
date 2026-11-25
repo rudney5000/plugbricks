@@ -1,0 +1,27 @@
+{
+  "description": "when several bricks of bricks/ provide what a brick requires, the person chooses (D26): --yes picks nothing and refuses (CAPABILITY_PROVIDER_CHOICE); in a terminal add asks which one, then asks to add it",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/rabbitmq", "to": "bricks/rabbitmq" } } },
+    { "mutate": { "copyDir": { "from": "examples/nats", "to": "bricks/nats" } } },
+    {
+      "run": ["add", "examples/queue-consumer", "--yes"],
+      "exit": 1,
+      "codes": ["CAPABILITY_PROVIDER_CHOICE"],
+      "stderr": "several bricks of bricks/ provide \"queue\", which queue-consumer requires: nats, rabbitmq; add the one you want first, for example: plugbricks add nats",
+      "unchanged": true
+    },
+    {
+      "run": ["add", "examples/queue-consumer"],
+      "answers": ["kafka", "rabbitmq", "yes"],
+      "stdout": [
+        "Which one? (empty to cancel) kafka",
+        "Which one? (empty to cancel) rabbitmq",
+        "queue-consumer needs:\n  rabbitmq (bricks/rabbitmq): provides \"queue\" to queue-consumer",
+        "Added rabbitmq",
+        "Added queue-consumer"
+      ],
+      "notStdout": "Added nats"
+    }
+  ]
+}
