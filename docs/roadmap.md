@@ -12,7 +12,7 @@ when the one before it that it depends on is merged.
 | #   | Chantier                                                                              | Section        | Depends on                                    | Who                               |
 | --- | ------------------------------------------------------------------------------------- | -------------- | --------------------------------------------- | --------------------------------- |
 | 1   | First publication to npm                                                              | 1              | the owner's accounts and checks               | the owner                         |
-| 2   | Community files (`SECURITY.md`, `CONTRIBUTING.md`, issue templates, `CHANGELOG.md`)   | 1              | nothing                                       | docs                              |
+| 2   | ~~Community files (`SECURITY.md`, `CONTRIBUTING.md`, issue templates, `CHANGELOG.md`)~~ | 1              | nothing                                       | docs                              |
 | 3   | ~~`add` by name from `bricks/`; the bricks copied into a new project~~ (done, D25)     | 2, step 1      | nothing                                       | code                              |
 | 4   | ~~The dependencies a brick needs, with confirmation~~ (done, D26)                     | 2, step 2      | step 3                                        | code                              |
 | 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
@@ -36,7 +36,9 @@ an npm account with two-factor authentication, the `NPM_TOKEN` secret, an `npm` 
 reviewer, a last check of the package names, and a check of the employment terms. Then a `v0.1.0` tag publishes
 under the `next` dist-tag. See `docs/pre-publication-checklist.md`.
 
-**Also before the first tag: the files a public repository is expected to have.** None exists today (checked on
+**Also before the first tag: the files a public repository is expected to have.** Done on 2026-11-26: `SECURITY.md`,
+`CONTRIBUTING.md`, `CHANGELOG.md`, the issue forms and the pull request template; no code of conduct yet (it needs a
+contact the owner chooses), and private vulnerability reporting is the owner's to enable. None exists today (checked on
 2026-11-25: no `SECURITY.md`, `CONTRIBUTING.md`, code of conduct, `CHANGELOG.md` or issue templates; `.github/` holds
 `dependabot.yml` and the workflows only). The first matters most: plugbricks generates passwords and runs
 containers, so a person who finds a flaw needs a private way to report it (GitHub's private vulnerability reporting

@@ -1,0 +1,60 @@
+# Changelog
+
+What changes from one published version of `plugbricks` and `create-plugbricks` to the next. Both packages are
+published together, at the same version. The reasons behind each change are in
+[`docs/decisions.md`](docs/decisions.md) (the `D` numbers below).
+
+While the version is 0.x, a minor version may change the manifest, the CLI or the lock (D24): this file says when.
+
+## 0.1.0 (not published yet)
+
+The first version. It will be published under the `next` dist-tag: `npm create plugbricks@next <name>`.
+
+### A project
+
+- `npm create plugbricks <name>` creates a project: `platform.json`, `platform.lock`, the bricks `postgres`,
+  `rabbitmq` and `nats` in `bricks/`, a README that explains every folder (D25).
+- `npm create plugbricks <name> -- --starter demo` creates the example shop, ready to `up`: PostgreSQL, the
+  `orders-api` and `shipping-api` subgraphs behind the router, and the `orders-web` page (D30).
+
+### Bricks
+
+- A brick is a folder with a `plugin.json`, validated against
+  [`plugin-manifest.schema.json`](packages/plugbricks/schemas/plugin-manifest.schema.json): its services, the
+  capabilities it provides and requires (optionally, D19), its volumes and what happens to them (D3), a GraphQL
+  subgraph, web pages (D17), the bricks it depends on (D21), the roles of its operations (D22). Images are pinned to
+  a version or a digest.
+- `add` installs a brick by name from `bricks/` or by path (D25), and proposes what it needs, asking before it adds
+  anything; `--yes` for a script (D26). `remove`, `enable` and `disable` refuse what would break another brick
+  (D14, D21).
+- `create <name> --kind api|web` writes a new GraphQL subgraph or web brick, with its code and its image recipe in
+  `services/` (D28).
+
+### Running a platform
+
+- `generate`, `up` and `down` on Docker Compose and on Kubernetes, from files plugbricks writes itself (D5), with
+  generated secrets kept in `.secrets/` and restricted to the user (D6). `up --prune-volumes` deletes only the volumes
+  listed for deletion (D3).
+- The Cosmo router in front of the subgraphs, whose composition is checked when a brick is added (D8, D9); on Docker
+  Compose it is published on the loopback address only, and it accepts browser calls only from the platform's own
+  pages (D17).
+- Capabilities provided by the example bricks: `database` (PostgreSQL), `queue` (RabbitMQ, NATS: D11 to D13),
+  `oidc` (Keycloak: D18, D19).
+- With an `oidc` provider: the router requires a token, the APIs check it again themselves, and each operation
+  needs its role (D19, D20, D22).
+- `status`, and `status --runtime` for what the runtime really runs, read-only (D10). One changing command at a
+  time per platform (D16).
+
+### The admin
+
+- `plugbricks admin`: a local web UI with OIDC sign-in, the bricks, their dependencies, the router and an audit log,
+  and the actions `add`, `enable`, `disable`, `remove` and `up` run through the CLI (D15, D21).
+
+### Example bricks
+
+- `postgres`, `rabbitmq`, `nats`, `keycloak`, `orders-api`, `shipping-api`, `orders-web`, `queue-consumer`; the images
+  of the application examples are published as `ghcr.io/rudney5000/plugbricks/<name>:0.1.0` (amd64, D29).
+
+### Licence
+
+- Apache-2.0 (D23).

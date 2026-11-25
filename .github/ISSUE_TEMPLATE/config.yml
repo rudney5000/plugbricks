@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability
+    url: https://github.com/rudney5000/plugbricks/security/advisories/new
+    about: Privately, so that it can be fixed before it is public (see SECURITY.md).

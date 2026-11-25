@@ -296,6 +296,9 @@ Tests write only inside `.test-work/` folders of each package (gitignored).
 
 ## Develop
 
+How to contribute, and what a change needs: [CONTRIBUTING.md](CONTRIBUTING.md). A vulnerability is reported
+privately: [SECURITY.md](SECURITY.md). What each version changes: [CHANGELOG.md](CHANGELOG.md).
+
 ```bash
 npm ci
 npm run hooks:install   # once per clone: turns on the git hooks of .githooks/
