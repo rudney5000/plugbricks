@@ -1,6 +1,13 @@
 # plugbricks
 
-Add plugins and infrastructure bricks (PostgreSQL, a message queue, …) to a federated GraphQL project, on Docker Compose or Kubernetes, from a single `platform.json`.
+plugbricks is a command-line tool that assembles a federated GraphQL platform from bricks (APIs, a database, a message queue, …), each described by a manifest, and runs it on Docker Compose or Kubernetes from a single `platform.json`.
+
+## What plugbricks is, and what it is not
+
+- **A tool, not a library.** Your code never imports plugbricks. A brick is a container image and a manifest (`plugin.json`); plugbricks starts it and hands it what it needs as environment variables (`DATABASE_URL`, `OIDC_*`, `AUTHORIZATION_*`). The example APIs in `apis/` do not depend on it.
+- **Not an application framework.** It does not run your code or decide how you write it: it does not care what is inside the image, as long as the brick honours its manifest and reads the variables it was promised.
+- **It does set conventions.** The project layout (`platform.json`, `platform.lock`, the bricks), the manifest, and the variables injected into a brick are the contract between a brick and the platform. This contract is what a brick author depends on, more than the command line. While the version is 0.x it can change in a minor version.
+- **A small programmatic API exists** (the `plugbricks` package exports its manifest validation, composition and planning), used by the admin and by `create-plugbricks`. It is not the way to use the tool.
 
 Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka deferred), step 6 done (the admin)** — the `orders` API and the `shipping` API that extends it (GraphQL subgraphs, each with its own database), composition checked when a brick is added, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17; the router and shipping scenario runs there since 2026-11-18). The Cosmo router is rendered for both runtimes (its configuration, its pinned image, loopback-only on Compose, a ClusterIP Service on Kubernetes). On Docker Compose and on Kubernetes, real requests through it reach the real `orders` and `shipping` APIs and their databases (end-to-end tests). `plugbricks status --runtime` reports what the runtime really runs, read-only, with a versioned JSON report (D10).
 
