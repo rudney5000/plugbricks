@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkImagePin } from "./image.js";
 import { MANIFEST_SCHEMA_ID } from "./manifest.js";
 import { addBrick, BRICK_FOLDER, isBrickName, PlugbricksError, readProject, type AddResult } from "./platform.js";
 import { issue } from "./issues.js";
@@ -20,7 +21,7 @@ const TEMPLATES = fileURLToPath(new URL("../templates/", import.meta.url));
 export interface CreateResult {
   name: string;
   kind: BrickKind;
-  /** The image its manifest names: `<platform>/<name>:0.1.0`, built by the person. */
+  /** The image its manifest names: `<platform>/<name>:0.1.0` by default, or the one given with --image. */
   image: string;
   /** Relative to the platform root, with "/". */
   brickDir: string;
@@ -73,7 +74,7 @@ export function createdName(base: string, kind: BrickKind): string {
  * Writes bricks/<name> and services/<name> from the template of `kind`, then adds the brick. Writes nothing when it
  * refuses; when the add itself is refused, removes what it wrote, so that nothing is left half done.
  */
-export function createBrick(root: string, base: string, kind: BrickKind): CreateResult {
+export function createBrick(root: string, base: string, kind: BrickKind, options: { image?: string } = {}): CreateResult {
   const project = readProject(root);
   const name = createdName(base, kind);
   if (!isBrickName(base) || !isBrickName(name)) {
@@ -91,8 +92,16 @@ export function createBrick(root: string, base: string, kind: BrickKind): Create
     );
   }
 
+  // --image names the image where a cluster can pull it, a registry (D28); the same pinning rule as any manifest.
+  const image = options.image ?? `${project.platform.name}/${name}:0.1.0`;
+  const pinned = checkImagePin(image);
+  if (!pinned.ok) {
+    const params: Record<string, string> = { image };
+    if (pinned.code === "IMAGE_INVALID") params.reason = pinned.reason;
+    if (pinned.code === "IMAGE_FLOATING_TAG") params.tag = pinned.tag;
+    throw new PlugbricksError([issue(pinned.code, "", params)]);
+  }
   const stem = name.slice(0, -`-${kind}`.length) || name;
-  const image = `${project.platform.name}/${name}:0.1.0`;
   const values = {
     name,
     image,

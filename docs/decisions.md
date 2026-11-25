@@ -1898,8 +1898,16 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   left after a refused add); the packed package creates a brick from the templates it ships (`dist`); end to end on
   Docker Compose (`e2e-compose`, "bricks written by create"): an API and a web brick created, their images built with
   the printed commands, `{ inventoryItems }` answered through the router and the page reading the router.
-- **Not done here.** Images for Kubernetes: `up --runtime k8s` needs the image where the cluster can pull it (a
-  registry, or `k3d image import`); the starter and the public images of the examples (steps 4 and 5).
+- **On Kubernetes (2026-11-26).** The cluster pulls the image itself, so it must be where the cluster can get it.
+  The driver sets no `imagePullPolicy`: Kubernetes takes `IfNotPresent` for a pinned tag, so an image imported into a
+  local cluster (`k3d image import`, `kind load docker-image`) is used as it is, as the k3d job does for the example
+  APIs. `create` prints that step after the build command, and `create --image <ref>` names a registry image in the
+  manifest and the build command from the start (`ghcr.io/acme/inventory-api:0.1.0`), with the pinning rule of any
+  manifest checked before anything is written (`IMAGE_FLOATING_TAG`, `IMAGE_NOT_PINNED`). Tested by the CLI scenario
+  `create-image` and on k3d in CI (`e2e-k8s`, "runs an API written by create"): created, built with the printed
+  command, imported with k3d, answered through the router.
+- **Not done here.** Pushing the image to a registry for the person, and the starter and the public images of the
+  examples (steps 4 and 5).
 
 ---
 
