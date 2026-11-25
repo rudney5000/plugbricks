@@ -56,8 +56,9 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
 1. **`add <name>` or `add <dir>`** finds the brick (a name is `bricks/<name>` of the project, or the folder of that
    name where the command was typed; both at once are refused, D25), validates the manifest against `schemas/plugin-manifest.schema.json`, checks the
    templates (D6), the image pinning rule, the runtime names, then resolves capabilities: a brick that
-   requires `database` is refused while no installed brick provides it (the provider is never added
-   automatically). If the platform would serve subgraphs, they are **composed before anything is
+   requires `database` is refused while no installed brick provides it. A provider is never added
+   without the person's agreement: `add` proposes the bricks of `bricks/` that meet what the brick requires or
+   declares, asks in a terminal, adds them with `--yes`, and otherwise refuses and says what it would add (D26). If the platform would serve subgraphs, they are **composed before anything is
    written** (D8); a composition error refuses the add. The brick is copied, and its integrity hash
    goes into `platform.lock`.
 2. **`remove <name>`** runs the same checks for the platform without the brick. It is refused while

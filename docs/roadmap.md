@@ -14,7 +14,7 @@ when the one before it that it depends on is merged.
 | 1   | First publication to npm                                                              | 1              | the owner's accounts and checks               | the owner                         |
 | 2   | Community files (`SECURITY.md`, `CONTRIBUTING.md`, issue templates, `CHANGELOG.md`)   | 1              | nothing                                       | docs                              |
 | 3   | ~~`add` by name from `bricks/`; the bricks copied into a new project~~ (done, D25)     | 2, step 1      | nothing                                       | code                              |
-| 4   | The dependencies a brick needs, with confirmation                                     | 2, step 2      | step 3                                        | code                              |
+| 4   | ~~The dependencies a brick needs, with confirmation~~ (done, D26)                     | 2, step 2      | step 3                                        | code                              |
 | 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
 | 7   | External subgraph (a decision first)                                                  | 4, item 1      | nothing                                       | decision, then code               |
@@ -62,6 +62,8 @@ In this order:
    never the other way round). In a terminal it asks. Without one (a CI, a script) it does not wait: it refuses and
    prints what it would add and the command to run again, `plugbricks add orders --yes`. `--yes` accepts all and lists
    each brick added. When several bricks provide the same capability, the person chooses; nothing is picked silently.
+   **Done (D26):** the proposals come from `bricks/`; a brick only declared in `dependencies` is left out without a
+   terminal, with the usual warning, instead of refusing.
 3. **`plugbricks create <name> --kind api|web`.** Writes a brick (manifest, schema, image recipe) named `<name>-api`
    or `<name>-web` and registers it. The suffixes are a convention of this command, not a rule: `postgres` and
    `keycloak` are neither. At most a soft warning for a brick that serves a subgraph or a web page and has no suffix.

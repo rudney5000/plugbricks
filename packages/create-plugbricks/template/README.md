@@ -35,6 +35,9 @@ npx plugbricks add services/orders      # requires "database": now satisfied
 npx plugbricks status
 ```
 
+`add services/orders` alone also works: it sees that `bricks/postgres` provides the `database`
+it needs and asks before adding it (`--yes` adds it without asking, for a script).
+
 `services/orders` is an example to start from: its image, `ghcr.io/example/orders-app`,
 does not exist, so replace it with your own before `up`. For a brick folder next to you,
 write it as a path: `npx plugbricks add ./my-brick`.
