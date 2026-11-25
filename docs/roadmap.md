@@ -13,7 +13,7 @@ when the one before it that it depends on is merged.
 | --- | ------------------------------------------------------------------------------------- | -------------- | --------------------------------------------- | --------------------------------- |
 | 1   | First publication to npm                                                              | 1              | the owner's accounts and checks               | the owner                         |
 | 2   | Community files (`SECURITY.md`, `CONTRIBUTING.md`, issue templates, `CHANGELOG.md`)   | 1              | nothing                                       | docs                              |
-| 3   | `add` by name from `bricks/`; the bricks copied into a new project                    | 2, step 1      | nothing                                       | code                              |
+| 3   | ~~`add` by name from `bricks/`; the bricks copied into a new project~~ (done, D25)     | 2, step 1      | nothing                                       | code                              |
 | 4   | The dependencies a brick needs, with confirmation                                     | 2, step 2      | step 3                                        | code                              |
 | 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
@@ -56,6 +56,7 @@ In this order:
 1. **`add` by name, from the project's `bricks/` folder.** `plugbricks add postgres` looks for `bricks/postgres`;
    `create-plugbricks` copies `postgres`, `rabbitmq` and `nats` (the bricks whose images are public: Docker Hub)
    into a new project. No catalogue to host: the folder is the catalogue, and the person's own bricks live there too.
+   **Done (D25):** a name is `bricks/<name>`, or the folder of that name here as before; both at once are refused.
 2. **Adding what a brick needs, with confirmation.** `add orders` proposes the providers of what it requires
    (`postgres` for `database`) and the dependencies its manifest declares (D21: `orders-web` brings `orders`, and
    never the other way round). In a terminal it asks. Without one (a CI, a script) it does not wait: it refuses and

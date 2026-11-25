@@ -16,9 +16,9 @@ Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka d
 ```bash
 npm create plugbricks mon-saas      # a new project; its README explains every folder
 cd mon-saas
-npx plugbricks add path/to/postgres # a brick that provides "database"
-npx plugbricks add services/orders  # requires "database"
-npx plugbricks add path/to/rabbitmq # a brick that provides "queue" (D11)
+npx plugbricks add postgres         # bricks/postgres, shipped in a new project: provides "database"
+npx plugbricks add services/orders  # a path: requires "database"
+npx plugbricks add rabbitmq         # bricks/rabbitmq: provides "queue" (D11)
 npx plugbricks status               # add --json for machine-readable output
 npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
 npx plugbricks up                    # Docker Compose
@@ -29,6 +29,11 @@ npx plugbricks disable shipping      # installed but no longer deployed; volumes
 npx plugbricks enable shipping       # deploy it again
 npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendingDeletion
 ```
+
+A name (`postgres`) adds the brick of the project's `bricks/` folder; a new project has `postgres`, `rabbitmq` and
+`nats` there, the bricks whose images are public. Without such a brick, a name still adds the folder of that name
+where you typed the command; when both exist, `add` refuses and asks for a path (`./postgres` or `bricks/postgres`).
+Anything with a `/` is a path (D25).
 
 `plugbricks` manages three things in a project:
 
@@ -203,7 +208,7 @@ With the shipping container stopped, the same page:
 (`docker build -t plugbricks-example/keycloak:0.1.0 apis/keycloak`), then:
 
 ```bash
-npx plugbricks add path/to/postgres
+npx plugbricks add postgres
 npx plugbricks add path/to/keycloak    # its console: http://127.0.0.1:<webPort>/admin/
 npx plugbricks up                      # returns once the realm answers (about 2 minutes the first time)
 ```
@@ -226,7 +231,7 @@ the admin must run on port 4100, the redirect URI of the realm's client (D18).
 `examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:
 
 ```bash
-npx plugbricks add path/to/rabbitmq   # provides "queue"
+npx plugbricks add rabbitmq           # provides "queue"
 npx plugbricks add services/orders    # requires "queue": receives AMQP_URL
 ```
 
