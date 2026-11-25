@@ -71,11 +71,16 @@ create_client() {
 JSON
 }
 
-# Makes sure a client role exists on the client whose internal id is $1.
+# Makes sure a client role exists on the client whose internal id is $1. The owner of the client and a consumer that is
+# granted the role can both create it at the same time: a creation that fails is fine when the role exists afterwards.
 ensure_role() {
   if ! "$kcadm" get "clients/$1/roles/$2" -r "$REALM" "${config[@]}" >/dev/null 2>&1; then
-    "$kcadm" create "clients/$1/roles" -r "$REALM" -s "name=$2" "${config[@]}" >/dev/null
-    echo "create-client: created role $2"
+    if "$kcadm" create "clients/$1/roles" -r "$REALM" -s "name=$2" "${config[@]}" >/dev/null; then
+      echo "create-client: created role $2"
+    elif ! "$kcadm" get "clients/$1/roles/$2" -r "$REALM" "${config[@]}" >/dev/null 2>&1; then
+      echo "create-client: could not create role $2" >&2
+      exit 1
+    fi
   fi
 }
 
