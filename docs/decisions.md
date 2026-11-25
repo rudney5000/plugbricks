@@ -543,6 +543,10 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   configuration built with `cosmo-shared` and the override is byte-identical to the one built
   before it (checked on 2026-11-17 on the two subgraphs of the spike). The CI audit of production
   dependencies passes with it and fails without it at the old versions.
+- **Majors held back (2026-11-25).** The composer asks for `graphql` `^16.9` and `@graphql-tools/utils` `^12.1`, so
+  the root packages stay on graphql 16 and utils 12 (the example APIs, standalone, are on graphql 17). Dependabot
+  proposed the next majors twice (#62, #65); `.github/dependabot.yml` now ignores the major updates of both for the
+  root directory, and still proposes their patches and minors. The rule goes when the composer accepts the new majors.
 - **Risks:**
   - the router configuration (step 4b-3) reuses about 25 lines of `wgc` (`constructRouterSubgraph`
     in its `router compose` command) with `buildRouterConfig` from `cosmo-shared`: these lines are
@@ -1822,8 +1826,9 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `add-needs-choice`, with a step field `answers` for what the person types. By hand in a pseudo-terminal (`script`):
   the choice between `nats` and `rabbitmq`, then the confirmation, then the order of the adds.
 - **Not done here.** The admin cannot answer: an add from the admin that needs another brick is refused with the
-  command to run. The `$schema` of the bricks copied into a new project (D25) is the relative path of the
-  repository, which an editor cannot resolve there.
+  command to run. The `$schema` of the bricks copied into a new project (D25) was the relative path of the
+  repository, which an editor cannot resolve there; since 2026-11-25 the copies carry the published URL
+  (`MANIFEST_SCHEMA_ID`), and the test that compares them with the examples ignores that one line.
 
 ## D27. The example APIs are named `orders-api` and `shipping-api`, like `orders-web`
 
