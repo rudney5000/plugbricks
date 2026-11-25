@@ -45,6 +45,13 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 - `status`, and `status --runtime` for what the runtime really runs, read-only (D10). One changing command at a
   time per platform (D16).
 
+### When something goes wrong
+
+- `doctor` checks what `up` needs and says what to fix, without changing anything: Node, Docker and Compose or
+  kubectl and the cluster, the ports, another platform of the same name, the images to build (D31).
+- `logs <brick>` and `exec <brick> -- <command>` reach a brick's service, or the router, on both runtimes, without
+  looking for its Docker or Kubernetes name (D32).
+
 ### The admin
 
 - `plugbricks admin`: a local web UI with OIDC sign-in, the bricks, their dependencies, the router and an audit log,

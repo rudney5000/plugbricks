@@ -214,12 +214,14 @@ describe("plugbricks CLI scenarios", () => {
         const f = step.fake?.find((x) => line.includes(x.match));
         return { status: f?.status ?? 0, stdout: f?.stdout ?? "", stderr: f?.stderr ?? "", ...(f?.error ? { error: f.error } : {}) };
       };
+      // logs and exec (D32) attach a command to the terminal: recorded like the others, its status from "fake".
+      const attach = (cmd: string, args: string[]) => exec(cmd, args, { cwd: work }).status ?? 1;
       const answers = step.answers ? [...step.answers] : undefined;
       const code = main(step.run!, {
         cwd: work,
         stdout: (l) => stdout.push(l),
         stderr: (l) => stderr.push(l),
-        runtime: { exec, random },
+        runtime: { exec, random, attach },
         ...(answers
           ? {
               ask: (q: string) => {
@@ -240,9 +242,9 @@ describe("plugbricks CLI scenarios", () => {
       if (step.stderr) expect(stderr.join("\n"), detail).toContain(step.stderr);
       // "<kubeconfig>" stands for the absolute path of kube.yaml in the scenario's work folder.
       if (step.commands) expect(ran, detail).toEqual(step.commands.map((c) => c.replaceAll("<kubeconfig>", join(work, "kube.yaml"))));
-      // Safety rule, checked for every scenario: a Kubernetes up or down never runs a kubectl
+      // Safety rule, checked for every scenario: a Kubernetes up, down, logs or exec never runs a kubectl
       // command without the cluster the user named, whatever the scenario expects.
-      const k8sRun = step.run!.includes("k8s") && ["up", "down"].includes(step.run![0]);
+      const k8sRun = step.run!.includes("k8s") && ["up", "down", "logs", "exec"].includes(step.run![0]);
       if (k8sRun) {
         const optionValue = (name: string) => step.run![step.run!.indexOf(name) + 1];
         const context = step.run!.includes("--context") ? optionValue("--context") : undefined;

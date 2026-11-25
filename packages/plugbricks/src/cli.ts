@@ -23,6 +23,7 @@ import { withPlatformLock } from "./lock.js";
 import { needsOf, type Choice } from "./needs.js";
 import { BRICK_KINDS, createBrick, type BrickKind } from "./create.js";
 import { doctor } from "./doctor.js";
+import { execIn, logs } from "./attach.js";
 import {
   down,
   generate,
@@ -62,6 +63,10 @@ Commands:
   enable <name>          Deploy an installed brick again (it was disabled)
   disable <name>         Stop deploying an installed brick; its volumes and secrets are kept
   status [--json]        Show installed bricks, capabilities and retained volumes
+  logs <brick> [--service <name>] [--follow] [--tail <n>]
+                         Show the logs of a brick's service (or of the router: logs router)
+  exec <brick> [--service <name>] [-- <command>...]
+                         Run a command inside a brick's service, a shell (sh) when none is given
   doctor                 Check what up needs (Node, Docker or kubectl, ports, images) and say what to fix; read-only
   status --runtime <name> [--json]
                          Also read what the runtime really runs (read-only): state, reason, restarts
@@ -160,6 +165,9 @@ export function main(argv: string[], io: Io): number {
           "prune-volumes": { type: "boolean" },
           yes: { type: "boolean", short: "y" },
           kind: { type: "string" },
+          service: { type: "string" },
+          follow: { type: "boolean", short: "f" },
+          tail: { type: "string" },
           image: { type: "string" },
           port: { type: "string" },
           dev: { type: "boolean" },
@@ -196,13 +204,16 @@ export function main(argv: string[], io: Io): number {
     };
     if (values.name !== undefined) optionFor("name", "init");
     if (values.json !== undefined) optionFor("json", "status");
-    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin", "doctor");
+    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin", "doctor", "logs", "exec");
     for (const opt of ["port", "dev", "issuer", "client-id", "ui-dir"] as const) {
       if (values[opt] !== undefined) optionFor(opt, "admin");
     }
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
     if (values.yes !== undefined) optionFor("yes", "add");
     if (values.kind !== undefined) optionFor("kind", "create");
+    if (values.service !== undefined) optionFor("service", "logs", "exec");
+    if (values.follow !== undefined) optionFor("follow", "logs");
+    if (values.tail !== undefined) optionFor("tail", "logs");
     if (values.image !== undefined) optionFor("image", "create");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
@@ -210,7 +221,7 @@ export function main(argv: string[], io: Io): number {
     }
     for (const opt of ["context", "kubeconfig", "allow-context"] as const) {
       if (values[opt] === undefined) continue;
-      optionFor(opt, "up", "down", "status", "admin", "doctor");
+      optionFor(opt, "up", "down", "status", "admin", "doctor", "logs", "exec");
       if (runtime !== "k8s") throw usage("USAGE_INVALID_OPTION", "", { detail: `--${opt} only applies with --runtime k8s` });
     }
     if (values["allow-context"] !== undefined && values["allow-context"] !== values.context) {
@@ -349,6 +360,27 @@ export function main(argv: string[], io: Io): number {
           if (values.image === undefined)
             io.stdout("  To name a registry image from the start, create with --image <registry>/<name>:<version>.");
           return 0;
+        }
+        case "logs": {
+          only(1, "a brick name");
+          let tail: number | undefined;
+          if (values.tail !== undefined) {
+            if (!/^\d+$/.test(values.tail))
+              throw usage("USAGE_INVALID_OPTION", "", { detail: `--tail takes a number of lines (got "${values.tail}")` });
+            tail = Number(values.tail);
+          }
+          return logs(root, runtime, args[0], { service: values.service, follow: values.follow, tail }, { ...io.runtime, k8s });
+        }
+        case "exec": {
+          if (args.length < 1) throw usage("USAGE_MISSING_ARGUMENT", "", { command, argument: "a brick name" });
+          // A TTY only for a person at a terminal: the same test as the questions of add (bin.ts gives ask then).
+          return execIn(
+            root,
+            runtime,
+            args[0],
+            { service: values.service, command: args.slice(1), tty: io.ask !== undefined },
+            { ...io.runtime, k8s },
+          );
         }
         case "doctor": {
           only(0, "");

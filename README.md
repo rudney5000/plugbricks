@@ -25,6 +25,8 @@ npx plugbricks add rabbitmq         # bricks/rabbitmq: provides "queue" (D11)
 npx plugbricks status               # add --json for machine-readable output
 npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
 npx plugbricks doctor               # what up needs, and what to fix first (read-only, D31)
+npx plugbricks logs orders-api --follow    # the logs of a brick's service (logs router: the router's), D32
+npx plugbricks exec postgres -- psql -U postgres   # a command inside it; a shell when none is given
 npx plugbricks up                    # Docker Compose
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept

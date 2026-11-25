@@ -1,0 +1,170 @@
+{
+  "description": "logs and exec refuse what does not run (D32): an unknown brick, a disabled one, a service to name or that does not exist, a router the platform does not have, a service with no container or not running; and the options that are not theirs",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "pair"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "nope"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_NOT_INSTALLED"
+      ],
+      "commands": []
+    },
+    {
+      "run": [
+        "logs",
+        "router"
+      ],
+      "exit": 1,
+      "codes": [
+        "ROUTER_NOT_IN_PLATFORM"
+      ],
+      "commands": []
+    },
+    {
+      "run": [
+        "logs",
+        "pair"
+      ],
+      "exit": 1,
+      "codes": [
+        "SERVICE_REQUIRED"
+      ],
+      "stderr": "brick \"pair\" has several services (front, back); name one with --service",
+      "commands": []
+    },
+    {
+      "run": [
+        "exec",
+        "pair",
+        "--service",
+        "side"
+      ],
+      "exit": 1,
+      "codes": [
+        "SERVICE_UNKNOWN"
+      ],
+      "stderr": "its services: front, back",
+      "commands": []
+    },
+    {
+      "run": [
+        "logs",
+        "pair",
+        "--service",
+        "back"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": ""
+        }
+      ],
+      "exit": 1,
+      "codes": [
+        "SERVICE_HAS_NO_CONTAINER"
+      ]
+    },
+    {
+      "run": [
+        "exec",
+        "pair",
+        "--service",
+        "back"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": ""
+        }
+      ],
+      "exit": 1,
+      "codes": [
+        "SERVICE_NOT_RUNNING"
+      ]
+    },
+    {
+      "run": [
+        "disable",
+        "pair"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "pair",
+        "--service",
+        "front"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_DISABLED_NOT_RUNNING"
+      ],
+      "commands": []
+    },
+    {
+      "run": [
+        "logs",
+        "postgres",
+        "--tail",
+        "x"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    },
+    {
+      "run": [
+        "exec",
+        "postgres",
+        "--follow"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    },
+    {
+      "run": [
+        "status",
+        "--service",
+        "front"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    },
+    {
+      "run": [
+        "exec"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_MISSING_ARGUMENT"
+      ]
+    }
+  ]
+}

@@ -62,6 +62,7 @@ Start and stop the platform:
 
 ```bash
 npx plugbricks doctor                   # what up needs (Docker, ports, images), and what to fix first
+npx plugbricks logs <brick>             # when a service falls: its logs (--follow to keep reading)
 npx plugbricks up                       # Docker Compose (needs Docker with Compose v2)
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes; you always name the cluster (add --kubeconfig <file> if needed)
 npx plugbricks down                     # stops everything; your data and secrets are kept

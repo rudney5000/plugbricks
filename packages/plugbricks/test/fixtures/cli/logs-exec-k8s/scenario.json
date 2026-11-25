@@ -1,0 +1,96 @@
+{
+  "description": "logs and exec on Kubernetes (D32): the Deployment of the service and its container (the pod also has the init containers of its waits), always with the cluster named; without one nothing runs",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "orders-api",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster",
+        "--tail",
+        "20",
+        "--follow"
+      ],
+      "commands": [
+        "kubectl --context test-cluster --namespace demo logs deployment/orders-api-app --container app --follow --tail 20"
+      ]
+    },
+    {
+      "run": [
+        "exec",
+        "orders-api",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster",
+        "--",
+        "env"
+      ],
+      "commands": [
+        "kubectl --context test-cluster --namespace demo exec -i deployment/orders-api-app --container app -- env"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "router",
+        "--runtime",
+        "k8s",
+        "--context",
+        "test-cluster"
+      ],
+      "commands": [
+        "kubectl --context test-cluster --namespace demo logs deployment/router --container router"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "orders-api",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REQUIRED"
+      ],
+      "commands": []
+    },
+    {
+      "run": [
+        "exec",
+        "orders-api",
+        "--runtime",
+        "k8s",
+        "--context",
+        "platform"
+      ],
+      "exit": 1,
+      "codes": [
+        "K8S_CONTEXT_REFUSED"
+      ],
+      "commands": []
+    }
+  ]
+}
