@@ -7,5 +7,8 @@
 # Passwords and keys generated on this machine: never committed, never shared.
 .secrets/
 
+# The compiled code of a service that plugbricks create wrote (services/), when built outside its image.
+services/*/dist/
+
 node_modules/
 *.log
