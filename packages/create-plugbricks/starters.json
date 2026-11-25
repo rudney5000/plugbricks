@@ -1,0 +1,6 @@
+{
+  "demo": {
+    "description": "the example shop: PostgreSQL, the orders-api and shipping-api subgraphs behind the router, and the orders-web page",
+    "bricks": ["postgres", "orders-api", "shipping-api", "orders-web"]
+  }
+}

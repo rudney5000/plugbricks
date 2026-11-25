@@ -1942,6 +1942,36 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   labels); the end-to-end tests on Docker Compose with the images under their new names. The push itself runs only on
   GitHub.
 
+## D30. A starter: `npm create plugbricks <name> -- --starter demo`
+
+- **Status:** implemented (2026-11-26). Step 4 of section 2 of `docs/roadmap.md`; with D28 and D29, chantier 8 is
+  done.
+- **Context:** a new project had three bricks to add and nothing that ran until the person wrote or found an API. With
+  the images of the examples public (D29), the example shop can run in a new project.
+- **Decision.**
+  - **The command.** `npm create plugbricks <name> -- --starter <starter>`; the generator also reads
+    `--starter=<starter>` and the option before the name. npm 7 and later give the generator only what follows `--`
+    (`npm init foo -- --hello` is `npm exec -- create-foo --hello`); without it npm takes `--starter` for one of its own
+    options. An unknown starter is a usage error that lists the starters (`CREATE_UNKNOWN_STARTER`, exit 2), and
+    nothing is written.
+  - **The starters** are in `packages/create-plugbricks/starters.json`: a name, a sentence, and the bricks, in the order
+    they are added (each after what it needs). One for now, `demo`: `postgres`, `orders-api`, `shipping-api`,
+    `orders-web`, the shop with its page, without Keycloak, so that the first `up` needs no sign-in.
+  - **No question.** The person chose the starter: its bricks are added as `add` would add them, without the
+    confirmation of D26, and the generator prints what it added, the next commands, and where the router and each web
+    page answer once the platform is up.
+  - **One catalogue.** The bricks the generator ships are in `packages/create-plugbricks/bricks/`: the base ones every
+    project gets in `bricks/` (`postgres`, `rabbitmq`, `nats`, D25) and those of the starters, copied into the project
+    only with their starter. A project made with `demo` has its bricks in `bricks/` too, so that `add`, `remove` and
+    the admin find them by name. The test that keeps the copies equal to the examples covers the whole catalogue,
+    and refuses an image only this repository can build.
+- **Tested.** `create-plugbricks`: the options, each starter (its bricks added in its order, `status` and `generate`
+  accept the project), `demo` and its addresses, the refusals, and the packed generator with `--starter demo`. By hand
+  on Docker Compose: a project made with `demo`, `up` with the images built locally under their published names, an
+  order created through the router listed on the page.
+- **Not done here.** The images must be public for a newcomer's `up` (D29, the owner's step). A starter with Keycloak,
+  when the admin sign-in is part of a first run.
+
 ---
 
 ## Already applied (milestone 2)

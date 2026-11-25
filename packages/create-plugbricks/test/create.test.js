@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { main as plugbricks, MANIFEST_SCHEMA_ID, validateManifest } from "plugbricks";
-import { checkWindowsAcl, create, restrictToCurrentUser, WINDOWS_ACL_SCRIPT } from "../lib/create.js";
+import { BASE_BRICKS, checkWindowsAcl, create, parseArgs, restrictToCurrentUser, STARTERS, WINDOWS_ACL_SCRIPT } from "../lib/create.js";
 import { extractTgz, linkDir, npmPack } from "../../plugbricks/test/helpers/pack.ts";
 
 // Everything runs in .test-work/ inside this package (gitignored).
@@ -13,6 +13,8 @@ const work = join(pkgDir, ".test-work");
 const examplesDir = fileURLToPath(new URL("../../plugbricks/examples/", import.meta.url));
 /** The bricks a new project gets in bricks/ (D25): those whose images are public, on Docker Hub. */
 const SHIPPED_BRICKS = ["nats", "postgres", "rabbitmq"];
+/** The catalogue of the generator (D30): the base bricks and the bricks of the starters. */
+const catalogueDir = fileURLToPath(new URL("../bricks/", import.meta.url));
 
 /** Every file of a folder, relative and sorted, with "/" as the separator. */
 function filesOf(dir, prefix = "") {
@@ -152,22 +154,10 @@ describe("npm create plugbricks <name>", () => {
     }
   });
 
-  it("ships the bricks of bricks/ as the examples of plugbricks, with the published $schema (their scripts run through /bin/sh: no mode to keep)", () => {
+  it("gives a new project the base bricks in bricks/, and no starter's", () => {
+    expect(BASE_BRICKS).toEqual(SHIPPED_BRICKS);
     expect(readdirSync(join(project, "bricks")).sort()).toEqual(SHIPPED_BRICKS);
-    for (const b of SHIPPED_BRICKS) {
-      const example = join(examplesDir, b);
-      const copy = join(project, "bricks", b);
-      expect(filesOf(copy), b).toEqual(filesOf(example));
-      for (const f of filesOf(example)) {
-        // Only the $schema line differs: the example points at the schema file of the repository, the copy at its
-        // published URL, which an editor of the new project can reach.
-        const text = (file) => readFileSync(file, "utf8").replace(/^ {2}"\$schema": ".*",$/m, '  "$schema": "<schema>",');
-        expect(text(join(copy, f)), `bricks/${b}/${f} differs from examples/${b}/${f}`).toBe(text(join(example, f)));
-      }
-      const manifest = JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8"));
-      expect(manifest.$schema, `bricks/${b}/plugin.json`).toBe(MANIFEST_SCHEMA_ID);
-      expect(validateManifest(manifest), b).toEqual({ ok: true });
-    }
+    expect(JSON.parse(readFileSync(join(project, "platform.json"), "utf8")).bricks).toEqual({});
   });
 
   it("lets a beginner follow the README: add the database by name, then create a first API (D28)", () => {
@@ -185,6 +175,94 @@ describe("npm create plugbricks <name>", () => {
       "postgres",
     ]);
     expect(existsSync(join(project, "services/inventory-api/src/main.ts"))).toBe(true);
+  });
+});
+
+describe("the catalogue of the generator (D25, D30)", () => {
+  it("holds the examples of plugbricks as they are, with the published $schema (their scripts run through /bin/sh: no mode to keep)", () => {
+    const catalogue = readdirSync(catalogueDir).sort();
+    expect(catalogue).toEqual([...new Set([...BASE_BRICKS, ...Object.values(STARTERS).flatMap((s) => s.bricks)])].sort());
+    for (const b of catalogue) {
+      const example = join(examplesDir, b);
+      const copy = join(catalogueDir, b);
+      expect(filesOf(copy), b).toEqual(filesOf(example));
+      for (const f of filesOf(example)) {
+        // Only the $schema line differs: the example points at the schema file of the repository, the copy at its
+        // published URL, which an editor of the new project can reach.
+        const text = (file) => readFileSync(file, "utf8").replace(/^ {2}"\$schema": ".*",$/m, '  "$schema": "<schema>",');
+        expect(text(join(copy, f)), `bricks/${b}/${f} differs from examples/${b}/${f}`).toBe(text(join(example, f)));
+      }
+      const manifest = JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8"));
+      expect(manifest.$schema, `bricks/${b}/plugin.json`).toBe(MANIFEST_SCHEMA_ID);
+      expect(validateManifest(manifest), b).toEqual({ ok: true });
+      // Every image a new project can pull: none only this repository can build (D29).
+      expect(JSON.stringify(manifest), b).not.toContain("plugbricks-example/");
+    }
+  });
+});
+
+describe("npm create plugbricks <name> -- --starter <starter> (D30)", () => {
+  const cwd = join(work, "starters");
+  beforeAll(() => {
+    rmSync(cwd, { recursive: true, force: true });
+    mkdirSync(cwd, { recursive: true });
+  });
+
+  it("reads the starter before or after the name, and as --starter=<starter>", () => {
+    expect(parseArgs(["shop", "--starter", "demo"])).toEqual({ name: "shop", starter: "demo" });
+    expect(parseArgs(["--starter", "demo", "shop"])).toEqual({ name: "shop", starter: "demo" });
+    expect(parseArgs(["shop", "--starter=demo"])).toEqual({ name: "shop", starter: "demo" });
+    expect(parseArgs(["shop"])).toEqual({ name: "shop", starter: undefined });
+    for (const bad of [
+      ["shop", "--starter"],
+      ["shop", "--starter="],
+      ["shop", "--starter", "--x"],
+      ["shop", "--other"],
+      ["a", "b"],
+      ["shop", "--starter", "demo", "--starter", "demo"],
+    ]) {
+      expect(parseArgs(bad), bad.join(" ")).toBeNull();
+    }
+  });
+
+  it.each(Object.keys(STARTERS))("%s: adds its bricks without asking, in its order, and says what it did", (starter) => {
+    const name = `with-${starter}`;
+    const r = run([name, "--starter", starter], cwd);
+    expect(r.code, r.stderr).toBe(0);
+    const project = join(cwd, name);
+    const bricks = STARTERS[starter].bricks;
+    expect(r.stdout).toContain(`Starter "${starter}": `);
+    const added = /^Added (.*)$/m
+      .exec(r.stdout)[1]
+      .split(", ")
+      .map((b) => b.split(" ")[0]);
+    expect(added, "added in the starter's order").toEqual(bricks);
+    expect(Object.keys(JSON.parse(readFileSync(join(project, "platform.json"), "utf8")).bricks).sort()).toEqual([...bricks].sort());
+    // The starter's bricks are in bricks/ too, next to the base ones, so that add and remove work on them by name.
+    expect(readdirSync(join(project, "bricks")).sort()).toEqual([...new Set([...SHIPPED_BRICKS, ...bricks])].sort());
+    // The platform is complete as it is: status and generate accept it.
+    expect(cli(["status"], project).code).toBe(0);
+    const generated = cli(["generate"], project);
+    expect(generated.code, generated.stderr).toBe(0);
+  });
+
+  it("demo: the shop, with the addresses of its router and its page", () => {
+    const r = run(["shop", "--starter=demo"], cwd);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toContain("Added postgres 1.0.0, orders-api 0.1.0, shipping-api 0.1.0, orders-web 0.1.0");
+    expect(r.stdout).toContain("Once it is up, the GraphQL router answers at http://127.0.0.1:4000/graphql");
+    expect(r.stdout).toContain("and the page of orders-web at http://127.0.0.1:8080/orders");
+    expect(r.stdout).toContain("  npx plugbricks up");
+    const lock = JSON.parse(readFileSync(join(cwd, "shop", "platform.lock"), "utf8"));
+    expect(lock.capabilities).toEqual({ database: "postgres" });
+    expect(lock.federation.subgraphs).toEqual(["orders-api", "shipping-api"]);
+  });
+
+  it("refuses an unknown starter, or a starter without a name, and writes nothing", () => {
+    const unknown = run(["nothing-here", "--starter", "nope"], cwd);
+    expect(unknown).toMatchObject({ code: 2, stderr: 'error CREATE_UNKNOWN_STARTER: no starter named "nope"; the starters are: demo' });
+    expect(existsSync(join(cwd, "nothing-here"))).toBe(false);
+    expect(run(["--starter", "demo"], cwd)).toMatchObject({ code: 2, stderr: expect.stringMatching(/^error CREATE_MISSING_NAME: /) });
   });
 });
 
@@ -335,8 +413,10 @@ describe("published package", () => {
         "template/gitattributes",
         "template/README.md",
         "template/services/README.md",
-        ...SHIPPED_BRICKS.map((b) => `template/bricks/${b}/plugin.json`),
-        "template/bricks/postgres/provision/create-database.sh",
+        ...SHIPPED_BRICKS.map((b) => `bricks/${b}/plugin.json`),
+        "bricks/postgres/provision/create-database.sh",
+        "bricks/orders-web/plugin.json",
+        "starters.json",
       ]),
     );
     expect(files.filter((f) => f.startsWith("test/"))).toEqual([]);
@@ -349,5 +429,16 @@ describe("published package", () => {
     });
     expect(r.status, r.stderr).toBe(0);
     for (const p of STRUCTURE) expect(existsSync(join(packWork, "from-pack", p)), p).toBe(true);
+    // The catalogue and the starters are in the archive (D30).
+    const started = spawnSync(
+      process.execPath,
+      [join(packWork, "package/bin/create-plugbricks.js"), "from-pack-demo", "--starter", "demo"],
+      {
+        cwd: packWork,
+        encoding: "utf8",
+      },
+    );
+    expect(started.status, started.stderr).toBe(0);
+    expect(existsSync(join(packWork, "from-pack-demo/.platform/bricks/orders-web/plugin.json"))).toBe(true);
   });
 });

@@ -9,6 +9,7 @@ packages/plugbricks/examples/**
 
 # The project template is copied as is by create-plugbricks.
 packages/create-plugbricks/template/**
+packages/create-plugbricks/bricks/**
 
 # Build output, work folders, dependencies, coverage, runtime files.
 **/dist/**

@@ -15,6 +15,8 @@ Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka d
 
 ```bash
 npm create plugbricks mon-saas      # a new project; its README explains every folder
+# or a project that runs at once: the example shop, added without a question (D30)
+#   npm create plugbricks mon-saas -- --starter demo && cd mon-saas && npm install && npx plugbricks up
 cd mon-saas
 npx plugbricks add postgres         # bricks/postgres, shipped in a new project: provides "database"
 npx plugbricks create inventory --kind api   # bricks/inventory-api and its code in services/inventory-api (D28)
