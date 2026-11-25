@@ -169,7 +169,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
   afterAll(() => {
     admin?.close();
     spawnSync("docker", ["compose", "--project-name", brickProject, "down", "--volumes", "--remove-orphans"], { encoding: "utf8" });
-  });
+  }, 120_000);
 
   it("answers as the issuer the browser reaches, as soon as up returns", async () => {
     const discovery = await fetch(`${origin}/realms/plugbricks/.well-known/openid-configuration`);
@@ -254,7 +254,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     const taken = compose("run", "--rm", "--no-deps", "-e", "CLIENT_ID=plugbricks-admin", "orders-web-provision-oidc");
     expect(taken.status).toBe(1);
     expect(taken.stderr).toContain("already has a client plugbricks-admin that plugbricks did not create");
-  });
+  }, 120_000);
 
   it("puts the router behind tokens: none 401, another issuer 401, orders-web's 200, and its page through it (D19)", async () => {
     const secrets = readFileSync(join(project, ".secrets/secrets.env"), "utf8");

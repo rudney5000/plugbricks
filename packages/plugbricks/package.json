@@ -33,12 +33,12 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.17.0",
-    "@graphql-tools/utils": "13.2.2",
+    "@graphql-tools/utils": "12.1.0",
     "@wundergraph/composition": "0.68.2",
     "@wundergraph/cosmo-connect": "0.165.0",
     "@wundergraph/cosmo-shared": "0.50.2",
     "ajv": "8.20.0",
-    "graphql": "17.1.0",
+    "graphql": "16.14.2",
     "openid-client": "6.9.1"
   },
   "devDependencies": {
