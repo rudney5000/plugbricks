@@ -9,18 +9,25 @@ built yet unless a line says so. Each chantier says why, what is known, and what
 Recommended order, so that any reader (a person or an AI assistant) knows what comes next. A step starts only
 when the one before it that it depends on is merged.
 
-| # | Chantier | Section | Depends on | Who |
-|---|----------|---------|------------|-----|
-| 1 | First publication to npm | 1 | the owner's accounts and checks | the owner |
-| 2 | `add` by name from `bricks/`; the bricks copied into a new project | 2, step 1 | nothing | code |
-| 3 | The dependencies a brick needs, with confirmation | 2, step 2 | step 2 | code |
-| 4 | Documentation site on GitHub Pages | 3 | steps 2 and 3, for its "Getting started" page | code, and the owner enables Pages |
-| 5 | External subgraph (a decision first) | 4, item 1 | nothing | decision, then code |
-| 6 | `create --kind`, a starter, public images of the examples | 2, steps 3 to 5 | steps 2 and 3 | code |
-| 7 | gRPC through Cosmo Connect (a study), a REST adapter example | 4, items 2 and 3 | step 5 | study, then docs |
-| 8 | What was decided earlier and is not done | 5 | nothing | code or docs |
+| #   | Chantier                                                                              | Section        | Depends on                                    | Who                               |
+| --- | ------------------------------------------------------------------------------------- | -------------- | --------------------------------------------- | --------------------------------- |
+| 1   | First publication to npm                                                              | 1              | the owner's accounts and checks               | the owner                         |
+| 2   | Community files (`SECURITY.md`, `CONTRIBUTING.md`, issue templates, `CHANGELOG.md`)   | 1              | nothing                                       | docs                              |
+| 3   | `add` by name from `bricks/`; the bricks copied into a new project                    | 2, step 1      | nothing                                       | code                              |
+| 4   | The dependencies a brick needs, with confirmation                                     | 2, step 2      | step 3                                        | code                              |
+| 5   | `plugbricks doctor`                                                                   | 2, step 6      | nothing                                       | code                              |
+| 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
+| 7   | External subgraph (a decision first)                                                  | 4, item 1      | nothing                                       | decision, then code               |
+| 8   | `create --kind`, a starter, public images of the examples                             | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
+| 9   | `logs` and `exec`, a development loop, service templates in other languages           | 5              | step 8 for the templates                      | code                              |
+| 10  | `export`: leave plugbricks with plain Compose or Kubernetes files                     | 8, item 1      | nothing                                       | code                              |
+| 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
+| 12  | More ready-made bricks (Redis, MySQL or MariaDB, object storage, a test mail server)  | 7              | step 3                                        | code                              |
+| 13  | gRPC through Cosmo Connect (a study), a REST adapter example                          | 4, items 2 and 3 | step 7                                      | study, then docs                  |
+| 14  | Signed images and an SBOM; a short demo video                                         | 8, items 2 and 3 | step 8 (public images)                      | code, then the owner              |
+| 15  | What was decided earlier and is not done                                              | 9              | nothing                                       | code or docs                      |
 
-The newcomer's test (`npm create plugbricks`, then `npm install`) resumes after step 1 and step 2.
+The newcomer's test (`npm create plugbricks`, then `npm install`) resumes after steps 1 and 3.
 
 ## 1. First publication (prepared: D24)
 
@@ -28,6 +35,12 @@ The workflow, the version (0.1.0), the licence (D23) and the notices are in plac
 an npm account with two-factor authentication, the `NPM_TOKEN` secret, an `npm` environment with a required
 reviewer, a last check of the package names, and a check of the employment terms. Then a `v0.1.0` tag publishes
 under the `next` dist-tag. See `docs/pre-publication-checklist.md`.
+
+**Also before the first tag: the files a public repository is expected to have.** None exists today (checked on
+2026-11-25: no `SECURITY.md`, `CONTRIBUTING.md`, code of conduct, `CHANGELOG.md` or issue templates; `.github/` holds
+`dependabot.yml` and the workflows only). The first matters most: plugbricks generates passwords and runs
+containers, so a person who finds a flaw needs a private way to report it (GitHub's private vulnerability reporting
+named in `SECURITY.md`, which the owner must enable in the settings).
 
 Not verified: that the workflow runs on its first try; that npm leaves `latest` empty when only `next` is
 published (if it does not, `npm create plugbricks` without `@next` would fail until a version is promoted).
@@ -57,6 +70,12 @@ In this order:
    Registry (`ghcr.io/<owner>/…`), so that `up` works for a newcomer. Docker downloads them at `up`; a cluster
    needs access to `ghcr.io`. They are public, they carry the owner's name, and they must be rebuilt when a
    dependency has an advisory. The starter above needs them.
+
+6. **`plugbricks doctor`.** One read-only command that checks what `up` needs and says what to fix: the Node
+   version (`engines`), that Docker answers, that the ports of `platform.json` are free, that the `kubectl` context
+   named exists. A newcomer, and a person on a managed machine where some rights are missing, learn from it why
+   `up` would fail, instead of reading a Docker error. Today the CLI has `init`, `add`, `remove`, `enable`,
+   `disable`, `status`, `generate`, `up`, `down` and `admin`, and nothing of the kind.
 
 Not verified: how the Compose and Kubernetes drivers treat a missing image today (pull policy); that the
 repository's CI token may publish packages (a repository setting).
@@ -108,7 +127,52 @@ themselves). What it federates today is a **GraphQL service in Federation v2 tha
 
 Not covered: a federation already run by Apollo (Router or Gateway): plugbricks replaces it, it does not join it.
 
-## 5. Decided earlier, not done
+## 5. For people who write services
+
+Aim: the daily gesture of someone who creates `order-api`, once the first minutes are solved.
+
+1. **`plugbricks logs <brick>`**, and possibly `exec`. To see why a service falls today one leaves plugbricks for
+   `docker compose logs` or `kubectl logs`. Not verified: what the drivers can reach without more access than
+   `up` already needs.
+2. **A development loop**, `plugbricks dev <brick>`: rebuild the image of one brick and restart it alone, and show its logs.
+3. **Service templates in other languages** (Go, Python) for `create`. The README says plugbricks does not care what is
+   inside the image; only Node bricks exist today, so that claim is **not tested** with another language. A template
+   would test it.
+
+## 6. Confidence for production
+
+Each item needs a written decision before code, like D22.
+
+1. **An observability brick** (Prometheus, Grafana, a trace viewer) that provides `metrics` and `tracing` in the
+   model of `database` and `oidc`. D9 turned them off on purpose: the router starts with `TRACING_ENABLED`,
+   `METRICS_OTLP_ENABLED` and `PROMETHEUS_ENABLED` set to `false`, and with its usage tracking disabled
+   (`COSMO_TELEMETRY_DISABLED`, `DO_NOT_TRACK`), after a capture showed it reaching a third-party host. A brick would
+   turn the first three on **only when it is installed**, and the decision must say that nothing else changes.
+2. **Environments and secrets.** Values per environment (development, staging, production) in `platform.json`, and
+   secrets that come from a vault or from Kubernetes Secrets managed elsewhere. Today passwords are generated
+   into `.secrets/` (`secrets.env`, `k8s-secret.yaml`): fine for development, not an answer for production.
+3. **Breaking-change detection** between two versions of a subgraph schema. `add` checks that composition still
+   passes, not that a client is broken. `wgc` has a schema check; whether it works without a Cosmo control plane is
+   **not verified**, and an offline comparison of two composed schemas may be needed.
+4. **`plugbricks upgrade <brick>`** with migration notes, once bricks have versions that people depend on.
+
+## 7. More ready-made bricks
+
+Each is small because the capability model exists (`postgres` is the pattern): Redis (cache), MySQL or MariaDB, an
+object store (MinIO), a test mail server (Mailpit). Kafka stays deferred (section 9). A brick needs a public image
+(Docker Hub) to work for a newcomer; this is why these come after step 3.
+
+## 8. Trust, and the way out
+
+1. **`plugbricks export`** (or `generate --out`): write the Compose file or the Kubernetes manifests into a folder to
+   keep, usable without plugbricks. It answers the first objection of a team (what if we want to leave?) and is almost
+   free: `generate` already writes them into `.generated/`, which ignores itself and is never committed.
+2. **Signed images and an SBOM** (a list of the components of each image), next to the provenance npm already gets
+   (D24). After the images are public.
+3. **A demo of about 60 seconds**: `npm create plugbricks` to the admin. It needs the public images (section 2,
+   step 5) and the starter.
+
+## 9. Decided earlier, not done
 
 - **README screenshot** (`docs/screenshots/admin-dependencies.png`) is out of date: no optional links, no
   Authorization rows.
@@ -117,7 +181,7 @@ Not covered: a federation already run by Apollo (Router or Gateway): plugbricks 
 - **D22 step B**: a rule per field (`@requiresScopes`) and the router enforcing it too. Only if a real field asks for it.
 - **A Dependabot `ignore` rule** for `graphql` and `@graphql-tools/utils`: the composer needs 16 and 12, and Dependabot
   proposes 17 and 13 again (#62 and #65). Note it in D8.
-- **Kafka**, deferred.
+- **Kafka**, deferred (and section 7 for the other bricks).
 - **Taking grants back** in Keycloak when a dependency is removed (D22 limit).
 - **The newcomer's test** (`npm create plugbricks`, then `npm install`) resumes when the packages are published; the
   frictions found so far are the two 404s and the missing bricks (sections 1 and 2).
