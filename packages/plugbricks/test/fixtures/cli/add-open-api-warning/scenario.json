@@ -1,0 +1,39 @@
+{
+  "description": "a GraphQL API that requires oidc without an authorization block gets a warning at add (D22): any valid token may call it; orders, which declares its roles, gets none",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ],
+      "notStdout": "authorization"
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web"
+      ],
+      "notStdout": "authorization"
+    },
+    {
+      "run": [
+        "add",
+        "bricks/open-api"
+      ],
+      "stdout": "open-api serves GraphQL and requires oidc but has no \"authorization\" block"
+    }
+  ]
+}

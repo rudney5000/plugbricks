@@ -571,6 +571,8 @@ export interface AddResult {
   cancelledDeletions: VolumeRef[];
   /** Declared dependencies (D21), except the optional ones, that are not installed; "add" prints one warning line per name. */
   missingDependencies: string[];
+  /** A GraphQL API that requires oidc but declares no "authorization" block (D22): any valid token may call it. */
+  openApi: boolean;
 }
 
 /** Declared dependencies of `m` that no installed brick provides, sorted (the "add" warning, D21). */
@@ -606,6 +608,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
 
   const { lock, platform } = project;
   const missingDependencies = missingDeclaredDependencies(m, lock);
+  const openApi = m.subgraph !== undefined && Object.hasOwn(m.requires ?? {}, "oidc") && m.authorization === undefined;
   const installed = lock.bricks[m.name];
   if (installed) {
     if (installed.integrity === integrity) {
@@ -616,6 +619,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
         reattachedVolumes: [],
         cancelledDeletions: [],
         missingDependencies,
+        openApi,
       };
     }
     fail("BRICK_NAME_CONFLICT", { name: m.name, source: installed.source });
@@ -705,7 +709,7 @@ export function addBrick(root: string, brickPath: string): AddResult {
   platform.bricks[m.name] = { source, ...(m.web ? { webPort: nextWebPort(platform) } : {}) };
   setFederation(lock, federation);
   save(project);
-  return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions, missingDependencies };
+  return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions, missingDependencies, openApi };
 }
 
 // ---------- remove ----------
