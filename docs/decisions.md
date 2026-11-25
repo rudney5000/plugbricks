@@ -2003,6 +2003,36 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `create` not built (with its build command), and a second platform of the same name running from another folder,
   found from the first and not from itself. Kubernetes only with the fake: kubectl is not installed here.
 
+## D32. `plugbricks logs` and `plugbricks exec`: a brick's service, without its runtime name
+
+- **Status:** implemented (2026-11-26). Item 1 of section 5 of `docs/roadmap.md`.
+- **Context:** to see why a service falls, or to run a command in it, a person left plugbricks for `docker` or
+  `kubectl` and had to find the names plugbricks gave: `<platform>-<brick>-<service>-1` on Compose, the Deployment
+  `<brick>-<service>` of the namespace `<platform>` and its container on Kubernetes.
+- **Decision.**
+  - **The commands.** `logs <brick> [--service <name>] [--follow|-f] [--tail <n>]` and
+    `exec <brick> [--service <name>] [-- <command>...]`, with the runtime options of `up` (`--runtime k8s` needs
+    `--context`, with the guards of D5). A brick with one service needs no `--service`; with several, it is required
+    (`SERVICE_REQUIRED`, `SERVICE_UNKNOWN`). `router` names the router when no brick has that name
+    (`ROUTER_NOT_IN_PLATFORM` when the platform serves no subgraph). Without a command, `exec` opens `sh`. A disabled
+    brick runs nothing (`BRICK_DISABLED_NOT_RUNNING`).
+  - **Attached.** The output goes straight to the terminal, and the terminal's input to the command, so that
+    `--follow` and an interactive shell work; plugbricks exits with the exit code of the command (130 after Ctrl-C).
+    `exec` allocates a TTY only for a person at a terminal (both ends are terminals, as for the questions of D26).
+  - **Docker Compose:** `docker logs` and `docker exec` on the container found by its Compose labels (project and
+    service), not `docker compose logs`: it needs no `.generated/` file and no secrets file, and the logs of a stopped
+    container stay readable (`SERVICE_HAS_NO_CONTAINER`, and `SERVICE_NOT_RUNNING` for `exec`).
+  - **Kubernetes:** `kubectl logs` and `kubectl exec` on `deployment/<brick>-<service>`, with `--container` set to the
+    service: the pod also has the init containers of its waits.
+  - **No lock**: neither changes the platform's files (D16).
+- **Tested.** CLI scenarios `logs-exec-compose` (the commands run, the exit code passed on), `logs-exec-k8s` (the
+  cluster flags on every call; nothing runs without them, checked by the runner for `logs` and `exec` as for `up`)
+  and `logs-exec-refusals`. By hand on Docker Compose: the logs of an API and of the router, `--tail`, a command and
+  its exit code (7), an interactive shell in a pseudo-terminal, and `--follow` stopped by SIGINT (130). Kubernetes
+  only with the fake: kubectl is not installed here.
+- **Not done here.** The logs of the provision and wait tasks (they are not services); a development loop that
+  rebuilds and restarts one brick (`plugbricks dev`, item 2).
+
 ---
 
 ## Already applied (milestone 2)
