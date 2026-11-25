@@ -31,10 +31,12 @@ is added. Each item says what to check and why.
       licence, since part of it was written on an employer's machine. Only the author can check this.
 - [x] **First version number** (D24): 0.1.0, published from a `v0.1.0` tag by `.github/workflows/publish.yml`, under the
       `next` dist-tag. 0.x means the manifest, the lock and the CLI codes can still change in a minor version.
+- [ ] **Private vulnerability reporting** is enabled (Settings, Code security, Private vulnerability reporting), so that
+      the link of `SECURITY.md` works.
 - [ ] **The accounts and settings that only the owner can create** (D24): an npm account with two-factor authentication,
       the `NPM_TOKEN` repository secret, and an `npm` environment with a required reviewer. Then check the names once more.
-- [ ] **Example bricks for a new project.** The archive carries none, so `plugbricks add path/to/postgres` of the README
-      has nothing to point to: `create-plugbricks` should copy them into the project it creates.
+- [x] **Example bricks for a new project** (D25, D30): `create-plugbricks` copies `postgres`, `rabbitmq` and `nats` into
+      every project, and the starter `demo` the example shop, whose images are public (D29).
 - [ ] **Signature of the tool checksums.** `tools.json` verifies each binary against a sha256 read from the checksum
       file of the same release; that proves the download is the file the release lists, not that the release is the
       maintainers'. Verify the signature of the checksum files where the tool publishes one (cosign, minisign or GPG).
