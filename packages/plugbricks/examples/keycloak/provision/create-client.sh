@@ -5,6 +5,11 @@
 # created, sets its secret again and restores its audience mapper. Refuses a client of that name it did not create
 # (the admin's public client, one made by hand). Never deletes anything.
 #
+# Authorization (D22): the client also gets the client roles its brick declares (ROLES), and its service account gets the
+# roles of the other bricks it declares to use (GRANTS), so that its tokens carry them in resource_access.<client>.roles.
+# A role that a brick no longer declares, or a grant that a brick no longer asks for, is left as it is: this script never
+# removes one. Take it away in the Keycloak console; tokens already issued keep it until they expire.
+#
 # Inputs (from plugin.json provides.oidc.provision.env):
 #   KEYCLOAK_URL     the provider inside the platform, http://<host>:<port>
 #   REALM            the realm the clients live in
@@ -12,6 +17,9 @@
 #   CLIENT_ID        the consumer's name
 #   CLIENT_SECRET    the consumer's own generated secret
 #   AUDIENCE         the audience its tokens get
+#   ROLES            optional: space-separated roles to create on the consumer's own client
+#   GRANTS           optional: space-separated <client>/<role> to give to the consumer's service account; a client that
+#                    does not exist yet is created by this script (its own provision task sets its secret later)
 # No secret goes on a command line (D6): kcadm.sh reads the password from KC_CLI_PASSWORD and the client,
 # with its secret, from standard input.
 set -euo pipefail
@@ -31,19 +39,26 @@ config=(--config "$config_dir/kcadm.config")
 
 KC_CLI_PASSWORD="$ADMIN_PASSWORD" "$kcadm" config credentials --server "$KEYCLOAK_URL" --realm master --user admin "${config[@]}" >/dev/null
 
-id=$("$kcadm" get clients -r "$REALM" -q clientId="$CLIENT_ID" --fields id --format csv --noquotes "${config[@]}")
+# The internal id of a client, empty when the realm has none of that name.
+client_id_of() {
+  "$kcadm" get clients -r "$REALM" -q clientId="$1" --fields id --format csv --noquotes "${config[@]}"
+}
 
-if [ -z "$id" ]; then
+# Creates a confidential client with a service account and the audience mapper. $2, when given, is its secret; without
+# one Keycloak generates a secret, which the client's own provision task replaces.
+create_client() {
+  local secret=""
+  [ -z "${2:-}" ] || secret="\"secret\": \"$2\","
   "$kcadm" create clients -r "$REALM" -f - "${config[@]}" >/dev/null <<JSON
 {
-  "clientId": "$CLIENT_ID",
+  "clientId": "$1",
   "enabled": true,
   "publicClient": false,
   "serviceAccountsEnabled": true,
   "standardFlowEnabled": false,
   "directAccessGrantsEnabled": false,
   "clientAuthenticatorType": "client-secret",
-  "secret": "$CLIENT_SECRET",
+  $secret
   "protocolMappers": [
     {
       "name": "audience",
@@ -54,6 +69,30 @@ if [ -z "$id" ]; then
   ]
 }
 JSON
+}
+
+# Makes sure a client role exists on the client whose internal id is $1.
+ensure_role() {
+  if ! "$kcadm" get "clients/$1/roles/$2" -r "$REALM" "${config[@]}" >/dev/null 2>&1; then
+    "$kcadm" create "clients/$1/roles" -r "$REALM" -s "name=$2" "${config[@]}" >/dev/null
+    echo "create-client: created role $2"
+  fi
+}
+
+id=$(client_id_of "$CLIENT_ID")
+created=no
+if [ -z "$id" ]; then
+  # Two provision tasks can reach for the same client at once (another consumer granting itself a role of this one):
+  # when the creation fails, the client may exist now, made by the other, and is then handled as one that existed.
+  if create_client "$CLIENT_ID" "$CLIENT_SECRET"; then created=yes; fi
+  id=$(client_id_of "$CLIENT_ID")
+  [ -n "$id" ] || {
+    echo "create-client: could not create client $CLIENT_ID in realm $REALM" >&2
+    exit 1
+  }
+fi
+
+if [ "$created" = yes ]; then
   echo "create-client: created client $CLIENT_ID in realm $REALM"
 else
   # A client of that name exists. It is ours only when it looks like one we create: confidential, with a service
@@ -80,3 +119,32 @@ JSON
   fi
   echo "create-client: client $CLIENT_ID already in realm $REALM; its secret set again"
 fi
+
+# D22. The roles this brick's API asks of a token, as roles of its own client.
+for role in ${ROLES:-}; do
+  ensure_role "$id" "$role"
+done
+
+# The roles of the other bricks this one declares to use, held by its service account. The service account is a user
+# of the realm called service-account-<client>. A target client that does not exist yet is created here, in the same
+# shape; the target's own provision task then finds it as one it could have made.
+for grant in ${GRANTS:-}; do
+  target=${grant%%/*}
+  role=${grant#*/}
+  if [ -z "$target" ] || [ -z "$role" ] || [ "$target" = "$grant" ]; then
+    echo "create-client: GRANTS entry \"$grant\" is not <client>/<role>" >&2
+    exit 1
+  fi
+  target_id=$(client_id_of "$target")
+  if [ -z "$target_id" ]; then
+    create_client "$target" "" || true
+    target_id=$(client_id_of "$target")
+    [ -n "$target_id" ] || {
+      echo "create-client: could not create client $target, which holds the role $role" >&2
+      exit 1
+    }
+  fi
+  ensure_role "$target_id" "$role"
+  "$kcadm" add-roles -r "$REALM" --uusername "service-account-$CLIENT_ID" --cclientid "$target" --rolename "$role" "${config[@]}"
+  echo "create-client: $CLIENT_ID holds $target/$role"
+done
