@@ -197,7 +197,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
            body: new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret }) });
          const t = await r.json();
          const c = JSON.parse(Buffer.from(t.access_token.split(".")[1], "base64url"));
-         console.log(JSON.stringify({ status: r.status, url, id, iss: c.iss, aud: c.aud, azp: c.azp }));`,
+         console.log(JSON.stringify({ status: r.status, url, id, iss: c.iss, aud: c.aud, azp: c.azp, roles: c.resource_access }));`,
       ],
       { encoding: "utf8" },
     );
@@ -212,6 +212,9 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       azp: "orders-web",
     });
     expect(token.aud).toContain("plugbricks-router");
+    // D22: orders-web lists orders (queries by default), so its service account holds orders:read under the client of
+    // orders, and nothing else of orders: no orders:write. The roles are in the token, not looked up when it is used.
+    expect(token.roles.orders).toEqual({ roles: ["orders:read"] });
 
     // The provision task ran once per up and is idempotent; its secret never went on a command line.
     const provision = spawnSync(
@@ -286,12 +289,50 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       password: secretOf("PB_KEYCLOAK__ADMIN_PASSWORD"),
     });
     expect((await graphql("{ orders(limit: 1) { id } }", admin)).status).toBe(401);
-    // orders-web's own client: what its server uses. With it an order is created through the router.
-    const own = await tokenAt("plugbricks", {
-      grant_type: "client_credentials",
-      client_id: "orders-web",
-      client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
-    });
+    // orders-web's own client: what its server uses.
+    const asOrdersWeb = () =>
+      tokenAt("plugbricks", {
+        grant_type: "client_credentials",
+        client_id: "orders-web",
+        client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
+      });
+    const readOnly = await asOrdersWeb();
+    // D22: its token may read through the router, but createOrder is a mutation and orders asks for orders:write: the
+    // router passes the token on, orders refuses it before the resolver runs. 401 is for a token that is not valid;
+    // this one is, it is the caller that is not allowed.
+    expect((await graphql("{ orders(limit: 1) { id } }", readOnly)).status).toBe(200);
+    const refused = await graphql("mutation { createOrder(total: 1) { id } }", readOnly);
+    expect(refused.body.data?.createOrder ?? null).toBeNull();
+    expect(JSON.stringify(refused.body)).toMatch(/FORBIDDEN|forbidden/);
+    // The operator gives it the write role in Keycloak (the console or kcadm), as it would any service account. A token
+    // issued before keeps what it had: the roles are in the token for its 300 s.
+    const kcadm = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--project-name",
+        brickProject,
+        "exec",
+        "-T",
+        "-e",
+        `KC_CLI_PASSWORD=${secretOf("PB_KEYCLOAK__ADMIN_PASSWORD")}`,
+        "keycloak-app",
+        "bash",
+        "-c",
+        [
+          "set -e",
+          "k=/opt/keycloak/bin/kcadm.sh; c=$(mktemp -d)",
+          'login() { "$k" "$@" --config "$c/kcadm.config"; }',
+          "login config credentials --server http://127.0.0.1:8080 --realm master --user admin >/dev/null",
+          "login add-roles -r plugbricks --uusername service-account-orders-web --cclientid orders --rolename orders:write",
+        ].join("; "),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(kcadm.status, kcadm.stderr).toBe(0);
+    expect((await graphql("mutation { createOrder(total: 1) { id } }", readOnly)).body.data?.createOrder ?? null).toBeNull();
+    // With a token asked after the grant, an order is created through the router.
+    const own = await asOrdersWeb();
     const created = await graphql("mutation { createOrder(total: 42.5) { id createdBy } }", own);
     // 200 with data: the router passed the token on, and orders checked it again itself (D20).
     expect(created.status).toBe(200);
@@ -301,7 +342,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
 
     // A service of the platform calling orders directly, past the router (D20): no token, or a forged identity
     // header, gets 401 from orders itself.
-    const direct = (headers: Record<string, string>) => {
+    const direct = (headers: Record<string, string>, query = "{ orders(limit: 1) { id } }") => {
       const r = spawnSync(
         "docker",
         [
@@ -313,7 +354,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
           "orders-web-app",
           "node",
           "-e",
-          `const r = await fetch("http://orders-app:4000/graphql", { method: "POST", headers: ${JSON.stringify({ "content-type": "application/json", ...headers })}, body: JSON.stringify({ query: "{ orders(limit: 1) { id } }" }) }); console.log(r.status);`,
+          `const r = await fetch("http://orders-app:4000/graphql", { method: "POST", headers: ${JSON.stringify({ "content-type": "application/json", ...headers })}, body: JSON.stringify({ query: ${JSON.stringify(query)} }) }); console.log(r.status);`,
         ],
         { encoding: "utf8" },
       );
@@ -323,6 +364,9 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     expect(direct({})).toBe(401);
     expect(direct({ "x-user-sub": "admin-forged" })).toBe(401);
     expect(direct({ authorization: `Bearer ${own}` })).toBe(200);
+    // D22: past the router, a valid token without the role is refused by orders itself: 403, not 401 and not data.
+    expect(direct({ authorization: `Bearer ${readOnly}` })).toBe(200);
+    expect(direct({ authorization: `Bearer ${readOnly}` }, "mutation { createOrder(total: 1) { id } }")).toBe(403);
     const id = created.body.data!.createOrder!.id;
 
     // The page, rendered by orders-web's server with its token. No shipping brick here: no shipment field in the
@@ -333,7 +377,8 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     // Its "Refresh" asks its own server, never the router.
     const refreshed = (await (await fetch(`http://127.0.0.1:${webPort + 1}/api/orders`)).json()) as { rows: string };
     expect(refreshed.rows).toContain(`#${id}`);
-  });
+    // Real docker execs and a kcadm login: well over vitest's 5 s.
+  }, 60_000);
 
   it("signs a user created in it into the admin, with the role given there", async () => {
     // The administrator's password is the brick's generated secret (D6), never a known one.
