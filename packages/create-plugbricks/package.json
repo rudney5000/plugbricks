@@ -1,10 +1,25 @@
 {
   "name": "create-plugbricks",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Create a new plugbricks project: npm create plugbricks <project-name>.",
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudney5000/plugbricks.git",
+    "directory": "packages/create-plugbricks"
+  },
+  "homepage": "https://github.com/rudney5000/plugbricks#readme",
+  "bugs": {
+    "url": "https://github.com/rudney5000/plugbricks/issues"
+  },
+  "keywords": [
+    "create",
+    "scaffold",
+    "plugbricks",
+    "graphql",
+    "federation"
+  ],
   "engines": {
     "node": ">=22.12.0"
   },
@@ -23,9 +38,13 @@
     "test:unit": "npm test"
   },
   "dependencies": {
-    "plugbricks": "0.0.1"
+    "plugbricks": "0.1.0"
   },
   "devDependencies": {
     "vitest": "5.1.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

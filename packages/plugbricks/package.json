@@ -1,10 +1,28 @@
 {
   "name": "plugbricks",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Add plugins and infrastructure bricks to a federated GraphQL project, on Docker Compose or Kubernetes, from one manifest.",
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rudney5000/plugbricks.git",
+    "directory": "packages/plugbricks"
+  },
+  "homepage": "https://github.com/rudney5000/plugbricks#readme",
+  "bugs": {
+    "url": "https://github.com/rudney5000/plugbricks/issues"
+  },
+  "keywords": [
+    "graphql",
+    "federation",
+    "apollo-federation",
+    "cosmo",
+    "docker-compose",
+    "kubernetes",
+    "platform",
+    "plugins"
+  ],
   "engines": {
     "node": ">=22.12.0"
   },
@@ -46,5 +64,9 @@
     "@types/node": "26.6.6",
     "typescript": "7.0.2",
     "vitest": "5.1.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

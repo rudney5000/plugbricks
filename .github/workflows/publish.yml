@@ -1,0 +1,63 @@
+name: Publish
+
+# Publishes plugbricks and create-plugbricks to npm when a version tag is pushed (v0.1.0). The packages go out under the
+# "next" dist-tag, with provenance; `npm dist-tag add plugbricks@<version> latest` promotes one by hand (D24).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # An "npm" environment lets the owner require an approval before this job runs (Settings, Environments).
+    environment: npm
+    permissions:
+      contents: read
+      # Needed for the provenance statement, which ties the package to this repository and this commit.
+      id-token: write
+    steps:
+      # Actions pinned by commit SHA; the comment gives the release it was resolved from.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Check that the tag matches the packages and comes from main
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./packages/plugbricks/package.json').version")
+          create=$(node -p "require('./packages/create-plugbricks/package.json').version")
+          needs=$(node -p "require('./packages/create-plugbricks/package.json').dependencies.plugbricks")
+          if [ "$TAG" != "v$version" ] || [ "$version" != "$create" ] || [ "$version" != "$needs" ]; then
+            echo "tag $TAG, plugbricks $version, create-plugbricks $create, which asks for plugbricks $needs: they must all agree"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "$GITHUB_SHA is not on main: only a merged commit is published"
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - run: npm run build -w plugbricks-admin
+
+      # Packs the package as npm will publish it, unpacks it and runs it (what the whole test run does not check).
+      - run: npm exec -w plugbricks -- vitest run test/dist.test.ts
+
+      # plugbricks first: create-plugbricks depends on it at this exact version.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish -w plugbricks --tag next
+          npm publish -w create-plugbricks --tag next

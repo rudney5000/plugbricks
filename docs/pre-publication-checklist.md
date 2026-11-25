@@ -17,20 +17,24 @@ is added. Each item says what to check and why.
 - [ ] **No vulnerable dependency in production.** `npm audit --omit=dev --audit-level=high` finds
       nothing (the CI `quality` job runs it). The `overrides` entry for `@graphql-tools/utils` in
       the root `package.json` (see D8) is checked again: remove it once the composer needs no override.
-- [ ] **No secret and no generated file in the package.** `npm pack --dry-run` lists only `dist/`
-      and `schemas/`.
+- [ ] **No secret and no generated file in the package.** `npm pack --dry-run` lists only `dist/`,
+      `schemas/`, `LICENSE` and `NOTICE` (the `dist` test checks it).
 - [ ] **Redo the network capture** (no DNS lookup, no outbound connection from the router at startup) whenever the router image version changes; the telemetry variable names may change.
 - [x] **The licence is chosen** (D23): Apache-2.0, `LICENSE` and `NOTICE` in the root and in both published packages.
       The copyright line of `NOTICE` names the GitHub account; change it if it should be a person's name.
-- [ ] **Package names and `private`.** The names `plugbricks` and `create-plugbricks` were free on npm on 2026-11-25 (404);
-      check again just before the first publish, and drop `"private": true` only on what is published.
-- [ ] **Notices of the third-party code in the admin bundle.** The admin UI built into the `plugbricks` package (`dist/admin`)
-      contains React, React Router and other MIT code, and the bundle carries none of their licence notices. Ship them
-      (keep the legal comments in the build, or generate a third-party notices file) before the first publish.
+- [ ] **Package names.** The names `plugbricks` and `create-plugbricks` were free on npm on 2026-11-25 (404); check
+      again just before the first publish. `"private": true` is gone from both packages (D24): `publishConfig.provenance`
+      is meant to make a publish from a person's machine fail (not tested: only the first real publish will show it).
+- [x] **Notices of the third-party code in the admin bundle** (D24): `prepack` writes `dist/admin/THIRD_PARTY_NOTICES.txt`
+      (React, React Router, their dependencies and Tailwind, with their licence texts); the `dist` test requires it.
 - [ ] **The author's right to license.** Check that the employment terms allow publishing this project under this
       licence, since part of it was written on an employer's machine. Only the author can check this.
-- [ ] **First version number.** Everything is 0.0.1. Decide what the first published version is (and what 0.x means for
-      the lockfile, the manifest schema and the CLI codes, which are meant to be stable) before tagging it.
+- [x] **First version number** (D24): 0.1.0, published from a `v0.1.0` tag by `.github/workflows/publish.yml`, under the
+      `next` dist-tag. 0.x means the manifest, the lock and the CLI codes can still change in a minor version.
+- [ ] **The accounts and settings that only the owner can create** (D24): an npm account with two-factor authentication,
+      the `NPM_TOKEN` repository secret, and an `npm` environment with a required reviewer. Then check the names once more.
+- [ ] **Example bricks for a new project.** The archive carries none, so `plugbricks add path/to/postgres` of the README
+      has nothing to point to: `create-plugbricks` should copy them into the project it creates.
 - [ ] **Signature of the tool checksums.** `tools.json` verifies each binary against a sha256 read from the checksum
       file of the same release; that proves the download is the file the release lists, not that the release is the
       maintainers'. Verify the signature of the checksum files where the tool publishes one (cosign, minisign or GPG).
