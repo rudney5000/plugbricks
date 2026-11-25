@@ -1,4 +1,4 @@
-# Image of the keycloak example brick: docker build -t plugbricks-example/keycloak:0.1.0 apis/keycloak
+# Image of the keycloak example brick: docker build -t ghcr.io/rudney5000/plugbricks/keycloak:0.1.0 apis/keycloak
 # The official image, pinned by digest, built once for PostgreSQL with its health endpoints ("kc.sh build"),
 # so that a new container starts with --optimized instead of rebuilding itself (84 s measured, D18).
 

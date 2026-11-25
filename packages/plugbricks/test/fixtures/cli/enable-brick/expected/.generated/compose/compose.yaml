@@ -2,7 +2,7 @@
 name: demo
 services:
   orders-api-app:
-    image: plugbricks-example/orders-api:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
     environment:
       DATABASE_URL: "postgres://orders-api:${PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders-api"
     healthcheck:

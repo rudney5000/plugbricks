@@ -2,7 +2,7 @@
 name: demo
 services:
   keycloak-app:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     environment:
       DATABASE_URL: "postgres://keycloak:${PB_POSTGRES__KEYCLOAK__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/keycloak"
       KC_BOOTSTRAP_ADMIN_PASSWORD: "${PB_KEYCLOAK__ADMIN_PASSWORD:?missing secret; run plugbricks generate}"

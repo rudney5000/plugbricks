@@ -9,6 +9,7 @@ import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { ask, get, through, until, type Answer } from "./helpers/graphql.js";
 import { k8sTestTarget } from "./helpers/k8s-guard.js";
 import { freePort, portForward, stopAllForwards } from "./helpers/port-forward.js";
+import { exampleImage } from "./helpers/images.js";
 
 // Runs the Kubernetes driver against a real, throwaway k3d cluster: up with postgres and orders, a
 // GraphQL call, down, remove + up --prune-volumes; the router in front of orders and shipping, with real requests
@@ -82,7 +83,7 @@ const names = (ns: string, kind: string) => {
 const loaded = new Set<string>();
 function loadImage(api: string): void {
   if (loaded.has(api)) return;
-  const tag = `plugbricks-example/${api}:0.1.0`;
+  const tag = exampleImage(api);
   const build = spawnSync("docker", ["build", "--quiet", "--tag", tag, join(repo, "apis", api)], { encoding: "utf8" });
   expect(build.status, build.stderr).toBe(0);
   const imported = spawnSync(k3d, ["image", "import", tag, "--cluster", target.ok ? target.cluster : ""], { encoding: "utf8" });

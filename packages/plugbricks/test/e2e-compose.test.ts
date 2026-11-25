@@ -8,6 +8,7 @@ import { main } from "../src/cli.js";
 import type { LiveStatus } from "../src/live.js";
 import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
+import { exampleImage } from "./helpers/images.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
 // down. Skipped, with the reason in the title, where no Linux Docker engine answers (macOS and
@@ -108,13 +109,9 @@ describe("Docker Compose driver against a real Docker engine", () => {
     `runs the orders API on its own database: data kept across down/up, no access to another consumer's database${why}`,
     () => {
       const repo = fileURLToPath(new URL("../../../", import.meta.url));
-      const build = spawnSync(
-        "docker",
-        ["build", "--quiet", "--tag", "plugbricks-example/orders-api:0.1.0", join(repo, "apis/orders-api")],
-        {
-          encoding: "utf8",
-        },
-      );
+      const build = spawnSync("docker", ["build", "--quiet", "--tag", exampleImage("orders-api"), join(repo, "apis/orders-api")], {
+        encoding: "utf8",
+      });
       expect(build.status, build.stderr).toBe(0);
 
       const name = "pbtest-orders";
@@ -248,7 +245,7 @@ function buildExampleApis(): void {
   if (apisBuilt) return;
   const repo = fileURLToPath(new URL("../../../", import.meta.url));
   for (const api of ["orders-api", "shipping-api", "orders-web"]) {
-    const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
+    const build = spawnSync("docker", ["build", "--quiet", "--tag", exampleImage(api), join(repo, "apis", api)], {
       encoding: "utf8",
     });
     expect(build.status, build.stderr).toBe(0);
@@ -261,13 +258,9 @@ let queueConsumerBuilt = false;
 function buildQueueConsumer(): void {
   if (queueConsumerBuilt) return;
   const repo = fileURLToPath(new URL("../../../", import.meta.url));
-  const build = spawnSync(
-    "docker",
-    ["build", "--quiet", "--tag", "plugbricks-example/queue-consumer:0.1.0", join(repo, "apis/queue-consumer")],
-    {
-      encoding: "utf8",
-    },
-  );
+  const build = spawnSync("docker", ["build", "--quiet", "--tag", exampleImage("queue-consumer"), join(repo, "apis/queue-consumer")], {
+    encoding: "utf8",
+  });
   expect(build.status, build.stderr).toBe(0);
   queueConsumerBuilt = true;
 }

@@ -2,7 +2,7 @@
 name: demo
 services:
   keycloak-app:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     environment:
       DATABASE_URL: "postgres://keycloak:${PB_POSTGRES__KEYCLOAK__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/keycloak"
       GRAPHQL_URL: http://router:3002/graphql
@@ -76,7 +76,7 @@ services:
         condition: service_started
     restart: "no"
   orders-api-app:
-    image: plugbricks-example/orders-api:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
     environment:
       AUTHORIZATION_MUTATIONS_ROLE: orders:write
       AUTHORIZATION_QUERIES_ROLE: orders:read
@@ -125,7 +125,7 @@ services:
         condition: service_completed_successfully
     restart: "no"
   orders-api-provision-oidc:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     entrypoint:
       - /bin/bash
       - /provision/create-client.sh
@@ -172,7 +172,7 @@ services:
         condition: service_started
     restart: "no"
   orders-api-wait-oidc:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     entrypoint:
       - /bin/sh
       - "-c"
@@ -191,7 +191,7 @@ services:
         condition: service_started
     restart: "no"
   orders-web-app:
-    image: plugbricks-example/orders-web:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.0
     environment:
       GRAPHQL_URL: http://router:3002/graphql
       OIDC_AUDIENCE: plugbricks-router
@@ -222,7 +222,7 @@ services:
         protocol: tcp
     restart: unless-stopped
   orders-web-provision-oidc:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     entrypoint:
       - /bin/bash
       - /provision/create-client.sh
@@ -245,7 +245,7 @@ services:
         condition: service_completed_successfully
     restart: "no"
   orders-web-wait-oidc:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     entrypoint:
       - /bin/sh
       - "-c"

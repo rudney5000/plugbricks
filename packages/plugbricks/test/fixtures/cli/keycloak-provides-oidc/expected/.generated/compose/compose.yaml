@@ -2,7 +2,7 @@
 name: demo
 services:
   keycloak-app:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     environment:
       DATABASE_URL: "postgres://keycloak:${PB_POSTGRES__KEYCLOAK__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/keycloak"
       KC_BOOTSTRAP_ADMIN_PASSWORD: "${PB_KEYCLOAK__ADMIN_PASSWORD:?missing secret; run plugbricks generate}"
@@ -74,7 +74,7 @@ services:
         condition: service_started
     restart: "no"
   orders-web-app:
-    image: plugbricks-example/orders-web:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.0
     environment:
       OIDC_AUDIENCE: plugbricks-router
       OIDC_CLIENT_ID: orders-web
@@ -103,7 +103,7 @@ services:
         protocol: tcp
     restart: unless-stopped
   orders-web-provision-oidc:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     entrypoint:
       - /bin/bash
       - /provision/create-client.sh
@@ -126,7 +126,7 @@ services:
         condition: service_completed_successfully
     restart: "no"
   orders-web-wait-oidc:
-    image: plugbricks-example/keycloak:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
     entrypoint:
       - /bin/sh
       - "-c"
