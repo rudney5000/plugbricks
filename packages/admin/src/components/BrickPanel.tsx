@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { dependencyGraph, requiredBy, tone } from "../lib.js";
+import { dependencyGraph, describeAuthorization, requiredBy, tone } from "../lib.js";
 import type { DependencyGraph, GraphEdge, GraphNode } from "../lib.js";
 import type { AdminBrick, AdminDependency, LiveState } from "../types.js";
 
@@ -258,6 +258,8 @@ function Details({ brick }: { brick: AdminBrick }) {
           ? brick.dependsOn.map((d) => `${d.brick} (${KIND[d.kind]}${d.optional ? ", optional" : ""})`).join(", ")
           : "—"}
       </Row>
+      <Row label="Authorization">{describeAuthorization(brick.authorization)}</Row>
+      <Row label="Roles held">{brick.authorization.grants.length ? brick.authorization.grants.join(", ") : "—"}</Row>
       <Row label="Tags">{brick.tags.length ? brick.tags.join(", ") : "—"}</Row>
       {brick.webUrl && (
         <Row label="Page">

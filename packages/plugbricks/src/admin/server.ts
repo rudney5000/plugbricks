@@ -513,6 +513,37 @@ function dependenciesOf(name: string, m: BrickManifest | undefined, status: Retu
   return [...found.values()].sort((a, b) => a.brick.localeCompare(b.brick));
 }
 
+/** What a brick's API asks of a token (D22), as the admin shows it. */
+interface AuthorizationView {
+  /** "roles": the API enforces the roles below; "open": it requires oidc and declares none, so any valid token may call it; "none": no token is involved. */
+  state: "roles" | "open" | "none";
+  /** The role each operation class asks for; null when the class is left out (any valid token). */
+  queries: string | null;
+  mutations: string | null;
+  /** "<brick>/<role>": the roles the brick's own service account is given on the bricks it depends on. */
+  grants: string[];
+}
+
+/** Whether the brick has an oidc provider wired now: a required one, or an optional one whose provider is enabled. */
+function oidcWired(requirement: { provider?: string; optional?: boolean } | undefined, status: ReturnType<typeof platformStatus>): boolean {
+  if (!requirement) return false;
+  if (!requirement.optional) return true;
+  const provider = Object.hasOwn(status.capabilities, "oidc") ? status.capabilities.oidc : undefined;
+  return provider !== undefined && status.bricks.some((x) => x.name === provider && x.enabled);
+}
+
+function authorizationOf(
+  m: BrickManifest | undefined,
+  oidc: { provider?: string; optional?: boolean } | undefined,
+  status: ReturnType<typeof platformStatus>,
+  grants: string[],
+): AuthorizationView {
+  const wired = oidcWired(oidc, status);
+  const state = !wired || !m ? "none" : m.authorization ? "roles" : m.subgraph ? "open" : "none";
+  if (state !== "roles") return { state, queries: null, mutations: null, grants };
+  return { state, queries: m?.authorization?.queries ?? null, mutations: m?.authorization?.mutations ?? null, grants };
+}
+
 async function bricksView(o: AdminOptions) {
   const status = platformStatus(o.root);
   const project = readProject(o.root);
@@ -602,6 +633,7 @@ async function bricksView(o: AdminOptions) {
             : `${cap} (optional, not provided)`;
         })
         .join(", "),
+      authorization: authorizationOf(m, b.requires.oidc, status, plan?.authorization.find((a) => a.brick === b.name)?.grants ?? []),
       // What `remove` would refuse it for, from the CLI's own check, so the UI can say so before trying.
       removeBlockedBy,
       dependsOn: dependenciesOf(b.name, m, status),

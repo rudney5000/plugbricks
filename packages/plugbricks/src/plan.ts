@@ -195,9 +195,21 @@ export interface PlanRouterAuth {
   wait: { image: string; exec: string[]; intervalSeconds: number; timeoutSeconds: number };
 }
 
+/**
+ * What D22 puts on a brick, when the platform has an oidc provider for it: the roles its API asks of a token, per
+ * operation class, and the "<brick>/<role>" its own service account is given on the bricks it depends on.
+ */
+export interface PlanAuthorization {
+  brick: string;
+  queries?: string;
+  mutations?: string;
+  grants: string[];
+}
+
 export interface Plan {
   platform: string;
   services: PlanService[];
+  authorization: PlanAuthorization[];
   router?: PlanRouter;
   requirements: PlanRequirement[];
   scripts: PlanScripts[];
@@ -367,6 +379,7 @@ export function buildPlan(
   const requirements: PlanRequirement[] = [];
   const scripts = new Map<string, PlanScripts>();
   const volumes: PlanVolume[] = [];
+  const authorization: PlanAuthorization[] = [];
 
   /**
    * The provider of each requirement of a brick. An optional one (D19) records none: it is wired to the brick that
@@ -392,6 +405,9 @@ export function buildPlan(
     const roles = providers.has("oidc")
       ? authorizationRoles(brick, m, manifests, (b) => wiredProviders(b, manifests.get(b)!).has("oidc"))
       : undefined;
+    if (roles && (m.authorization || roles.granted.length > 0)) {
+      authorization.push({ brick, ...m.authorization, grants: roles.granted });
+    }
     // Variables injected by every required capability; the brick's own env wins on a clash.
     const injected: Record<string, Value> = {};
     for (const cap of requires) {
@@ -524,6 +540,7 @@ export function buildPlan(
   return {
     platform,
     services: services.sort((a, b) => a.name.localeCompare(b.name)),
+    authorization: authorization.sort((a, b) => a.brick.localeCompare(b.brick)),
     ...(planRouter ? { router: planRouter } : {}),
     requirements: requirements.sort((a, b) => a.consumer.localeCompare(b.consumer) || a.capability.localeCompare(b.capability)),
     scripts: [...scripts.values()].sort((a, b) => a.name.localeCompare(b.name)),
