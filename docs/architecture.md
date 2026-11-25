@@ -53,7 +53,8 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
 
 ## 3. Control plane: from a manifest to running containers (built)
 
-1. **`add <dir>`** validates the manifest against `schemas/plugin-manifest.schema.json`, checks the
+1. **`add <name>` or `add <dir>`** finds the brick (a name is `bricks/<name>` of the project, or the folder of that
+   name where the command was typed; both at once are refused, D25), validates the manifest against `schemas/plugin-manifest.schema.json`, checks the
    templates (D6), the image pinning rule, the runtime names, then resolves capabilities: a brick that
    requires `database` is refused while no installed brick provides it (the provider is never added
    automatically). If the platform would serve subgraphs, they are **composed before anything is

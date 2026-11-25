@@ -1747,7 +1747,39 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   exist); an `npm` environment in the repository settings, with the owner as a required reviewer, so that no tag
   publishes without an approval; the names checked again; the employment terms checked (D23).
 - **Not decided here:** the example bricks. The archive does not carry them, so a visitor has nothing to `add`
-  (checklist). `create-plugbricks` copying them into a new project is the next step.
+  (checklist). `create-plugbricks` copying them into a new project is the next step: done in D25.
+
+## D25. `add` by name, from the project's `bricks/` folder; a new project gets three bricks there
+
+- **Status:** implemented (2026-11-25). Step 1 of section 2 of `docs/roadmap.md`.
+- **Context:** a new project had no brick to add: the published packages carry no example (D24), and the README
+  said "point `add` at a brick folder of the plugbricks repository". The roadmap asks for `plugbricks add postgres`,
+  with the project's own folder as the catalogue, and no catalogue to host.
+- **Decision.**
+  - **A name or a path.** An argument of `add` that follows the brick name rule (`^[a-z][a-z0-9-]{0,38}[a-z0-9]$`:
+    no `/`, no `.`) is a name; anything else is a path, as before.
+  - **Where a name is looked for.** In `bricks/<name>` of the platform (`--dir` when given, not the current folder),
+    then in the folder `<name>` where the command was typed. The second is what `add postgres` meant before this
+    decision, and what about sixty calls of the end-to-end tests rely on (they copy `examples/postgres` to
+    `./postgres`); it stays.
+  - **Nothing picked silently.** When both hold a brick (and are not the same folder), `add` refuses with
+    `BRICK_NAME_AMBIGUOUS` and asks for `./<name>` or `bricks/<name>`. When neither does, `BRICK_NOT_IN_FOLDER` says
+    what `bricks/` holds, or that there is no `bricks/`.
+  - **The folder is named after the brick.** A brick taken from `bricks/<name>` must have `"name": "<name>"`
+    (`BRICK_NAME_MISMATCH`): otherwise `add postgres` would install another name, and `remove postgres` would fail.
+    A path keeps any folder name. The lock records the source as usual, `bricks/postgres`.
+  - **Three bricks in a new project.** `create-plugbricks` ships `bricks/postgres`, `bricks/rabbitmq` and
+    `bricks/nats`, the example bricks whose images are public on Docker Hub. They are copies of
+    `packages/plugbricks/examples/`, kept in `packages/create-plugbricks/template/bricks/`; a test of
+    `create-plugbricks` fails when a copy differs from its example, file by file. Their provision scripts are run
+    as `/bin/sh <script>`, so the executable bit, which `npm pack` drops, does not matter. `services/orders` stays
+    where it was: it is the person's own code, added by path, and its image is a placeholder.
+- **Tested.** CLI scenarios `add-by-name` (golden files, the source `bricks/<name>`, adding again unchanged),
+  `add-by-name-not-in-folder`, `add-by-name-here`, `add-by-name-ambiguous`, `add-by-name-mismatch` and
+  `add-by-name-dir`; `create-plugbricks`: the structure, the copies equal to the examples and valid, the README,
+  `add postgres` by name in the new project, and the packed generator.
+- **Not done here.** The admin's "add" takes the same argument (it runs the CLI) but does not list `bricks/`; adding
+  what a brick needs, with confirmation, is the next step of the roadmap (section 2, step 2).
 
 ---
 

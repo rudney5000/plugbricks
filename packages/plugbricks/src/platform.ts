@@ -32,6 +32,8 @@ import {
 export const PLATFORM_FILE = "platform.json";
 export const LOCK_FILE = "platform.lock";
 export const BRICKS_DIR = ".platform/bricks";
+/** The project's own folder of bricks to add by name (D25): `plugbricks add postgres` adds bricks/postgres. */
+export const BRICK_FOLDER = "bricks";
 const NAME = /^[a-z][a-z0-9-]{0,38}[a-z0-9]$/;
 
 /** Same rule as "name" in platform.schema.json. */
@@ -585,11 +587,58 @@ function missingDeclaredDependencies(m: Manifest, lock: Lock): string[] {
 }
 
 /**
+ * Whether an argument of "add" is a brick name (D25) rather than a path: the brick name rule, so no separator, no dot
+ * and nothing that could be a file. `postgres` is a name; `./postgres`, `bricks/postgres` and `plugin.json` are paths.
+ */
+export function isBrickName(arg: string): boolean {
+  return NAME.test(arg);
+}
+
+/** Where "add" takes a brick from, for an argument that is a name (D25). */
+export interface BrickByName {
+  /** The brick's folder. */
+  dir: string;
+  /** Set when the brick comes from bricks/: its manifest must then carry this name. */
+  byName?: string;
+}
+
+/**
+ * Finds the brick an argument of "add" names (D25): bricks/<name> of the project, or the folder <name> where the
+ * command was typed, as before bricks/ existed. Never picks one silently: when both hold a brick, BRICK_NAME_AMBIGUOUS
+ * asks for a path; when neither does, BRICK_NOT_IN_FOLDER says what bricks/ holds.
+ */
+export function brickByName(root: string, name: string, cwd: string = root): BrickByName {
+  const project = resolve(root);
+  const inFolder = join(project, BRICK_FOLDER, name);
+  const here = join(resolve(cwd), name);
+  const isBrick = (dir: string) => existsSync(join(dir, "plugin.json"));
+  if (isBrick(inFolder) && isBrick(here) && inFolder !== here) {
+    fail("BRICK_NAME_AMBIGUOUS", { name, folder: `${BRICK_FOLDER}/` });
+  }
+  if (isBrick(inFolder)) return { dir: inFolder, byName: name };
+  if (isBrick(here)) return { dir: here };
+  const folder = join(project, BRICK_FOLDER);
+  const names = existsSync(folder)
+    ? readdirSync(folder, { withFileTypes: true })
+        .filter((e) => e.isDirectory() && isBrick(join(folder, e.name)))
+        .map((e) => e.name)
+        .sort()
+    : [];
+  const detail = !existsSync(folder)
+    ? `the project has no ${BRICK_FOLDER}/ folder, and there is no brick folder "${name}" here`
+    : names.length
+      ? `${BRICK_FOLDER}/ holds ${names.join(", ")}`
+      : `${BRICK_FOLDER}/ holds no brick`;
+  fail("BRICK_NOT_IN_FOLDER", { name, folder: `${BRICK_FOLDER}/`, detail });
+}
+
+/**
  * Validates a brick, checks it against the installed ones, copies it to .platform/bricks/<name>
  * and records it. Adding the same brick again changes nothing.
- * `brickPath` is a brick directory or its plugin.json, absolute or relative to `root`.
+ * `brickPath` is a brick directory or its plugin.json, absolute or relative to `root`. With `byName` (D25), the brick
+ * was asked for by that name, and its manifest must carry it (BRICK_NAME_MISMATCH).
  */
-export function addBrick(root: string, brickPath: string): AddResult {
+export function addBrick(root: string, brickPath: string, options: { byName?: string } = {}): AddResult {
   const project = readProject(root);
   const target = resolve(project.root, brickPath);
   const manifestFile = target.endsWith(".json") ? target : join(target, "plugin.json");
@@ -606,6 +655,11 @@ export function addBrick(root: string, brickPath: string): AddResult {
       v.issues.map((i) => ({ ...i, path: `${shown}#${i.path}` })),
     );
   const m = raw as Manifest;
+  // Asked for by name, the folder must hold the brick of that name: otherwise "add postgres" would install another
+  // name, and "remove postgres" would then fail.
+  if (options.byName !== undefined && m.name !== options.byName) {
+    fail("BRICK_NAME_MISMATCH", { name: options.byName, path: shown, actual: m.name });
+  }
   checkReferencedFiles(brickDir, m);
   const integrity = brickIntegrity(brickDir, m.name);
 

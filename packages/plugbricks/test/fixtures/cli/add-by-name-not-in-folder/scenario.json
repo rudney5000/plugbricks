@@ -1,0 +1,22 @@
+{
+  "description": "a name that is neither a brick of bricks/ nor a brick folder here is refused (BRICK_NOT_IN_FOLDER, D25), and the message says what bricks/ holds",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    {
+      "run": ["add", "postgres"],
+      "exit": 1,
+      "codes": ["BRICK_NOT_IN_FOLDER"],
+      "stderr": "no brick named \"postgres\" in bricks/: the project has no bricks/ folder, and there is no brick folder \"postgres\" here",
+      "unchanged": true
+    },
+    { "mutate": { "copyDir": { "from": "examples/nats", "to": "bricks/nats" } } },
+    { "mutate": { "copyDir": { "from": "examples/rabbitmq", "to": "bricks/rabbitmq" } } },
+    {
+      "run": ["add", "postgres"],
+      "exit": 1,
+      "codes": ["BRICK_NOT_IN_FOLDER"],
+      "stderr": "bricks/ holds nats, rabbitmq",
+      "unchanged": true
+    }
+  ]
+}

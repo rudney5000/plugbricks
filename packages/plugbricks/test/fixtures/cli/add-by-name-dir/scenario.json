@@ -1,0 +1,9 @@
+{
+  "description": "with --dir, a name is looked for in the bricks/ folder of that platform, not of the current folder (D25)",
+  "steps": [
+    { "run": ["init", "--name", "demo", "--dir", "proj"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "proj/bricks/postgres" } } },
+    { "run": ["add", "postgres", "--dir", "proj"], "stdout": "Added postgres 1.0.0" },
+    { "run": ["status", "--dir", "proj"], "stdout": "postgres" }
+  ]
+}

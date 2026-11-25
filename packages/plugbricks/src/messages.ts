@@ -90,6 +90,9 @@ export const MESSAGES = {
 
   // add
   BRICK_NOT_FOUND: "no plugin.json found at {path}",
+  BRICK_NOT_IN_FOLDER: 'no brick named "{name}" in {folder}: {detail}',
+  BRICK_NAME_AMBIGUOUS: 'both {folder}{name} and the folder "{name}" here hold a brick; write ./{name} or {folder}{name} to say which one',
+  BRICK_NAME_MISMATCH: '{path} is the brick "{actual}", not "{name}"; name its folder after the brick, or add it by its path',
   BRICK_PATH_NOT_PORTABLE: 'brick "{brick}" cannot be used on every OS: {detail}',
   MANIFEST_INVALID: "{path} is not a valid plugin manifest; see the issues below",
   BRICK_FILE_MISSING: 'brick "{brick}" references {file}, which does not exist in the brick',

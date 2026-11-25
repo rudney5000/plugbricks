@@ -1,0 +1,81 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "rabbitmq",
+  "version": "0.1.0",
+  "description": "Base brick: a RabbitMQ broker that provides the \"queue\" capability to every consumer that requires it. One broker is shared by all of them; the provision task gives each consumer its own vhost, user and permissions (D11, D12).",
+  "services": [
+    {
+      "name": "broker",
+      "image": "rabbitmq:4.1.4-management",
+      "port": 5672,
+      "extraPorts": [
+        {
+          "name": "management",
+          "port": 15672
+        }
+      ],
+      "volumes": [
+        {
+          "name": "data",
+          "mountPath": "/var/lib/rabbitmq",
+          "retention": "retain"
+        }
+      ],
+      "healthcheck": {
+        "exec": [
+          "rabbitmq-diagnostics",
+          "-q",
+          "ping"
+        ],
+        "intervalSeconds": 10,
+        "timeoutSeconds": 5,
+        "retries": 10,
+        "startPeriodSeconds": 20
+      },
+      "env": {
+        "RABBITMQ_DEFAULT_USER": "plugbricks",
+        "RABBITMQ_DEFAULT_PASS": "${secrets.default_password}"
+      }
+    }
+  ],
+  "provides": {
+    "queue": {
+      "service": "broker",
+      "ready": {
+        "exec": [
+          "nc",
+          "-z",
+          "-w",
+          "2",
+          "${provider.host}",
+          "${provider.port}"
+        ],
+        "image": "busybox:1.36",
+        "intervalSeconds": 2
+      },
+      "provision": {
+        "image": "curlimages/curl:8.11.1",
+        "command": [
+          "/bin/sh",
+          "/provision/create-vhost.sh"
+        ],
+        "scripts": "provision",
+        "env": {
+          "MANAGEMENT_URL": "http://${provider.host}:15672",
+          "ADMIN_USER": "plugbricks",
+          "ADMIN_PASSWORD": "${secrets.default_password}",
+          "APP_VHOST": "${consumer.name}",
+          "APP_USER": "${consumer.name}",
+          "APP_PASSWORD": "${secrets.consumer_password}"
+        }
+      },
+      "inject": {
+        "AMQP_URL": "amqp://${consumer.name}:${secrets.consumer_password}@${provider.host}:${provider.port}/${consumer.name}",
+        "QUEUE_NAME": "${consumer.name}"
+      }
+    }
+  },
+  "tags": [
+    "queue"
+  ]
+}
