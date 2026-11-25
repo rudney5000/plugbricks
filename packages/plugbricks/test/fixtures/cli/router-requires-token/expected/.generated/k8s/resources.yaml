@@ -187,7 +187,7 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: plugbricks-example/keycloak:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
           ports:
             - containerPort: 8080
           env:
@@ -321,7 +321,7 @@ spec:
               mountPath: /provision
               readOnly: true
         - name: wait-oidc
-          image: plugbricks-example/keycloak:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
           command:
             - /bin/sh
             - "-c"
@@ -339,7 +339,7 @@ spec:
             - name: PB_WAIT_TIMEOUT
               value: "300"
         - name: provision-oidc
-          image: plugbricks-example/keycloak:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
           command:
             - /bin/bash
             - /provision/create-client.sh
@@ -376,7 +376,7 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: plugbricks-example/orders-api:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
           ports:
             - containerPort: 4000
           env:
@@ -457,7 +457,7 @@ spec:
     spec:
       initContainers:
         - name: wait-oidc
-          image: plugbricks-example/keycloak:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
           command:
             - /bin/sh
             - "-c"
@@ -475,7 +475,7 @@ spec:
             - name: PB_WAIT_TIMEOUT
               value: "300"
         - name: provision-oidc
-          image: plugbricks-example/keycloak:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
           command:
             - /bin/bash
             - /provision/create-client.sh
@@ -512,7 +512,7 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: plugbricks-example/orders-web:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.0
           ports:
             - containerPort: 3000
           env:
@@ -674,7 +674,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: wait-oidc
-          image: plugbricks-example/keycloak:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/keycloak:0.1.0
           command:
             - /bin/sh
             - "-c"

@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
   "bricks": {
     "orders-api": {
-      "integrity": "sha256-b0c2923a2f93e06f11ba86d77e4b3cb19922234da0de54711311db87942858e9",
+      "integrity": "sha256-3ba97f4e3f4b8cda13f2bbb3d3ac72eb48b4f7e76c66443cb40a8f58d837b03c",
       "provides": [],
       "requires": {
         "database": {

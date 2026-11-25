@@ -1,4 +1,4 @@
-# Image of the orders-web example: docker build -t plugbricks-example/orders-web:0.1.0 apis/orders-web
+# Image of the orders-web example: docker build -t ghcr.io/rudney5000/plugbricks/orders-web:0.1.0 apis/orders-web
 # Same Node version as .node-version at the repository root. No runtime dependency: node:http and fetch.
 
 FROM node:22.23.5-alpine AS build

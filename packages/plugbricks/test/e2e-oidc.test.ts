@@ -9,6 +9,7 @@ import { main } from "../src/cli.js";
 import { platformOidcIssuer } from "../src/plan.js";
 import { readProject } from "../src/platform.js";
 import { browser, signInThroughKeycloak } from "./helpers/oidc-browser.js";
+import { exampleImage } from "./helpers/images.js";
 
 // Real Keycloak sign-ins into `plugbricks admin`. Both blocks use the admin's port 4100, the redirect URI of the
 // realm's public client, so they live in this one file: vitest runs the blocks of a file one after the other.
@@ -130,7 +131,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
 
   beforeAll(async () => {
     for (const api of ["keycloak", "orders-api", "orders-web"]) {
-      const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
+      const build = spawnSync("docker", ["build", "--quiet", "--tag", exampleImage(api), join(repo, "apis", api)], {
         encoding: "utf8",
       });
       expect(build.status, build.stderr).toBe(0);

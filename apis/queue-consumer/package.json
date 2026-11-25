@@ -1,7 +1,7 @@
 {
   "name": "plugbricks-example-queue-consumer",
   "version": "0.1.0",
-  "description": "Example queue consumer for plugbricks: declares its queue on the RabbitMQ broker, publishes and consumes one message, and reports it on /health. Built as the image plugbricks-example/queue-consumer:0.1.0.",
+  "description": "Example queue consumer for plugbricks: declares its queue on the RabbitMQ broker, publishes and consumes one message, and reports it on /health. Built as the image ghcr.io/rudney5000/plugbricks/queue-consumer:0.1.0.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",

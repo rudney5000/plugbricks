@@ -1,4 +1,4 @@
-# Image of the shipping example subgraph: docker build -t plugbricks-example/shipping-api:0.1.0 apis/shipping-api
+# Image of the shipping example subgraph: docker build -t ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0 apis/shipping-api
 # Same Node version as .node-version at the repository root.
 
 FROM node:22.23.5-alpine AS build

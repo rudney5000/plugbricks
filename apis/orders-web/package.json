@@ -1,7 +1,7 @@
 {
   "name": "plugbricks-example-orders-web",
   "version": "0.1.0",
-  "description": "Example web brick for plugbricks: the shop's orders page, rendered by the server through the router (GRAPHQL_URL) and refreshed by the browser (PUBLIC_GRAPHQL_URL). Built as the image plugbricks-example/orders-web:0.1.0.",
+  "description": "Example web brick for plugbricks: the shop's orders page, rendered by the server through the router (GRAPHQL_URL) and refreshed by the browser (PUBLIC_GRAPHQL_URL). Built as the image ghcr.io/rudney5000/plugbricks/orders-web:0.1.0.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",

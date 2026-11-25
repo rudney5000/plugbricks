@@ -66,7 +66,7 @@
             "containers": [
               {
                 "name": "app",
-                "image": "plugbricks-example/orders-api:0.1.0"
+                "image": "ghcr.io/rudney5000/plugbricks/orders-api:0.1.0"
               }
             ]
           }
@@ -203,7 +203,7 @@
         "containers": [
           {
             "name": "app",
-            "image": "plugbricks-example/orders-api:0.1.0",
+            "image": "ghcr.io/rudney5000/plugbricks/orders-api:0.1.0",
             "env": [
               {
                 "name": "DATABASE_URL",
@@ -227,8 +227,8 @@
         "containerStatuses": [
           {
             "name": "app",
-            "image": "plugbricks-example/orders-api:0.1.0",
-            "imageID": "docker.io/plugbricks-example/orders-api:0.1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "image": "ghcr.io/rudney5000/plugbricks/orders-api:0.1.0",
+            "imageID": "docker.io/ghcr.io/rudney5000/plugbricks/orders-api:0.1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "ready": true,
             "started": true,
             "restartCount": 0,

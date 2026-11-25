@@ -1,4 +1,4 @@
-# Image of the queue-consumer example: docker build -t plugbricks-example/queue-consumer:0.1.0 apis/queue-consumer
+# Image of the queue-consumer example: docker build -t ghcr.io/rudney5000/plugbricks/queue-consumer:0.1.0 apis/queue-consumer
 # Same Node version as .node-version at the repository root.
 
 FROM node:22.23.5-alpine AS build
