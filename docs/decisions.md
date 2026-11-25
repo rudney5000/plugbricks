@@ -1701,6 +1701,26 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D23. The licence is Apache-2.0
+
+- **Status:** implemented (2026-11-25).
+- **Decision:** plugbricks, `create-plugbricks` and the admin are under the Apache License 2.0. The text is the standard,
+  unmodified one (`LICENSE` at the root and in each published package, where npm ships it); `NOTICE` carries the
+  copyright line and is listed in the `files` of both published packages. Every `package.json` says `Apache-2.0`.
+  Nothing else changes: the packages stay `"private": true` until the publication steps of
+  `docs/pre-publication-checklist.md` are done.
+- **Why Apache-2.0 and not MIT:** an explicit patent licence, which an infrastructure tool that a company installs is
+  expected to carry; it is the licence of `@wundergraph/composition` (D8), which the tool depends on, so the project does
+  not mix two families; every other dependency of the composer is MIT or 0BSD, which Apache-2.0 accepts.
+  A source-available licence (AGPL, BSL, Elastic) was not wanted: it is meant to stop a third party from selling the
+  tool as a service, which is not an aim here, and Elastic-2.0 was already ruled out for a dependency (D8).
+- **The copyright holder** in `NOTICE` is the GitHub account that owns the repository, `rudney5000`. It is one line, in
+  three identical files (the root and the two packages), and can be changed to a person's name.
+- **Not done here:** the notices of the third-party code inside the admin bundle (see the checklist), and whether the
+  author's employment terms allow the licence: only the author can check that.
+
+---
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

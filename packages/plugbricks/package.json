@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Add plugins and infrastructure bricks to a federated GraphQL project, on Docker Compose or Kubernetes, from one manifest.",
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "private": true,
   "engines": {
     "node": ">=22.12.0"
@@ -21,7 +21,8 @@
   },
   "files": [
     "dist",
-    "schemas"
+    "schemas",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

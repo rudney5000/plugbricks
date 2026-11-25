@@ -7,8 +7,9 @@ is added. Each item says what to check and why.
       `plugbricks`. Every package must carry a licence that allows redistribution. Dependencies
       that are not MIT need a look by a person:
   - `@wundergraph/composition` 0.68.2 (decision D8) pulls 116 packages: 114 are MIT. The two
-    others are **`@wundergraph/composition` itself (Apache-2.0)** and **`tslib` (0BSD)**. Check
-    both licence texts, and whether Apache-2.0 asks us to ship its `NOTICE` file with the package.
+    others are **`@wundergraph/composition` itself (Apache-2.0)** and **`tslib` (0BSD)**. Both
+    licence texts were read on 2026-11-25. The composer is a dependency that npm installs: it is not copied into our
+    packages, so its `NOTICE`, if it has one (it has none), is not ours to ship. Check this again if it is ever bundled.
   - `@wundergraph/cosmo-shared` 0.50.2 (used from milestone 4b-3 on) adds `@wundergraph/cosmo-shared`,
     `@wundergraph/cosmo-connect`, `@connectrpc/connect-query` and `@connectrpc/connect-query-core`
     (Apache-2.0), `@bufbuild/protobuf` (Apache-2.0 AND BSD-3-Clause) and `split2` (ISC).
@@ -19,9 +20,15 @@ is added. Each item says what to check and why.
 - [ ] **No secret and no generated file in the package.** `npm pack --dry-run` lists only `dist/`
       and `schemas/`.
 - [ ] **Redo the network capture** (no DNS lookup, no outbound connection from the router at startup) whenever the router image version changes; the telemetry variable names may change.
-- [ ] **Package names and the licence field.** The npm names `plugbricks` and `create-plugbricks` are not checked for
-      availability, and every package is `"private": true` with `"license": "UNLICENSED"`: choose the licence, drop
-      `private` on what is published, and check the names before the first publish.
+- [x] **The licence is chosen** (D23): Apache-2.0, `LICENSE` and `NOTICE` in the root and in both published packages.
+      The copyright line of `NOTICE` names the GitHub account; change it if it should be a person's name.
+- [ ] **Package names and `private`.** The names `plugbricks` and `create-plugbricks` were free on npm on 2026-11-25 (404);
+      check again just before the first publish, and drop `"private": true` only on what is published.
+- [ ] **Notices of the third-party code in the admin bundle.** The admin UI built into the `plugbricks` package (`dist/admin`)
+      contains React, React Router and other MIT code, and the bundle carries none of their licence notices. Ship them
+      (keep the legal comments in the build, or generate a third-party notices file) before the first publish.
+- [ ] **The author's right to license.** Check that the employment terms allow publishing this project under this
+      licence, since part of it was written on an employer's machine. Only the author can check this.
 - [ ] **First version number.** Everything is 0.0.1. Decide what the first published version is (and what 0.x means for
       the lockfile, the manifest schema and the CLI codes, which are meant to be stable) before tagging it.
 - [ ] **Signature of the tool checksums.** `tools.json` verifies each binary against a sha256 read from the checksum
