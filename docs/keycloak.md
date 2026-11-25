@@ -66,3 +66,19 @@ console at `http://127.0.0.1:<webPort>/admin/`, its administrator's password gen
 `.secrets/secrets.env`. With it, `plugbricks admin --client-id plugbricks-admin` finds the issuer by itself
 (D19); `--issuer` is for an external Keycloak, as on this page. The README section "`keycloak`" shows the
 commands.
+
+### Roles of the APIs (D22)
+
+The brick's provision task also gives the platform's APIs their roles. A brick whose manifest has an
+`authorization` block (`orders`: `orders:read`, `orders:write`; `shipping`: `shipping:read`, `shipping:write`)
+gets those as **client roles of its own client** (the client the task creates for it, named like the brick). The
+service account of a brick that lists such an API in `dependencies` is given the roles of the operations it says it
+uses (`"operations"`, queries by default): `orders-web` holds `orders:read` and `shipping:read`, and no write role.
+The token then carries them in `resource_access.<brick>.roles`, and the API refuses a valid token without the role
+of the operation (`FORBIDDEN`, HTTP 403).
+
+To let a service write, give its service account the write role, in the console (Clients, the API's client, Roles,
+then Users, `service-account-<brick>`, Role mapping) or with `kcadm.sh add-roles -r plugbricks --uusername
+service-account-orders-web --cclientid orders --rolename orders:write`. The task never removes a role or a grant:
+to take one away, do it in the console. A token already issued keeps its roles until it expires (300 s, Keycloak's
+default for the realm); the next one does not have them.

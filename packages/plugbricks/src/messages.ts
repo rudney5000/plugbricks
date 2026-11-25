@@ -28,6 +28,8 @@ export const MESSAGES = {
   PORT_CONFLICT: 'the ports of service "{service}" conflict: {detail}',
   SELF_DEPENDENCY: 'plugin "{name}" lists itself in "dependencies"',
   DUPLICATE_DEPENDENCY: 'plugin "{name}" appears twice in "dependencies"',
+  AUTHORIZATION_WITHOUT_OIDC:
+    'the "authorization" block is checked against the tokens of the "oidc" capability, but this brick does not require it; add "oidc" to "requires" (optional is fine)',
   OIDC_NOT_PROVIDED: 'the "oidc" block describes tokens for the router, but this brick does not provide the "oidc" capability',
   WEB_ENV_RESERVED:
     'service "{service}" serves the pages of this brick and sets {name} in its env; plugbricks sets it (the router\'s address), so remove it from the manifest',

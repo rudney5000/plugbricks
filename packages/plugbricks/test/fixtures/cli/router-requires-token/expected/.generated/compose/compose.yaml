@@ -78,6 +78,8 @@ services:
   orders-app:
     image: plugbricks-example/orders:0.1.0
     environment:
+      AUTHORIZATION_MUTATIONS_ROLE: orders:write
+      AUTHORIZATION_QUERIES_ROLE: orders:read
       DATABASE_URL: "postgres://orders:${PB_POSTGRES__ORDERS__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders"
       OIDC_AUDIENCE: plugbricks-router
       OIDC_CLIENT_ID: orders
@@ -132,8 +134,10 @@ services:
       AUDIENCE: plugbricks-router
       CLIENT_ID: orders
       CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS__CLIENT_SECRET:?missing secret; run plugbricks generate}"
+      GRANTS: ""
       KEYCLOAK_URL: http://keycloak-app:8080
       REALM: plugbricks
+      ROLES: "orders:read orders:write"
     volumes:
       - type: bind
         source: "../../.platform/bricks/keycloak/provision"
@@ -227,8 +231,10 @@ services:
       AUDIENCE: plugbricks-router
       CLIENT_ID: orders-web
       CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET:?missing secret; run plugbricks generate}"
+      GRANTS: orders/orders:read
       KEYCLOAK_URL: http://keycloak-app:8080
       REALM: plugbricks
+      ROLES: ""
     volumes:
       - type: bind
         source: "../../.platform/bricks/keycloak/provision"
@@ -295,7 +301,7 @@ services:
       PROMETHEUS_ENABLED: "false"
       TRACING_ENABLED: "false"
     labels:
-      plugbricks.router-config-sha256: "5f008ab31e260fe15b7fc145ac080239a8c46561fc67b978a051f987536020f6"
+      plugbricks.router-config-sha256: "424bd1ef1fe3fe8ffe56c03ea73fbdac25631cbd70f989da7a9a2f0298a04fa3"
       plugbricks.router-auth-sha256: "47f3346e09b0d3ee12329a86ccd52bada15df44e8b357d14b3931be13bd57039"
     volumes:
       - type: bind

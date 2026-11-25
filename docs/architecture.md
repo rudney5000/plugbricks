@@ -61,7 +61,7 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
    goes into `platform.lock`.
 2. **`remove <name>`** runs the same checks for the platform without the brick. It is refused while
    another brick requires what it provides, extends one of its entities (`EXTENDS_IN_USE`), or lists it in its
-   `dependencies` (`DEPENDENCY_IN_USE`, D21). Its
+   `dependencies` (`DEPENDENCY_IN_USE`, D21; not when the entry is marked `optional`). Its
    volumes are kept by default (`retainedVolumes`, D3); its secrets are always kept (D6).
 3. **`disable <name>` / `enable <name>`**: an installed brick is not necessarily enabled (D14).
    `disable` writes `enabled: false` in `platform.json`; the brick stays installed (its copy, lock
@@ -208,7 +208,20 @@ A capability is not the only way a brick can need another one. `orders-web` read
 so it cannot work without `orders`, and no capability says so. A manifest can list such plugins in
 `dependencies` (D21). The admin shows them with the capabilities and the extended entities; `remove` refuses a
 brick that another declares (`DEPENDENCY_IN_USE`), `disable` refuses it while the declaring brick is enabled,
-`add` warns when a declared brick is not installed, and `up` does not wait for it.
+`add` warns when a declared brick is not installed, and `up` does not wait for it. An entry marked `optional`
+(`orders-web` lists `shipping` that way: its page shows the shipment when shipping is there and works without it)
+is only shown, and used for the roles below.
+
+An API says who may call it with an `authorization` block (D22): `{ "queries": "orders:read", "mutations":
+"orders:write" }`, the client roles a token needs to run a query and to run a mutation. The block needs a
+`subgraph` and `requires.oidc`. With an `oidc` provider the plan puts the two roles in the API's env
+(`AUTHORIZATION_QUERIES_ROLE`, `AUTHORIZATION_MUTATIONS_ROLE`), and the provision task of `examples/keycloak`
+creates them as roles of the API's own client (`ROLES`). A brick that lists the API in `dependencies` says what it
+does with it, `"operations": ["queries"]` by default or `["mutations"]` too, and its provision task gives its
+service account the matching roles (`GRANTS`). The API checks `resource_access.<its client>.roles` after the token
+check and before any resolver: a valid token without the role is refused with the GraphQL code `FORBIDDEN` and HTTP
+403; a token that is not valid is still 401. Without an `oidc` provider, or for a class the block leaves out,
+nothing changes.
 
 ## 6. GraphQL Federation v2 (built)
 
@@ -229,7 +242,7 @@ that intent (D8).
 
 ```mermaid
 flowchart LR
-  S1["orders/schema.graphql"] --> F["federateSubgraphs<br/>@wundergraph/composition 0.68.1"]
+  S1["orders/schema.graphql"] --> F["federateSubgraphs<br/>@wundergraph/composition 0.68.2"]
   S2["shipping/schema.graphql"] --> F
   F -->|"error"| X["add refused<br/>COMPOSITION_FAILED"]
   F -->|"ok"| H["sha256 of the federated schema<br/>→ platform.lock federation"]
@@ -270,7 +283,7 @@ without listing it in `extends` is not detected.
 | Browser origins | the router accepts only the origins it lists (`CORS_ALLOW_ORIGINS`); any other gets 403 and nothing runs | D17 |
 | Authentication | with an `oidc` provider, the router requires a JWT (issuer, audience, RS256, keys from the provider) and each API checks it again; without one, no token | D19, D20 |
 | Service identity | one confidential OIDC client per consumer, its own secret, injected by `oidc`; the router forwards the caller's token, and APIs never trust an identity header | D19, D20 |
-| Authorization | not built: any valid token may call any field | D20 |
+| Authorization | with an `oidc` provider and an `authorization` block, each API requires the client role of the operation class (queries, mutations): `FORBIDDEN` / 403 without it; without a block, any valid token; no field-level rule | D20, D22 |
 | Images | pinned to `MAJOR.MINOR` at least, or a digest; the router by digest | `src/image.ts`, `tools.json` |
 | Router | non-root (65532), read-only filesystem, no capability, playground off, telemetry off | D9 |
 | Data | one role and database per consumer; volumes kept unless pruned explicitly | D3, `examples/postgres` |
@@ -328,6 +341,8 @@ flowchart LR
 
 ## 9. Not built yet
 
-1. **Authorization.** Every valid token may call every field; per-role or per-scope authorization is not
-   built (D20).
+1. **Field-level authorization.** The role is per operation class (all queries, all mutations) of an API
+   (D22, step A). A rule on one field (`@authenticated`, `@requiresScopes`, enforced by the router and by each API)
+   is the later step B; a role removed in Keycloak stays valid in the tokens already issued until they expire
+   (300 s by default).
 2. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).

@@ -458,7 +458,8 @@ end yet.
   were compared on 2026-11-17, on the same cases (valid pair; the same entity field and the same
   value type with incompatible types; an extension of a type nobody defines; an undefined type; a
   `@key` on a missing field; a syntax error):
-  - `@wundergraph/composition` 0.68.1: Apache-2.0, 116 packages in its production closure.
+  - `@wundergraph/composition` (0.68.1 when compared, 0.68.2 pinned today): Apache-2.0, 116 packages in its
+    production closure.
     Steady-state call 1.3 to 3.2 ms. Errors are plain `Error` objects with a message only, no code,
     and the same problem can appear twice.
   - `@apollo/composition` 2.14.4: **Elastic-2.0**, 3 packages under that licence, 73 packages in
@@ -466,8 +467,9 @@ end yet.
     `EXTENSION_WITH_NO_BASE`, ...). Its output is a supergraph schema for Apollo's router, not
     the configuration the Cosmo router reads.
   - the `wgc` binary 0.133.12: 565 packages, 271 MB, 3.3 s per call: rejected as a dependency.
-- **Decision:** `@wundergraph/composition` 0.68.1, exact version, with `@wundergraph/cosmo-shared`
-  0.50.1 (added now, used from step 4b-3).
+- **Decision:** `@wundergraph/composition` 0.68.2, exact version, with `@wundergraph/cosmo-shared`
+  0.50.2 (added now, used from step 4b-3). Raised from 0.68.1 and 0.50.1 on 2026-11-25 to follow
+  `wgc` 0.133.13 (PR #61); the comparison above was made with 0.68.1.
   1. **One chain.** The router reads a `router-config.json` built from the composition result.
      Checking with one composer and configuring with another would let them disagree. The
      configuration built in process from this library was accepted by the router 0.372.0
@@ -530,22 +532,25 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   federation is involved (a subgraph is being added, or the lock already records one): then `add`
   and `remove` refuse with `BRICK_UNREADABLE`, because composing without it would record a wrong
   hash.
-- **Dependency override.** `@wundergraph/composition` 0.68.1 and `@wundergraph/cosmo-shared` 0.50.1
-  depend on `@graphql-tools/utils` 11.x and 8.x, which have two high advisories (prototype
-  pollution in `mergeDeep` and `mergeIncrementalResult`; fixed in 12.0.1). The root `package.json`
-  therefore overrides it to 12.1.0, the version `@graphql-tools/merge` already uses. The composition
-  code only requires `@graphql-tools/merge`. The router configuration built with `cosmo-shared`
-  and the override is byte-identical to the one built before it (checked on 2026-11-17 on the two
-  subgraphs of the spike). The CI audit of production dependencies passes with it and fails
-  without it. Remove the override when the packages move to a fixed version.
+- **Dependency override.** `@wundergraph/composition` 0.68.2 and `@wundergraph/cosmo-shared` 0.50.2
+  both declare `@graphql-tools/utils` `^12.1.0`, so the override is no longer what keeps the fixed
+  version in the tree; it is left in place (it pins 12.1.0, the version the tree resolves anyway)
+  and removed with the next dependency pass. It was added when 0.68.1 and 0.50.1 asked for 11.x
+  and 8.x, which have two high advisories (prototype pollution in `mergeDeep` and
+  `mergeIncrementalResult`; fixed in 12.0.1). The composition code only requires
+  `@graphql-tools/merge`; `federation.ts` uses `printSchemaWithDirectives` from this package
+  directly, hence the direct dependency in `packages/plugbricks/package.json`. The router
+  configuration built with `cosmo-shared` and the override is byte-identical to the one built
+  before it (checked on 2026-11-17 on the two subgraphs of the spike). The CI audit of production
+  dependencies passes with it and fails without it at the old versions.
 - **Risks:**
   - the router configuration (step 4b-3) reuses about 25 lines of `wgc` (`constructRouterSubgraph`
     in its `router compose` command) with `buildRouterConfig` from `cosmo-shared`: these lines are
     not a public API and can change. A CI job comparing our output with `wgc router compose` (version
     pinned) is the planned protection; until it exists, the equality was checked once, by hand, and
     differs only by `featureFlagConfigs`;
-  - the composer and the router are released independently: 0.68.1 and 0.372.0 are known to work
-    together on the cases of the spike, nothing more;
+  - the composer and the router are released independently: 0.68.2 and 0.372.0 are known to work
+    together (the 2026-11-17 spike, then the `wgc` cross-check of PR #61), nothing more;
   - the schema hash depends on the composer's output: a new composer version that prints another
     schema makes `status` report `FEDERATION_CHANGED` until the bricks are added again.
 
@@ -671,7 +676,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Risks:** the router image is large (145 MB) and comes from ghcr.io, which is not pinned by a
   mirror; the playground variable is deprecated; the telemetry switch is a variable that the router could
   rename (the check is a capture, not a test in CI); the composer version appears in the configuration
-  (`compatibilityVersion: 1:0.68.1`), so a new composer changes the text and the hash of the file.
+  (`compatibilityVersion: 1:0.68.2`), so a new composer changes the text and the hash of the file.
 
 ---
 
@@ -1421,6 +1426,267 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done:** editing `platform.json` from the panel; a registry of plugin versions (the mockup this came from
   had "Release", "Stored plugins" and "Add version": plugbricks has one installed copy per brick, no registry).
   The brick integrity hash covers `plugin.json`, so adding the field to an installed brick means `add` again.
+- **Addendum (D22, 2026-11-25):** an entry can say `"optional": true`, and then `remove`, `disable` and the `add`
+  warning above skip it (the brick works without its target; the admin shows the link as optional), and
+  `"operations"` says which GraphQL operation classes the brick uses of its target, which decides the roles it is
+  granted. The rules above are unchanged for an entry that says neither.
+
+---
+
+## D22. Authorization in the data plane: roles per operation now, field scopes later
+
+- **Status:** accepted (2026-11-25); **step A is implemented, step B is not.** Proposed on 2026-11-24, accepted
+  with the five recommendations of "Questions for the owner" as written. D20 left every valid token able to call
+  every field; with an `oidc` provider and an `authorization` block, a valid token now also needs the role of the
+  class of its operation. "Implemented" below says what was built and where it differs from the proposal; the
+  rest of the entry is the proposal as it was accepted.
+- **Context:** D19 gives every brick that requires `oidc` its own confidential Keycloak client, with a service
+  account and a token of 300 s (Keycloak's default, observed in D19; `apis/keycloak/realm.json` does not set
+  it); D20 makes the router require a JWT when the platform has an `oidc` provider, forward
+  `Authorization` to the subgraphs, and each API (`apis/orders`, `apis/shipping`, the same `src/auth.ts` with
+  `jose`, 6.2.16 when this was written and 6.2.18 now) verify issuer, audience, expiry, subject and RS256 itself, including on a direct call inside the
+  network. `orders` records `createdBy` from that verified token (`preferred_username`, else `sub`), never from a
+  header. The admin's `plugbricks-admin` / `plugbricks-viewer` roles are D15, for the admin process only: they are
+  a different subject and are not reused here. The remaining hole is exactly D20's limit: a service of the
+  platform holding a valid token can call any API and any field, and a field that needs more than "valid token"
+  has no way to say so.
+- **Verified while writing this** (2026-11-24, on this machine):
+  - **Composition** (local, the pinned `@wundergraph/composition` **0.68.2**): two subgraphs with
+    `extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key", "@requiresScopes",
+    "@authenticated"])`, `@requiresScopes(scopes: [["orders:read"]])` on a query field and `@authenticated` on a
+    mutation compose successfully; the federated AST keeps both directives, and the sha256 of the federated schema
+    (the rule of `composeSubgraphs`, sorted definitions) **changes** when the directives are added. Without the
+    import the composer also parsed the syntax, but what it does with it was not checked; the import is the
+    documented form, and the one D22 uses.
+    `buildRouterConfigFile` puts the directives in the router configuration (`engineConfig`); it has no separate
+    `authorization` key. This is the router config the repository generates, not a run of the router.
+  - **Router** (the pinned `ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a…`, D19): the
+    [official Cosmo authorization-directives documentation](https://wundergraph.com/cosmo/security/authorization-directives)
+    says `@authenticated` and `@requiresScopes` are evaluated by the router before execution, require Router
+    0.60.0+ (0.372.0 is above it) and JWT authentication; the router
+    configuration documentation gives `authentication.jwt.scope_claim` (default `scope`) for providers that put
+    scopes in another claim, and `authorization.require_authentication`. The pinned image was **not** run with
+    these directives: that runtime behaviour is **NON VÉRIFIÉ** here (only the composition and the generated
+    configuration were exercised).
+  - **Keycloak** (local, disposable container, `quay.io/keycloak/keycloak:26.7.3`, the realm fixture): a
+    service-account client `svc` with `client_credentials` got a token with
+    `preferred_username: "service-account-svc"`, `azp: "svc"`; a **realm role** `orders:read` assigned with
+    `kcadm add-roles --uusername service-account-svc --rolename orders:read` appeared in
+    `realm_access.roles`; a **client role** `orders:read` under a client `orders-api` assigned with
+    `--cclientid orders-api --rolename orders:read` appeared in `resource_access["orders-api"].roles`; a
+    **client scope** `orders:read` assigned with `kcadm update clients/<id>/default-client-scopes/<scope-id>`
+    appeared in the `scope` claim (`"orders:read email profile"`). The token was 1342 characters with those
+    roles and the scope; the service account also carries Keycloak's `offline_access`, `uma_authorization` and
+    `default-roles-plugbricks`. The token audience was `["orders-api", "account"]`; the D19 audience mapper would
+    add `plugbricks-router` (not measured with it). The container and its data were removed after the test.
+  - **The API check** (read in `apis/orders/src/auth.ts`): `jwtVerify` returns the payload, but `Caller` keeps only
+    `subject`, `name` and `client`; no role or scope is read today. The same file is in `apis/shipping`.
+- **The seven questions, per option:**
+
+  | Question | A — roles per operation | B — field or operation scopes | C — A now, B later |
+  |---|---|---|---|
+  | 1. Where applied | In each API, after its token check; the router stays authentication-only. A direct call is covered (D20's test). | In the router (the documented directives) **and** in each API; the router alone loses the direct-call case D20 proved. | A now; B adds the router and keeps the API check. |
+  | 2. Where declared, who decides | A new optional `authorization` block in the brick's `plugin.json`: the author declares the roles for its operation classes; the operator assigns those roles in Keycloak. No `platform.json` override now. | Directives in the brick's `schema.graphql` (`@authenticated` / `@requiresScopes`): the author declares; the operator assigns client scopes. | A now; B later in the schema, same author/operator split. |
+  | 3. How the role arrives, token size | Client roles under the API's own client (the one D19 already gives it): `kcadm add-roles --uusername service-account-<consumer> --cclientid <api> --rolename <role>`; the token shows `resource_access.<api>.roles`; audience mapper unchanged; a few short strings (the local sample 1342 chars). | Client scopes named like the scopes, assigned to the consumer's client; the token shows them in `scope` (the local sample); the router reads `scope` by default; the token stays small. | A now; the same names can become scopes for B. |
+  | 4. Composition, hash, router config, installed bricks | No schema change: no federated hash change, no `FEDERATION_CHANGED`; the router config does not change. The brick integrity changes because `plugin.json` changes: the brick must be `add`ed again; the plan injects the authorization values into its env, so the generated Compose/k8s files change. | The directives compose (verified) but change the federated schema hash: `FEDERATION_CHANGED` until the brick is `add`ed again (D8); `router-config.json` and the goldens change; the router config carries the directives. | A now; B only when it is wanted, with its hash change. |
+  | 5. No `oidc`; valid token without the role | Without `oidc`: nothing changes. With `oidc` and the block: the API refuses (new `FORBIDDEN` code; the HTTP status is **NON VÉRIFIÉ**) the operation class whose role the token lacks (the token is valid, so not 401); without the block it keeps D20. | Without `oidc`: nothing changes. With `oidc`: the router refuses the protected field (partial data when nullable, null data when not) and the APIs refuse too; a valid token without the scope is refused; `@authenticated` only asks for a valid token. | A now; B later. |
+  | 6. `createdBy`, service-to-service | Unchanged: the callee sees the calling service's `preferred_username` (`service-account-<client>`) and records it; the role is not an identity. A service calling another uses its own service role; the end user is not propagated. | Same; the scope does not change identity. | Same. |
+  | 7. Tests | Manifest/`plugin.json` schema, CLI goldens (the injected env, no `FEDERATION_CHANGED`), API unit tests (role present/missing, query vs mutation, direct call, `/health`, `createdBy`), Compose Keycloak e2e (read allowed, write without role refused, direct call refused), k3d (planned). | The same plus composition/hash/router-config goldens, the router e2e for the directives (only once the pinned router is exercised), the API enforcement, the scope claim, the field-level cases; k3d. | A first; B adds the second row. |
+
+- **Decision: C, in two stages. A now; B when a field needs more than the operation class.** Step A is built (see
+  "Implemented"); points 6 (B) and the router-side parts are not.
+  1. **Now A: one role per operation class.** Each API brick that wants authorization declares an optional
+     `authorization` block in its `plugin.json`, for example
+     `{ "queries": "orders:read", "mutations": "orders:write" }` for `orders` and
+     `{ "queries": "shipping:read" }` for `shipping`. The names are client roles under the API's own Keycloak
+     client (D19 already gives every consumer, including the API itself, its own client). A brick without the
+     block keeps D20: a valid token is enough. The examples `orders` and `shipping` declare theirs.
+  2. **The API is the enforcement point.** After its existing token check, each API reads its own block (the plan
+     injects it into the API's service environment, next to the `OIDC_*` variables; the exact variable names are
+     an implementation detail) and requires the role for a query or a mutation before the resolver runs; a token
+     without it gets a new GraphQL error with the code `FORBIDDEN` and nothing is executed. The APIs use only
+     `BAD_USER_INPUT` today (`apis/orders/src/app.ts`, `apis/shipping/src/app.ts`); `FORBIDDEN` exists only in the
+     admin's own HTTP API (`packages/plugbricks/src/admin/server.ts`), which is D15. Whether the HTTP status of
+     that answer can be set to 403 with the pinned GraphQL server is **NON VÉRIFIÉ** and is settled when it is
+     implemented. `/health` stays open. The router
+     keeps authentication only in A: it is not given a role rule to enforce, so a direct call inside the network is
+     still covered by the API itself, as D20 requires. A partial authorization configuration on an API that has
+     `oidc` refuses at start-up rather than silently opening the class.
+  3. **The author declares, the operator assigns.** The `plugin.json` block is the brick author's contract: which
+     role an operation class needs. The platform operator decides which consumer's service account gets that role
+     in Keycloak; no `platform.json` override is built in A. This keeps the policy reviewable with the brick
+     (integrity hash) and the actual grants in Keycloak.
+  4. **Keycloak carries the roles on the service account.** `create-client.sh` (D19) already creates the
+     consumer's confidential client, its service account, its secret and the router audience mapper. It gains a
+     role list (computed from the consumer's declared dependencies and the targets' `authorization` blocks, or
+     supplied by the operator; the exact wiring is part of the implementation) and calls
+     `kcadm add-roles --uusername service-account-<consumer> --cclientid <target-api-client> --rolename <role>`
+     for each; the token then has `resource_access.<target-api-client>.roles`. Client roles are preferred over
+     realm roles: they are scoped to the API and cannot be confused with another API's role; the local test
+     verified both forms. The audience mapper and the lifetime do not change, which also means that a role removed in Keycloak stays in
+     every token already issued until it expires (see the Limits). The token grows by the role
+     strings only; the local sample was 1342 characters with roles and a client scope, which is not a concern.
+  5. **What an installed platform sees.** In A, only `plugin.json` changes: the brick's integrity changes, so it is
+     `add`ed again; the federated schema hash does not change, so there is no `FEDERATION_CHANGED`; the router
+     configuration does not change; the plan injects the authorization values into the API's env, so the generated
+     Compose and Kubernetes files change and the goldens follow. The consumer's role grants are applied by the
+     provision task on the next `up` (it is idempotent). In B, the schema changes: the federated hash changes,
+     `FEDERATION_CHANGED` appears until the brick is `add`ed again, and `router-config.json` and the goldens
+     change.
+  6. **Later B: field scopes.** When a field (or a type) needs finer control than "all queries" or "all mutations",
+     the brick's `schema.graphql` gains `@authenticated` and/or `@requiresScopes(scopes: [["orders:read"]])`
+     (the v2.5 `@link` import; the composer passes them, verified with 0.68.1). The router documents their enforcement
+     (Router 0.60.0+, JWT authentication; the pinned 0.372.0 is above it) and the APIs must enforce the same
+     declarations too, because a direct call bypasses the router: B is a router **and** API change, not a
+     router-only one. Keycloak supplies the scopes as client scopes, so they appear in the `scope` claim (verified
+     with the local container); the router's default `scope_claim` is `scope`. The names can be the same strings
+     as A's roles. The schema change brings `FEDERATION_CHANGED`, a new `router-config.json`, the field-level
+     partial/null semantics, and the goldens. The trigger is a concrete field that A's operation class cannot
+     express, not a wish for granularity.
+  7. **No `oidc`, and a valid token without the role.** Without an enabled `oidc` provider there is no token, no
+     `authorization` block is injected, and every API behaves exactly as today (D19/D20's rule). With `oidc`: a
+     token that is valid but lacks the role of the operation class is refused (`FORBIDDEN`) and the resolver does
+     not run; a
+     query with `orders:read`, a mutation with `orders:write`; the same token can still read the public `/health`.
+     A brick that does not declare the block stays at D20 (any valid token), which is the deliberate opt-in; the
+     examples declare it so the e2e can prove the refusal.
+  8. **`createdBy` and a service calling a service.** `createdBy` keeps recording the verified caller's
+     `preferred_username`, else `sub`: in the data plane that is the calling service's account
+     (`service-account-orders-web`, verified in the local Keycloak token), never the end user, because the
+     platform does not propagate a user token today. The role (or scope) is an authorization attribute of that
+     service account, not an identity: a service that calls another in its own name is authorized by its own
+     service role, and the callee sees the service's name. Delegating a user and recording the user is a later
+     decision, tied to user tokens (D15's admin login is not that).
+  9. **What does not change.** The admin's two roles and its OIDC login (D15); the optional `oidc` requirement and
+     the no-provider path; the router's authentication (issuer, audience, RS256, JWKS); the token lifetime; the
+     `createdBy` field; the direct-call 401 without a token; the health endpoints. Authorization does not turn a
+     missing token into a role check: 401 stays 401, and "valid token, not allowed" is the new `FORBIDDEN`.
+
+- **Implemented (step A, 2026-11-25), and where it differs from the proposal:**
+  - **Manifest.** `authorization: { "queries": "<role>", "mutations": "<role>" }`, at least one class, roles of
+    lowercase words joined by `:` `.` `_` `-` (64 characters at most). It needs a `subgraph` (`DEPENDENT_FIELD`) and
+    `requires.oidc` (`AUTHORIZATION_WITHOUT_OIDC`). A class left out stays at D20.
+  - **Who gets which role (not specified in the proposal).** The roles a consumer's service account holds come
+    from its `dependencies`, and each entry says what it does with its target: `"operations": ["queries"]` by default,
+    `["queries", "mutations"]` to write too. A consumer gets exactly the roles of the classes it lists, never all of a
+    target's. `orders-web` lists `orders` and `shipping` and holds `orders:read` and `shipping:read` only. A grant
+    never comes from a block the consumer did not name; the operator can still add any role in Keycloak.
+  - **An optional dependency (new).** `orders-web` shows the shipment when `shipping` is installed and works
+    without it, so listing `shipping` as a hard dependency would have been false (`remove shipping` refused, a
+    warning at every `add orders-web` without it). A dependency can say `"optional": true`: it is shown as optional by the
+    admin, protects nothing (`remove`, `disable`, the `add` warning of D21 skip it), and its operations are still granted
+    when the target is installed and has a block.
+  - **Plan.** With an enabled `oidc` provider in the plan, a brick with a block gets `AUTHORIZATION_QUERIES_ROLE`
+    and `AUTHORIZATION_MUTATIONS_ROLE` in its env (only the classes it names), next to the `OIDC_*` variables. The
+    client the roles belong to is the one in `OIDC_CLIENT_ID`, not a new variable. The provision env of the
+    provider can use two new templates: `${consumer.roles}` (the roles of the consumer's own block) and
+    `${consumer.grants}` (`<brick>/<role>` for each role to grant, sorted); both are empty when there is nothing, so
+    every consumer of `examples/keycloak` now has `ROLES` and `GRANTS` in its provision env (the goldens of the
+    scenarios with keycloak changed for that reason, and the brick must be added again: its `plugin.json` and
+    script changed). A dependency counts only when it is installed, enabled, has a block and is itself wired to an
+    `oidc` provider. Without a provider, no variable, no task: unchanged, as D19 and D20 (a scenario proves it).
+  - **Keycloak.** `create-client.sh` creates the roles of `ROLES` on the consumer's own client and gives its service
+    account each `GRANTS` entry (`kcadm add-roles --uusername service-account-<consumer> --cclientid <brick>
+    --rolename <role>`). A target client that does not exist yet is created in the same shape (the consumer's task can
+    run before the target's), and the target's own task then finds a client it could have made. Nothing is ever
+    removed. The client id of a brick is its name: `OIDC_CLIENT_ID` and the `<brick>/` of a grant rely on it, so
+    another `oidc` provider must follow the same rule to use `authorization`. Tried on Keycloak 26.7.3: the token of a
+    granted service account carries `resource_access.<brick>.roles`, a second run changes nothing, and `expires_in` is 300.
+  - **A race found by the end-to-end test.** The consumer's task (granting itself `orders:read`) and `orders`'s
+    own task (creating the role) can create the same role, or the same client, at the same moment: the loser stopped
+    the whole `up`. In a parallel trial of 12 runs, 6 failed; with the fix (a failed creation is fine when the object
+    exists afterwards), 0 of 12 failed.
+  - **APIs.** The shared `auth.ts` (identical in `orders` and `shipping`, a test keeps it so) reads `resource_access`
+    into `Caller.roles` (anything that is not a list of strings is ignored; `realm_access` and `scope` do not count)
+    and a Yoga plugin refuses an operation before any resolver when the caller lacks the role of its class: GraphQL code
+    `FORBIDDEN`, **HTTP 403** (verified with `graphql-yoga` 6.1.0 and `graphql` 17.1.0, the versions of this
+    repository; the proposal marked the status NON VÉRIFIÉ). The message names the role, not the token. `_entities` and
+    `_service` are queries, so the router's entity calls need the read role too: a consumer that reads shipments through
+    `orders` needs `shipping:read`, which is why `orders-web` lists `shipping`. The operation is the one the request
+    selects (`operationName`), not the first of the document. A subscription is refused. The roles without the token
+    check (`OIDC_ISSUER`) or without `OIDC_CLIENT_ID` stop the API at start-up.
+  - **A warning at `add`** (the recommendation of question 3): a GraphQL API that requires `oidc` and has no block
+    prints that any valid token can call it. It is added all the same.
+  - **Not built, as proposed:** the router does not enforce the roles (APIs only, question 4); no `platform.json`
+    override; step B (field scopes, `@authenticated` / `@requiresScopes`); the admin does not show the roles; user
+    tokens and delegation.
+- **Alternatives:**
+  - **A alone, as the end state.** The smallest change, no schema/hash churn, no router configuration change,
+    all enforcement in the APIs. It closes the limit at operation granularity. It was not chosen as the end
+    state because a field with a different audience (a price, a customer's address) would need a new operation
+    or an operation-wide role; B is the escape hatch, and C keeps A's work (the roles can become scopes).
+  - **B alone, now.** Field-level scopes from the start. It requires changing the schemas (hash, re-add,
+    goldens), relying on the router's directive enforcement (documented for 0.60.0+, not run against the pinned
+    0.372.0 here) **and** implementing the same checks in each API, plus the client-scope assignment in Keycloak.
+    That is more moving parts than the example needs today, and the router-only shortcut is exactly what D20
+    rejected: a direct call would still pass.
+  - **Router-only (A or B at the router).** Rejected by D20's direct-call test: any container of the platform can
+    call `orders-app` by name, past the router. Identity headers (`X-User-Sub`) were rejected for the same reason.
+  - **Identity headers derived from the token.** Rejected in D20; not revived here.
+  - **C (chosen).** A now gives a complete, small rule at the API boundary; B is a later, additive refinement
+    with the schema and the router, triggered by a real field.
+
+- **Tests (step A, run 2026-11-25):** manifest schema and cross-checks (six invalid fixtures, the examples), the plan
+  (roles in the env and in the provision env, no oidc, grants per operation, a dependency that is missing, open or without
+  oidc), CLI scenarios with goldens (`authorization-roles`, `authorization-without-oidc`, `optional-declared-dependency`,
+  `add-open-api-warning`), the APIs (`apis/orders` 31 tests, `apis/shipping` 17: roles of a token, 401 and 403, per class,
+  `_entities`, the operation chosen by name, nothing reaches the database on a refusal, a mutation of the three of them
+  each broken on purpose in the code and caught), the Compose end-to-end with a real Keycloak (6 tests: the token carries `orders:read`
+  only, `orders-web` reads and is refused a mutation, 403 on a direct call, then `kcadm add-roles` and a new token
+  creates the order with `createdBy`; the earlier token keeps its roles) and the k3d end-to-end of the same flow (1 test,
+  on a throwaway cluster, deleted afterwards). **Not run here:** the other eight k3d tests (they have no `oidc`
+  provider and the plan does not change for them), and `shipping` in the Keycloak end-to-end (its roles are tested in its unit
+  tests and in the plan, not against a real token).
+- **Tests planned (the proposal, kept for step B):** For A: the manifest schema and validation of the `authorization` block (a valid example, a
+  missing/unknown role, a partial block), CLI scenarios with goldens (the injected env, the generated Compose/k8s,
+  no `FEDERATION_CHANGED`, the `add` re-integrity), unit tests in `apis/orders` and `apis/shipping` (a token with
+  the role, without it, the wrong role, a query vs a mutation, the direct call, `/health`, `createdBy`), and the
+  Compose Keycloak e2e: `orders-web` with `orders:read` and `shipping:read` reads the page, a consumer without
+  `orders:write` is refused a mutation, a direct call to the API with the role is 200 and without it refused (`FORBIDDEN`), and the
+  no-`oidc` platform is unchanged. The k3d e2e repeats the token and direct-call cases (planned; the 9 k3d tests
+  are skipped without a cluster, as today). For B: the composition and `router-config.json` goldens, the schema
+  hash/`FEDERATION_CHANGED`, the router e2e for `@authenticated`/`@requiresScopes` (only once the pinned router is
+  actually run with them), the API-side enforcement of the same directives, the scope claim from Keycloak, the
+  partial/null cases, and the field-level tests; not before A. **Not tested now:** anything in this entry, the
+  router's directive enforcement, the B API enforcement, the role/scope assignment in the real provision script,
+  the user-token path, and k3d (no cluster).
+- **Limits:** **A grant is never taken back.** The provision task only adds: removing a brick from `dependencies`,
+  changing `operations`, or renaming a role leaves the old grant and the old role in Keycloak until someone removes
+  them in the console, and grants are applied when the task runs (`up`), not when `plugin.json` changes. **A token issued
+  before a grant does not have it** (the roles are in the token): the next one does. **Revocation is not immediate.** The API checks the token, not Keycloak: a role removed from a
+  service account (or a service account disabled) stays valid in every token already issued until its `exp`, 300
+  s with Keycloak's default, and nothing in A or B shortens that window; shorter tokens or introspection would be
+  a separate decision. **The block is an opt-in.** A new API that requires `oidc` but forgets the `authorization`
+  block stays at D20 (any valid token) without any warning; making the block mandatory when a platform has an
+  `oidc` provider, or warning at `add`, is not decided here (question 3: the warning at `add` is built, the refusal is not). A is per operation class, not per field: `orders:read` reads every query field of `orders`, and a
+  service that holds it can read more than one field; B exists for the finer case. The data plane has only
+  service accounts today: the caller is the service, `createdBy` records the service, and there is no end-user
+  identity; user tokens and delegation are later. The router does not enforce A; the APIs do, so a compromised
+  API container or its token is still a service-level grant. The roles/scopes live in Keycloak; the operator's
+  grants are the real policy switch, the `plugin.json` block is the author's requirement, and a
+  `platform.json` override is not built. The audience mapper and the token lifetime are unchanged; the token
+  gets a few role strings (the local sample 1342 characters). B depends on the router's documented directive
+  behaviour and on each API enforcing the same declarations; the pinned router was not run with them, the
+  schema hash changes, and the existing bricks need `add` again. The admin's roles (D15) and the data plane are
+  separate. Kafka is unrelated.
+- **Questions for the owner:**
+  1. Does one role per operation class (`orders:read` / `orders:write`, `shipping:read`) suffice for the
+     `orders` / `shipping` / `orders-web` example, or does a field already need its own scope now? Recommendation:
+     A now, B only when a real field needs it.
+  2. Do the roles and scopes come from Keycloak service accounts only, or should D22 also plan for a generic OIDC
+     provider and for user tokens, and should a service calling another decide with its own role or, later, the
+     end user's? Recommendation: Keycloak service accounts and the calling service's own role now; user tokens
+     and delegation later.
+  3. Who owns the policy: the brick author declares the required roles in `plugin.json`, the operator assigns
+     them in Keycloak; should the operator also be able to override the requirement in `platform.json`, and
+     should the block be mandatory (or at least warned about at `add`) when the platform has an `oidc` provider?
+     Recommendation: author declares, operator assigns, no override now; a warning at `add` when an API that
+     requires `oidc` has no block, to be decided with the implementation.
+  4. Should the router also enforce the roles/scopes as defence in depth, or only the APIs? Recommendation: the
+     APIs only in A; the router too in B, once the pinned router is verified with the directives.
+  5. Is a revocation window of up to 300 s acceptable, given that the APIs check the token and not Keycloak?
+     Recommendation: yes for the examples, stated as a limit; shorter tokens or introspection only if a real
+     case needs immediate revocation.
 
 ---
 

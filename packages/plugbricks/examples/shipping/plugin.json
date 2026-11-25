@@ -2,7 +2,7 @@
   "$schema": "../../schemas/plugin-manifest.schema.json",
   "name": "shipping",
   "version": "0.1.0",
-  "description": "Example API: a GraphQL subgraph that adds shipment data to the orders. It extends the Order entity of the orders brick and keeps its own data in PostgreSQL. Its source is apis/shipping; build the image with: docker build -t plugbricks-example/shipping:0.1.0 apis/shipping",
+  "description": "Example API: a GraphQL subgraph that adds shipment data to the orders. It extends the Order entity of the orders brick and keeps its own data in PostgreSQL. With an oidc provider it asks every request for a token that carries the client role shipping:read (queries) or shipping:write (mutations) (D22). Its source is apis/shipping; build the image with: docker build -t plugbricks-example/shipping:0.1.0 apis/shipping",
   "services": [
     {
       "name": "app",
@@ -40,6 +40,10 @@
       ]
     }
   ],
+  "authorization": {
+    "queries": "shipping:read",
+    "mutations": "shipping:write"
+  },
   "tags": [
     "api",
     "graphql"
