@@ -127,7 +127,8 @@ export const MESSAGES = {
   BRICK_UNREADABLE: 'the installed copy of "{brick}" cannot be read: {detail}',
 
   // npm create plugbricks
-  CREATE_MISSING_NAME: "missing project name; usage: npm create plugbricks <project-name>",
+  CREATE_MISSING_NAME: "usage: npm create plugbricks <project-name> [-- --starter <starter>]",
+  CREATE_UNKNOWN_STARTER: 'no starter named "{starter}"; the starters are: {starters}',
   CREATE_TARGET_NOT_EMPTY: "{dir} already exists and is not empty; choose another name or remove it first",
   SECRETS_NOT_RESTRICTED:
     "could not restrict {dir} to your user only ({detail}); other accounts on this machine may be able to read it. Restrict it before storing any secret",

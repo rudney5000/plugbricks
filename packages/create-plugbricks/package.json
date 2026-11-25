@@ -30,6 +30,8 @@
     "bin",
     "lib",
     "template",
+    "bricks",
+    "starters.json",
     "NOTICE"
   ],
   "scripts": {

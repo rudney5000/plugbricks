@@ -1,0 +1,31 @@
+extend schema
+  @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+
+"An order, owned by the orders subgraph. This subgraph adds the shipment to it."
+type Order @key(fields: "id") {
+  id: ID!
+  "Null until the order was shipped."
+  shipment: Shipment
+}
+
+type Shipment {
+  carrier: String!
+  trackingNumber: String
+  status: ShipmentStatus!
+}
+
+enum ShipmentStatus {
+  PENDING
+  SHIPPED
+  DELIVERED
+}
+
+type Query {
+  "The shipment of an order, or null when it was not shipped."
+  shipment(orderId: ID!): Shipment
+}
+
+type Mutation {
+  "Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once."
+  shipOrder(orderId: ID!, carrier: String!): Shipment!
+}

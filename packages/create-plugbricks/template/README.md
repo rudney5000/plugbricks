@@ -21,9 +21,12 @@ them and of what they need from each other.
 
 ## First steps
 
+A project made with a starter (`npm create plugbricks <name> -- --starter demo`) already has its
+bricks added: `npm install`, then `npx plugbricks up`, and the generator printed where it answers.
+
 ```bash
 npm install                 # installs the plugbricks command locally
-npx plugbricks status       # an empty platform: no bricks yet
+npx plugbricks status       # what is installed: nothing yet, unless the project was made with a starter
 ```
 
 A name adds the brick of `bricks/`; a path (with a `/`) adds any brick folder.
