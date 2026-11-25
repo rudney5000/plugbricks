@@ -140,7 +140,8 @@ bricks needed first, in order, and who requires this one. A brick that is needed
 gathers status, restarts, port, `provides`, `requires`, `extends` and what would refuse its removal. A declared
 dependency protects its target from `remove` (`DEPENDENCY_IN_USE`), here `orders` while `orders-web` is installed,
 and from `disable` while the declaring brick is enabled; `add` warns when the declared brick is not installed;
-`up` waits only for the capabilities a brick requires.
+`up` waits only for the capabilities a brick requires. A dependency marked `optional` (here `shipping`, which
+`orders-web` can run without) is shown as optional and protects nothing.
 
 ![The Dependencies panel of orders-web: orders-web needs orders, which needs postgres](docs/screenshots/admin-dependencies.png)
 
@@ -351,3 +352,4 @@ Dependencies are pinned to exact versions (`.npmrc` sets `save-exact`), and `pac
    - Done (9a, 9b): with a brick that provides `oidc`, the router passes the token on and `orders` and `shipping` check it themselves (401 without a valid token, even called directly inside the platform) (D20).
    - Done (9c): `orders` records who created an order, `Order.createdBy` (the verified caller's `preferred_username`, else `sub`, never a header; null without a token check); the tokens, `createdBy` and the direct call refused without a token are tested end to end on Docker Compose and on k3d (D20).
    - Done (10): `dependencies` in the manifest (`orders-web` declares `orders`), and a panel in the admin under the Bricks table: what a brick needs, transitively, in what order, and who requires it (D21). `remove orders` is refused while `orders-web` declares it, `disable orders` while `orders-web` is enabled (both `DEPENDENCY_IN_USE`), and `add` warns when the declared brick is missing; `up` does not wait for it.
+   - Done (11): an API says who may call it with an `authorization` block (`orders`: `orders:read`, `orders:write`; `shipping`: `shipping:read`, `shipping:write`). With an `oidc` provider, a valid token without the role of the operation (query or mutation) is refused by the API itself, `FORBIDDEN` and HTTP 403, even called directly; a token that is not valid is still 401. The Keycloak brick creates the roles on the API's own client and gives a brick that lists the API in `dependencies` the roles of the operations it says it uses (`orders-web` reads orders and shipments and cannot write; `"optional": true` for a dependency that is not needed to run). Without an `oidc` provider nothing changes. Tested end to end with a real Keycloak on Docker Compose and on k3d (D22). Not built: a rule on one field (`@requiresScopes`), the router enforcing the roles, and taking a role back at once (a token keeps its roles for its 300 s).

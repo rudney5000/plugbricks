@@ -1421,18 +1421,25 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done:** editing `platform.json` from the panel; a registry of plugin versions (the mockup this came from
   had "Release", "Stored plugins" and "Add version": plugbricks has one installed copy per brick, no registry).
   The brick integrity hash covers `plugin.json`, so adding the field to an installed brick means `add` again.
+- **Addendum (D22, 2026-11-25):** an entry can say `"optional": true`, and then `remove`, `disable` and the `add`
+  warning above skip it (the brick works without its target; the admin shows the link as optional), and
+  `"operations"` says which GraphQL operation classes the brick uses of its target, which decides the roles it is
+  granted. The rules above are unchanged for an entry that says neither.
 
 ---
 
 ## D22. Authorization in the data plane: roles per operation now, field scopes later
 
-- **Status:** proposed (2026-11-24). **Nothing is implemented.** D20 still leaves every valid token able to call
-  every field; this entry chooses how to close that, and what not to build yet.
+- **Status:** accepted (2026-11-25); **step A is implemented, step B is not.** Proposed on 2026-11-24, accepted
+  with the five recommendations of "Questions for the owner" as written. D20 left every valid token able to call
+  every field; with an `oidc` provider and an `authorization` block, a valid token now also needs the role of the
+  class of its operation. "Implemented" below says what was built and where it differs from the proposal; the
+  rest of the entry is the proposal as it was accepted.
 - **Context:** D19 gives every brick that requires `oidc` its own confidential Keycloak client, with a service
   account and a token of 300 s (Keycloak's default, observed in D19; `apis/keycloak/realm.json` does not set
   it); D20 makes the router require a JWT when the platform has an `oidc` provider, forward
   `Authorization` to the subgraphs, and each API (`apis/orders`, `apis/shipping`, the same `src/auth.ts` with
-  `jose` 6.2.16) verify issuer, audience, expiry, subject and RS256 itself, including on a direct call inside the
+  `jose`, 6.2.16 when this was written and 6.2.18 now) verify issuer, audience, expiry, subject and RS256 itself, including on a direct call inside the
   network. `orders` records `createdBy` from that verified token (`preferred_username`, else `sub`), never from a
   header. The admin's `plugbricks-admin` / `plugbricks-viewer` roles are D15, for the admin process only: they are
   a different subject and are not reused here. The remaining hole is exactly D20's limit: a service of the
@@ -1481,14 +1488,14 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   | 6. `createdBy`, service-to-service | Unchanged: the callee sees the calling service's `preferred_username` (`service-account-<client>`) and records it; the role is not an identity. A service calling another uses its own service role; the end user is not propagated. | Same; the scope does not change identity. | Same. |
   | 7. Tests | Manifest/`plugin.json` schema, CLI goldens (the injected env, no `FEDERATION_CHANGED`), API unit tests (role present/missing, query vs mutation, direct call, `/health`, `createdBy`), Compose Keycloak e2e (read allowed, write without role refused, direct call refused), k3d (planned). | The same plus composition/hash/router-config goldens, the router e2e for the directives (only once the pinned router is exercised), the API enforcement, the scope claim, the field-level cases; k3d. | A first; B adds the second row. |
 
-- **Decision: C, in two stages. A now; B when a field needs more than the operation class.** Nothing below is
-  built: the verbs in the present tense describe the target design once this entry is accepted.
+- **Decision: C, in two stages. A now; B when a field needs more than the operation class.** Step A is built (see
+  "Implemented"); points 6 (B) and the router-side parts are not.
   1. **Now A: one role per operation class.** Each API brick that wants authorization declares an optional
      `authorization` block in its `plugin.json`, for example
      `{ "queries": "orders:read", "mutations": "orders:write" }` for `orders` and
      `{ "queries": "shipping:read" }` for `shipping`. The names are client roles under the API's own Keycloak
      client (D19 already gives every consumer, including the API itself, its own client). A brick without the
-     block keeps D20: a valid token is enough. The examples `orders` and `shipping` would declare theirs.
+     block keeps D20: a valid token is enough. The examples `orders` and `shipping` declare theirs.
   2. **The API is the enforcement point.** After its existing token check, each API reads its own block (the plan
      injects it into the API's service environment, next to the `OIDC_*` variables; the exact variable names are
      an implementation detail) and requires the role for a query or a mutation before the resolver runs; a token
@@ -1550,6 +1557,54 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
      `createdBy` field; the direct-call 401 without a token; the health endpoints. Authorization does not turn a
      missing token into a role check: 401 stays 401, and "valid token, not allowed" is the new `FORBIDDEN`.
 
+- **Implemented (step A, 2026-11-25), and where it differs from the proposal:**
+  - **Manifest.** `authorization: { "queries": "<role>", "mutations": "<role>" }`, at least one class, roles of
+    lowercase words joined by `:` `.` `_` `-` (64 characters at most). It needs a `subgraph` (`DEPENDENT_FIELD`) and
+    `requires.oidc` (`AUTHORIZATION_WITHOUT_OIDC`). A class left out stays at D20.
+  - **Who gets which role (not specified in the proposal).** The roles a consumer's service account holds come
+    from its `dependencies`, and each entry says what it does with its target: `"operations": ["queries"]` by default,
+    `["queries", "mutations"]` to write too. A consumer gets exactly the roles of the classes it lists, never all of a
+    target's. `orders-web` lists `orders` and `shipping` and holds `orders:read` and `shipping:read` only. A grant
+    never comes from a block the consumer did not name; the operator can still add any role in Keycloak.
+  - **An optional dependency (new).** `orders-web` shows the shipment when `shipping` is installed and works
+    without it, so listing `shipping` as a hard dependency would have been false (`remove shipping` refused, a
+    warning at every `add orders-web` without it). A dependency can say `"optional": true`: it is shown as optional by the
+    admin, protects nothing (`remove`, `disable`, the `add` warning of D21 skip it), and its operations are still granted
+    when the target is installed and has a block.
+  - **Plan.** With an enabled `oidc` provider in the plan, a brick with a block gets `AUTHORIZATION_QUERIES_ROLE`
+    and `AUTHORIZATION_MUTATIONS_ROLE` in its env (only the classes it names), next to the `OIDC_*` variables. The
+    client the roles belong to is the one in `OIDC_CLIENT_ID`, not a new variable. The provision env of the
+    provider can use two new templates: `${consumer.roles}` (the roles of the consumer's own block) and
+    `${consumer.grants}` (`<brick>/<role>` for each role to grant, sorted); both are empty when there is nothing, so
+    every consumer of `examples/keycloak` now has `ROLES` and `GRANTS` in its provision env (the goldens of the
+    scenarios with keycloak changed for that reason, and the brick must be added again: its `plugin.json` and
+    script changed). A dependency counts only when it is installed, enabled, has a block and is itself wired to an
+    `oidc` provider. Without a provider, no variable, no task: unchanged, as D19 and D20 (a scenario proves it).
+  - **Keycloak.** `create-client.sh` creates the roles of `ROLES` on the consumer's own client and gives its service
+    account each `GRANTS` entry (`kcadm add-roles --uusername service-account-<consumer> --cclientid <brick>
+    --rolename <role>`). A target client that does not exist yet is created in the same shape (the consumer's task can
+    run before the target's), and the target's own task then finds a client it could have made. Nothing is ever
+    removed. The client id of a brick is its name: `OIDC_CLIENT_ID` and the `<brick>/` of a grant rely on it, so
+    another `oidc` provider must follow the same rule to use `authorization`. Tried on Keycloak 26.7.3: the token of a
+    granted service account carries `resource_access.<brick>.roles`, a second run changes nothing, and `expires_in` is 300.
+  - **A race found by the end-to-end test.** The consumer's task (granting itself `orders:read`) and `orders`'s
+    own task (creating the role) can create the same role, or the same client, at the same moment: the loser stopped
+    the whole `up`. In a parallel trial of 12 runs, 6 failed; with the fix (a failed creation is fine when the object
+    exists afterwards), 0 of 12 failed.
+  - **APIs.** The shared `auth.ts` (identical in `orders` and `shipping`, a test keeps it so) reads `resource_access`
+    into `Caller.roles` (anything that is not a list of strings is ignored; `realm_access` and `scope` do not count)
+    and a Yoga plugin refuses an operation before any resolver when the caller lacks the role of its class: GraphQL code
+    `FORBIDDEN`, **HTTP 403** (verified with `graphql-yoga` 6.1.0 and `graphql` 17.1.0, the versions of this
+    repository; the proposal marked the status NON VÉRIFIÉ). The message names the role, not the token. `_entities` and
+    `_service` are queries, so the router's entity calls need the read role too: a consumer that reads shipments through
+    `orders` needs `shipping:read`, which is why `orders-web` lists `shipping`. The operation is the one the request
+    selects (`operationName`), not the first of the document. A subscription is refused. The roles without the token
+    check (`OIDC_ISSUER`) or without `OIDC_CLIENT_ID` stop the API at start-up.
+  - **A warning at `add`** (the recommendation of question 3): a GraphQL API that requires `oidc` and has no block
+    prints that any valid token can call it. It is added all the same.
+  - **Not built, as proposed:** the router does not enforce the roles (APIs only, question 4); no `platform.json`
+    override; step B (field scopes, `@authenticated` / `@requiresScopes`); the admin does not show the roles; user
+    tokens and delegation.
 - **Alternatives:**
   - **A alone, as the end state.** The smallest change, no schema/hash churn, no router configuration change,
     all enforcement in the APIs. It closes the limit at operation granularity. It was not chosen as the end
@@ -1566,7 +1621,18 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   - **C (chosen).** A now gives a complete, small rule at the API boundary; B is a later, additive refinement
     with the schema and the router, triggered by a real field.
 
-- **Tests planned:** For A: the manifest schema and validation of the `authorization` block (a valid example, a
+- **Tests (step A, run 2026-11-25):** manifest schema and cross-checks (six invalid fixtures, the examples), the plan
+  (roles in the env and in the provision env, no oidc, grants per operation, a dependency that is missing, open or without
+  oidc), CLI scenarios with goldens (`authorization-roles`, `authorization-without-oidc`, `optional-declared-dependency`,
+  `add-open-api-warning`), the APIs (`apis/orders` 31 tests, `apis/shipping` 17: roles of a token, 401 and 403, per class,
+  `_entities`, the operation chosen by name, nothing reaches the database on a refusal, a mutation of the three of them
+  each broken on purpose in the code and caught), the Compose end-to-end with a real Keycloak (6 tests: the token carries `orders:read`
+  only, `orders-web` reads and is refused a mutation, 403 on a direct call, then `kcadm add-roles` and a new token
+  creates the order with `createdBy`; the earlier token keeps its roles) and the k3d end-to-end of the same flow (1 test,
+  on a throwaway cluster, deleted afterwards). **Not run here:** the other eight k3d tests (they have no `oidc`
+  provider and the plan does not change for them), and `shipping` in the Keycloak end-to-end (its roles are tested in its unit
+  tests and in the plan, not against a real token).
+- **Tests planned (the proposal, kept for step B):** For A: the manifest schema and validation of the `authorization` block (a valid example, a
   missing/unknown role, a partial block), CLI scenarios with goldens (the injected env, the generated Compose/k8s,
   no `FEDERATION_CHANGED`, the `add` re-integrity), unit tests in `apis/orders` and `apis/shipping` (a token with
   the role, without it, the wrong role, a query vs a mutation, the direct call, `/health`, `createdBy`), and the
@@ -1579,12 +1645,15 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   partial/null cases, and the field-level tests; not before A. **Not tested now:** anything in this entry, the
   router's directive enforcement, the B API enforcement, the role/scope assignment in the real provision script,
   the user-token path, and k3d (no cluster).
-- **Limits:** **Revocation is not immediate.** The API checks the token, not Keycloak: a role removed from a
+- **Limits:** **A grant is never taken back.** The provision task only adds: removing a brick from `dependencies`,
+  changing `operations`, or renaming a role leaves the old grant and the old role in Keycloak until someone removes
+  them in the console, and grants are applied when the task runs (`up`), not when `plugin.json` changes. **A token issued
+  before a grant does not have it** (the roles are in the token): the next one does. **Revocation is not immediate.** The API checks the token, not Keycloak: a role removed from a
   service account (or a service account disabled) stays valid in every token already issued until its `exp`, 300
   s with Keycloak's default, and nothing in A or B shortens that window; shorter tokens or introspection would be
   a separate decision. **The block is an opt-in.** A new API that requires `oidc` but forgets the `authorization`
   block stays at D20 (any valid token) without any warning; making the block mandatory when a platform has an
-  `oidc` provider, or warning at `add`, is not decided here (question 3). A is per operation class, not per field: `orders:read` reads every query field of `orders`, and a
+  `oidc` provider, or warning at `add`, is not decided here (question 3: the warning at `add` is built, the refusal is not). A is per operation class, not per field: `orders:read` reads every query field of `orders`, and a
   service that holds it can read more than one field; B exists for the finer case. The data plane has only
   service accounts today: the caller is the service, `createdBy` records the service, and there is no end-user
   identity; user tokens and delegation are later. The router does not enforce A; the APIs do, so a compromised
