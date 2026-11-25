@@ -1,0 +1,26 @@
+name: Feature request
+description: Something plugbricks could do, or a brick it could ship.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        plugbricks records its decisions in docs/decisions.md and its plan in docs/roadmap.md: a look at them first
+        may show that it is planned, or why it was left out.
+  - type: textarea
+    id: need
+    attributes:
+      label: What you need
+      description: The situation, and what is hard or impossible today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: A command, an option, a field of the manifest, a brick. Optional.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+      description: Optional.
