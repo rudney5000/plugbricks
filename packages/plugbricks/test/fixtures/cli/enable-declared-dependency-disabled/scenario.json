@@ -1,0 +1,21 @@
+{
+  "description": "orders-web declares that it needs orders (D21) and, optionally, shipping: enabling it while orders is disabled succeeds and prints a warning, silent about the optional shipping; once orders is enabled the warning is gone",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/shipping"] },
+    { "run": ["add", "examples/orders-web"] },
+    { "run": ["disable", "orders-web"] },
+    { "run": ["disable", "shipping"] },
+    { "run": ["disable", "orders"] },
+    {
+      "run": ["enable", "orders-web"],
+      "stdout": "dependency \"orders\" is disabled; orders-web will not work until it is enabled",
+      "notStdout": "shipping"
+    },
+    { "run": ["enable", "orders"], "stdout": "Enabled orders", "notStdout": "is disabled" },
+    { "run": ["disable", "orders-web"] },
+    { "run": ["enable", "orders-web"], "stdout": "Enabled orders-web", "notStdout": "is disabled" }
+  ]
+}
