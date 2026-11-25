@@ -1,0 +1,17 @@
+{
+  "name": "stock",
+  "version": "0.1.0",
+  "description": "Defines InventoryItem with a name that is a number: a created inventory-api cannot compose with it.",
+  "services": [
+    {
+      "name": "api",
+      "image": "node:22.23.5-alpine",
+      "port": 4000
+    }
+  ],
+  "subgraph": {
+    "service": "api",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}

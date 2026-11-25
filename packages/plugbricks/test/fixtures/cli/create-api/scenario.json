@@ -1,0 +1,34 @@
+{
+  "description": "create <name> --kind api (D28) writes the brick to bricks/<name>-api and its code to services/<name>-api from the templates, fills their placeholders, adds the brick and prints the command that builds its image",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    {
+      "run": ["create", "inventory", "--kind", "api"],
+      "stdout": [
+        "Created inventory-api: bricks/inventory-api (the brick) and services/inventory-api (its code and image recipe)\nAdded inventory-api 0.1.0",
+        "  docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .\n  plugbricks up"
+      ]
+    },
+    { "run": ["status"], "stdout": "Federation: inventory-api" }
+  ],
+  "exists": [
+    "bricks/inventory-api/plugin.json",
+    "bricks/inventory-api/schema.graphql",
+    "services/inventory-api/Dockerfile",
+    "services/inventory-api/Dockerfile.dockerignore",
+    "services/inventory-api/package.json",
+    "services/inventory-api/package-lock.json",
+    "services/inventory-api/tsconfig.json",
+    "services/inventory-api/src/main.ts",
+    ".platform/bricks/inventory-api/plugin.json"
+  ],
+  "absent": ["services/inventory-api/src/main.ts.tmpl", "bricks/inventory-api/plugin.json.tmpl", "services/inventory-api/node_modules"],
+  "expectRaw": {
+    "bricks/inventory-api/plugin.json": "\"image\": \"demo/inventory-api:0.1.0\"",
+    "bricks/inventory-api/schema.graphql": "type InventoryItem @key(fields: \"id\") {",
+    "services/inventory-api/src/main.ts": "    inventoryItems: () => items,",
+    "services/inventory-api/package.json": "\"name\": \"inventory-api\"",
+    "services/inventory-api/package-lock.json": "\"name\": \"inventory-api\"",
+    "services/inventory-api/Dockerfile": "COPY bricks/inventory-api/schema.graphql ./"
+  }
+}

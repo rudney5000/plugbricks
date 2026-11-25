@@ -92,6 +92,9 @@ export const MESSAGES = {
   BRICK_NOT_FOUND: "no plugin.json found at {path}",
   BRICK_NOT_IN_FOLDER: 'no brick named "{name}" in {folder}: {detail}',
   BRICK_NAME_AMBIGUOUS: 'both {folder}{name} and the folder "{name}" here hold a brick; write ./{name} or {folder}{name} to say which one',
+  BRICK_CREATE_INVALID_NAME:
+    '"{name}" cannot name a brick created with --kind {kind}: use lowercase letters, digits and "-", starting with a letter, 40 characters at most with the suffix',
+  BRICK_CREATE_TARGET_EXISTS: "cannot create {name}: {path} already exists; nothing was written",
   ADD_NEEDS_CONFIRMATION:
     "{brick} cannot be added without {bricks}, which add would take from {folder}; nothing was added. To add them too: {command}",
   ADD_NOT_CONFIRMED: "{brick} cannot be added without {bricks}; nothing was added",

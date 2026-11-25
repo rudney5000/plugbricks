@@ -1,0 +1,11 @@
+{
+  "description": "create <name> --kind web (D28) writes a web brick and its server, adds it with a webPort (D17), and keeps a name that already ends with the suffix",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["create", "shop-web", "--kind", "web"], "stdout": ["Created shop-web: bricks/shop-web", "docker build -t demo/shop-web:0.1.0 -f services/shop-web/Dockerfile ."] },
+    { "run": ["status"], "stdout": "shop-web 0.1.0  pages on 127.0.0.1:8080" }
+  ],
+  "exists": ["bricks/shop-web/plugin.json", "services/shop-web/server.mjs", "services/shop-web/Dockerfile", "services/shop-web/Dockerfile.dockerignore"],
+  "absent": ["bricks/shop-web-web", "services/shop-web/server.mjs.tmpl"],
+  "expectRaw": { "services/shop-web/server.mjs": "<title>shop-web</title>" }
+}

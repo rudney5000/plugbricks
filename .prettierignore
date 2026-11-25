@@ -26,3 +26,6 @@ package-lock.json
 *.md
 *.graphql
 Dockerfile
+
+# The templates of "plugbricks create" (D28): written into a project as they are, placeholders included.
+packages/plugbricks/templates/**

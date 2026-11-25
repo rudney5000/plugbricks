@@ -44,6 +44,16 @@ updates:
       queue-consumer-dependencies:
         patterns: ["*"]
 
+  # The service template of "plugbricks create --kind api" (D28): what a new API starts with, kept current like the
+  # example APIs.
+  - package-ecosystem: npm
+    directory: /packages/plugbricks/templates/api/service
+    schedule:
+      interval: weekly
+    groups:
+      create-api-template:
+        patterns: ["*"]
+
   # tools/wgc-crosscheck holds only the official Cosmo CLI for a test; a new version is a new reference to compare with.
   - package-ecosystem: npm
     directory: /tools/wgc-crosscheck

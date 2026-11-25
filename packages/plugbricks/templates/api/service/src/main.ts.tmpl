@@ -1,0 +1,42 @@
+// {{name}}: a GraphQL subgraph, created by "plugbricks create". Its schema is bricks/{{name}}/schema.graphql, the one
+// the platform composes; the image carries a copy of it (see the Dockerfile). Replace the items below with your own data.
+import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { buildSubgraphSchema } from "@apollo/subgraph";
+import { parse } from "graphql";
+import { createYoga } from "graphql-yoga";
+
+interface {{Type}} {
+  id: string;
+  name: string;
+}
+
+const items: {{Type}}[] = [
+  { id: "1", name: "first" },
+  { id: "2", name: "second" },
+];
+
+const typeDefs = parse(readFileSync(new URL("../schema.graphql", import.meta.url), "utf8"));
+const resolvers = {
+  Query: {
+    {{field}}: () => items,
+  },
+  {{Type}}: {
+    // Called by the router when another subgraph refers to an item by its key.
+    __resolveReference: (ref: { id: string }) => items.find((i) => i.id === ref.id) ?? null,
+  },
+};
+
+const yoga = createYoga({ schema: buildSubgraphSchema([{ typeDefs, resolvers }]), graphiql: false, landingPage: false });
+
+const server = createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "content-type": "text/plain" }).end("ok");
+    return;
+  }
+  yoga(req, res);
+});
+
+const port = Number(process.env.PORT ?? 4000);
+server.listen(port, () => console.log(`{{name}}: listening on :${port} (/graphql, /health)`));
+for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => server.close(() => process.exit(0)));

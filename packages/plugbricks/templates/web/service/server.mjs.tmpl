@@ -1,0 +1,49 @@
+// {{name}}: a web brick created by "plugbricks create", with no dependency: a Node HTTP server. Its page asks the
+// router a first question from the server (GRAPHQL_URL, the router inside the platform). PUBLIC_GRAPHQL_URL is the
+// router as a browser on this machine reaches it, for pages that ask it from the browser.
+import { createServer } from "node:http";
+
+const port = Number(process.env.PORT ?? 3000);
+const graphql = process.env.GRAPHQL_URL;
+
+const escape = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+async function askRouter() {
+  if (!graphql) return "no router: this platform serves no subgraph yet";
+  try {
+    const res = await fetch(graphql, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: "{ __typename }" }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return `the router answered ${res.status}: ${await res.text()}`;
+  } catch (e) {
+    return `the router did not answer (${e.message})`;
+  }
+}
+
+const server = createServer(async (req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "content-type": "text/plain" }).end("ok");
+    return;
+  }
+  if (req.method !== "GET" || req.url !== "/") {
+    res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+    return;
+  }
+  const answer = await askRouter();
+  res
+    .writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": "default-src 'self'" })
+    .end(`<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>{{name}}</title>
+<h1>{{name}}</h1>
+<p>Served by the <b>{{name}}</b> brick. Replace services/{{name}}/server.mjs with your own pages.</p>
+<p>${escape(answer)}</p>
+</html>`);
+});
+
+server.listen(port, () => console.log(`{{name}}: listening on :${port} (/, /health)`));
+for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => server.close(() => process.exit(0)));

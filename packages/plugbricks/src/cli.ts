@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
@@ -21,6 +21,7 @@ import { startAdmin } from "./admin/server.js";
 import { platformOidcIssuer } from "./plan.js";
 import { withPlatformLock } from "./lock.js";
 import { needsOf, type Choice } from "./needs.js";
+import { BRICK_KINDS, createBrick, type BrickKind } from "./create.js";
 import {
   down,
   generate,
@@ -54,6 +55,8 @@ Commands:
   add <name>             Install the brick bricks/<name> of this project (or the folder <name> here)
   add <path>             Install the brick at <path> (a directory with a plugin.json)
                          Either way, what it needs from bricks/ is proposed first (--yes: add it without asking)
+  create <name> --kind api|web
+                         Write a new brick <name>-api or <name>-web in bricks/ and its code in services/, and add it
   remove <name>          Uninstall a brick
   enable <name>          Deploy an installed brick again (it was disabled)
   disable <name>         Stop deploying an installed brick; its volumes and secrets are kept
@@ -74,6 +77,7 @@ Options:
   --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
   -y, --yes              With add: also add what the brick needs from bricks/, without asking
+  --kind api|web         With create: a GraphQL subgraph or a web brick
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
   -v, --version          Show the version
@@ -131,7 +135,7 @@ function version(): string {
 }
 
 /** The commands that write platform.json, platform.lock, .generated/, .secrets/ or the runtime. */
-const CHANGING_COMMANDS = new Set(["add", "remove", "enable", "disable", "generate", "up", "down"]);
+const CHANGING_COMMANDS = new Set(["add", "create", "remove", "enable", "disable", "generate", "up", "down"]);
 
 /** Runs one CLI invocation and returns the exit code. Never calls process.exit, so tests can run it in-process. */
 export function main(argv: string[], io: Io): number {
@@ -152,6 +156,7 @@ export function main(argv: string[], io: Io): number {
           "allow-context": { type: "string" },
           "prune-volumes": { type: "boolean" },
           yes: { type: "boolean", short: "y" },
+          kind: { type: "string" },
           port: { type: "string" },
           dev: { type: "boolean" },
           issuer: { type: "string" },
@@ -193,6 +198,7 @@ export function main(argv: string[], io: Io): number {
     }
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
     if (values.yes !== undefined) optionFor("yes", "add");
+    if (values.kind !== undefined) optionFor("kind", "create");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
       throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
@@ -312,6 +318,25 @@ export function main(argv: string[], io: Io): number {
               `  ${r.name} serves GraphQL and requires oidc but has no "authorization" block: with an oidc provider, any valid token can call it`,
             );
           }
+          return 0;
+        }
+        case "create": {
+          only(1, "a name");
+          const kind = values.kind as BrickKind | undefined;
+          if (kind === undefined || !BRICK_KINDS.includes(kind)) {
+            throw usage("USAGE_INVALID_OPTION", "", {
+              detail: `create needs --kind ${BRICK_KINDS.join(" or ")}${values.kind === undefined ? "" : ` (got "${values.kind}")`}`,
+            });
+          }
+          const r = createBrick(root, args[0], kind);
+          io.stdout(`Created ${r.name}: ${r.brickDir} (the brick) and ${r.serviceDir} (its code and image recipe)`);
+          io.stdout(`Added ${r.added.name} ${r.added.version}`);
+          // The build context is the project folder: the image of an API carries the schema of its brick.
+          const here = relative(io.cwd, root).split("\\").join("/");
+          const at = (p: string) => (here ? `${here}/${p}` : p);
+          io.stdout("Next, build its image, then start the platform:");
+          io.stdout(`  docker build -t ${r.image} -f ${at(`${r.serviceDir}/Dockerfile`)} ${here || "."}`);
+          io.stdout(`  plugbricks up${values.dir !== undefined ? ` --dir ${values.dir}` : ""}`);
           return 0;
         }
         case "remove": {
