@@ -55,5 +55,6 @@ export const MANIFEST_DEFAULTS = {
     ]),
   ) as { intervalSeconds: number; timeoutSeconds: number; retries: number; startPeriodSeconds: number },
   readyIntervalSeconds: manifestSchema.schema.$defs.provide.properties.ready.properties.intervalSeconds.default as number,
+  dependencyOperations: manifestSchema.schema.$defs.dependency.properties.operations.default as ("queries" | "mutations")[],
   webPath: manifestSchema.schema.$defs.web.properties.path.default as string,
 };

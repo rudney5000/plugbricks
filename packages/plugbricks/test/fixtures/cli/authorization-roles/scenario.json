@@ -1,0 +1,57 @@
+{
+  "description": "orders and shipping declare the roles of their queries and mutations (D22): with keycloak, each API gets them in its env and its provision task creates them on its own client, and orders-web, which lists orders and shipping, is granted their read roles and nothing more",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/keycloak"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/shipping"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "      AUTHORIZATION_MUTATIONS_ROLE: orders:write\n      AUTHORIZATION_QUERIES_ROLE: orders:read\n"
+  }
+}

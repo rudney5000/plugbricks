@@ -33,6 +33,11 @@
     {
       "plugin": "orders",
       "description": "the page reads its orders from the orders subgraph, through the router"
+    },
+    {
+      "plugin": "shipping",
+      "description": "the page shows each order's shipment when the shipping subgraph is installed; without it the orders still show",
+      "optional": true
     }
   ],
   "web": {

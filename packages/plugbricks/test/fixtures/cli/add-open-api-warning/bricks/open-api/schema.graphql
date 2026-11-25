@@ -1,0 +1,4 @@
+type Query {
+  "Answers pong. Nothing else: this API only shows the add warning."
+  ping: String!
+}

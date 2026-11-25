@@ -1,6 +1,6 @@
 /**
  * Templates in manifest values: `${provider.host}`, `${provider.port}`, `${consumer.name}`,
- * `${web.origin}` and `${secrets.<name>}`. Which ones a field may use depends on the field (TEMPLATE_CONTEXTS).
+ * `${consumer.roles}`, `${consumer.grants}`, `${web.origin}` and `${secrets.<name>}`. Which ones a field may use depends on the field (TEMPLATE_CONTEXTS).
  * Anything else written as `${...}` is refused when the brick is added, so a typo never
  * reaches a running container.
  */
@@ -8,7 +8,15 @@
 /** Secret names: lowercase words joined by single underscores, so env var names never collide (see secretEnvName). */
 export const SECRET_NAME = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 
-export type TemplateVar = "provider.host" | "provider.port" | "provider.web.origin" | "consumer.name" | "web.origin" | "secrets";
+export type TemplateVar =
+  | "provider.host"
+  | "provider.port"
+  | "provider.web.origin"
+  | "consumer.name"
+  | "consumer.roles"
+  | "consumer.grants"
+  | "web.origin"
+  | "secrets";
 
 /** What each templated field may use. Secrets only in environment maps, never in a command line (visible in ps). */
 export const TEMPLATE_CONTEXTS = {
@@ -17,7 +25,12 @@ export const TEMPLATE_CONTEXTS = {
   webServiceEnv: ["secrets", "web.origin"],
   readyExec: ["provider.host", "provider.port"],
   provisionCommand: ["provider.host", "provider.port", "consumer.name"],
-  provisionEnv: ["provider.host", "provider.port", "consumer.name", "secrets"],
+  /**
+   * consumer.roles: the roles the consumer's "authorization" block names, space-separated (D22): the provision task creates
+   * them on the consumer's own client. consumer.grants: "<brick>/<role>" for each role of a dependency's block that the
+   * consumer's service account must hold, space-separated. Both are empty when there is nothing to say.
+   */
+  provisionEnv: ["provider.host", "provider.port", "consumer.name", "consumer.roles", "consumer.grants", "secrets"],
   /** provider.web.origin: where the browser reaches a provider that is a web brick, e.g. the issuer of its tokens (D20). */
   inject: ["provider.host", "provider.port", "provider.web.origin", "consumer.name", "secrets"],
 } as const satisfies Record<string, readonly TemplateVar[]>;

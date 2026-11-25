@@ -153,5 +153,35 @@
     "code": "DUPLICATE_DEPENDENCY",
     "path": "/dependencies/1/plugin",
     "why": "the same plugin listed twice, with different descriptions (so uniqueItems does not catch it)"
+  },
+  "authorization-without-oidc.json": {
+    "code": "AUTHORIZATION_WITHOUT_OIDC",
+    "path": "/authorization",
+    "why": "a role rule is read from the oidc provider's tokens, so the brick must require oidc"
+  },
+  "authorization-without-subgraph.json": {
+    "code": "DEPENDENT_FIELD",
+    "path": "/authorization",
+    "why": "authorization applies to a GraphQL API, so it needs a subgraph"
+  },
+  "authorization-bad-role.json": {
+    "code": "INVALID_FORMAT",
+    "path": "/authorization/queries",
+    "why": "a role name is lowercase words joined by : . _ or -, with no space"
+  },
+  "authorization-empty.json": {
+    "code": "OUT_OF_RANGE",
+    "path": "/authorization",
+    "why": "an empty block says nothing: leave it out to stay at D20"
+  },
+  "authorization-unknown-class.json": {
+    "code": "UNKNOWN_FIELD",
+    "path": "/authorization/subscriptions",
+    "why": "only queries and mutations are operation classes in D22"
+  },
+  "dependency-bad-operation.json": {
+    "code": "INVALID_VALUE",
+    "path": "/dependencies/0/operations/0",
+    "why": "a dependency uses queries or mutations of its target"
   }
 }

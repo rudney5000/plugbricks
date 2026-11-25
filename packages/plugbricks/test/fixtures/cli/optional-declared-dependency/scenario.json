@@ -1,0 +1,70 @@
+{
+  "description": "orders-web lists shipping as an optional dependency (D22): adding it without shipping prints no warning, and shipping can then be disabled and removed while orders-web stays installed; the required one, orders, is still protected",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-web"
+      ],
+      "notStdout": "is not installed"
+    },
+    {
+      "run": [
+        "add",
+        "examples/shipping"
+      ]
+    },
+    {
+      "run": [
+        "disable",
+        "shipping"
+      ]
+    },
+    {
+      "run": [
+        "enable",
+        "shipping"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "shipping"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "orders"
+      ],
+      "exit": 1,
+      "codes": [
+        "DEPENDENCY_IN_USE"
+      ],
+      "unchanged": true,
+      "stderr": "\"orders-web\" declare it in \"dependencies\""
+    }
+  ],
+  "absent": [
+    ".platform/bricks/shipping"
+  ]
+}

@@ -409,6 +409,7 @@ describe("the admin server", () => {
       "orders-web": [
         "keycloak capability optional: oidc",
         "orders declared: the page reads its orders from the orders subgraph, through the router",
+        "shipping declared optional: the page shows each order's shipment when the shipping subgraph is installed; without it the orders still show",
       ],
       postgres: [],
       shipping: ["keycloak capability optional: oidc", "orders extends: Order", "postgres capability: database"],
@@ -417,7 +418,10 @@ describe("the admin server", () => {
     // An optional capability nobody provides is not wired, so it is no dependency.
     expect(main(["disable", "keycloak"], rio)).toBe(0);
     const without = await needs();
-    expect(without["orders-web"]).toEqual(["orders declared: the page reads its orders from the orders subgraph, through the router"]);
+    expect(without["orders-web"]).toEqual([
+      "orders declared: the page reads its orders from the orders subgraph, through the router",
+      "shipping declared optional: the page shows each order's shipment when the shipping subgraph is installed; without it the orders still show",
+    ]);
     expect(without.orders).toEqual(["postgres capability: database"]);
 
     // With shipping gone, only orders-web's declaration protects orders: the admin shows the CLI's refusal.
