@@ -1,0 +1,100 @@
+name: Example images
+
+# Builds the images of the example bricks from apis/ and publishes them to GitHub Container Registry (D29), so that a
+# new project can `up` the examples without building anything. The list comes from the example manifests
+# (packages/plugbricks/scripts/example-images.mjs): an image is published under the name and version its manifest
+# gives, and a version already published is never replaced; a fix ships as a new version, written in the manifest.
+# A pull request builds them only.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apis/**"
+      - "packages/plugbricks/examples/**"
+      - "packages/plugbricks/scripts/example-images.mjs"
+      - ".github/workflows/images.yml"
+  pull_request:
+    paths:
+      - "apis/**"
+      - "packages/plugbricks/examples/**"
+      - "packages/plugbricks/scripts/example-images.mjs"
+      - ".github/workflows/images.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  # A publication is never cut in the middle.
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: build and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Used only on main, to push; a pull request never logs in.
+      packages: write
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    steps:
+      # Actions pinned by commit SHA; the comment gives the release it was resolved from.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUBLISH == 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+
+      - name: Build, and publish the versions not published yet
+        env:
+          SOURCE: https://github.com/${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t lines < <(node packages/plugbricks/scripts/example-images.mjs)
+          echo "| Image | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          for line in "${lines[@]}"; do
+            read -r context image <<< "$line"
+            if [ "$PUBLISH" = true ] && docker manifest inspect "$image" > /dev/null 2>&1; then
+              echo "$image is already published: left as it is (a new version ships a fix)"
+              echo "| \`$image\` | already published |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            docker build \
+              --label "org.opencontainers.image.source=$SOURCE" \
+              --label "org.opencontainers.image.revision=$REVISION" \
+              --label "org.opencontainers.image.licenses=Apache-2.0" \
+              --tag "$image" "$context"
+            if [ "$PUBLISH" = true ]; then
+              docker push "$image"
+              digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image")
+              echo "| \`$image\` | published: \`$digest\` |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`$image\` | built (not published from a pull request) |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      # A package is private when GitHub creates it: the owner makes it public once, in its settings. Until then a new
+      # project cannot pull it; say so, without failing the publication.
+      - name: Check that anyone can pull them
+        if: env.PUBLISH == 'true'
+        run: |
+          docker logout ghcr.io
+          for line in $(node packages/plugbricks/scripts/example-images.mjs | cut -d' ' -f2); do
+            if ! docker manifest inspect "$line" > /dev/null 2>&1; then
+              echo "::warning::$line cannot be pulled anonymously: make the package public (Package settings, Change visibility)"
+            fi
+          done
