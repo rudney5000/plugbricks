@@ -1,4 +1,4 @@
-import type { AdminBrick, AdminDependency, BricksResponse, LiveState, RouterView } from "./types";
+import type { AdminAuthorization, AdminBrick, AdminDependency, BricksResponse, LiveState, RouterView } from "./types";
 
 export function summary(bricks: AdminBrick[]): BricksResponse["summary"] {
   return {
@@ -167,4 +167,15 @@ export function requiredBy(
       b.dependsOn.filter((d) => d.brick === name).map((d) => ({ brick: b.name, kind: d.kind, label: d.label, optional: d.optional })),
     )
     .sort((a, b) => a.brick.localeCompare(b.brick));
+}
+
+/**
+ * What the Details tab says about a brick's API (D22). A class without a role asks nothing more than a valid token, and
+ * a brick that requires oidc but declares no roles is open: the page says so, because nothing else on it would.
+ */
+export function describeAuthorization(a: AdminAuthorization): string {
+  if (a.state === "none") return "—";
+  if (a.state === "open") return "open: any valid token may call it";
+  const any = "any valid token";
+  return `queries: ${a.queries ?? any}; mutations: ${a.mutations ?? any}`;
 }

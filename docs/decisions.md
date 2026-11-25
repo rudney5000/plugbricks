@@ -1626,6 +1626,13 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   - **C (chosen).** A now gives a complete, small rule at the API boundary; B is a later, additive refinement
     with the schema and the router, triggered by a real field.
 
+- **In the admin (2026-11-25).** `GET /api/bricks` gives each brick an `authorization` object, and the Details tab shows it
+  on two rows. `state` is `roles` (the API enforces what the row lists; a class left out reads "any valid token"), `open`
+  (it serves a subgraph and requires oidc but declares no roles: "any valid token may call it", the case the `add`
+  warning names) or `none`; `grants` lists the `<brick>/<role>` its service account is given. The values come from the
+  manifests, and the grants from the plan (`Plan.authorization`), which also renders the provision task's `ROLES` and
+  `GRANTS`, so what the page shows and what Keycloak receives cannot differ. It shows what the platform asks for, not
+  what Keycloak holds now: a grant made by hand, or one that was never taken back (see Limits), does not appear.
 - **Tests (step A, run 2026-11-25):** manifest schema and cross-checks (six invalid fixtures, the examples), the plan
   (roles in the env and in the provision env, no oidc, grants per operation, a dependency that is missing, open or without
   oidc), CLI scenarios with goldens (`authorization-roles`, `authorization-without-oidc`, `optional-declared-dependency`,

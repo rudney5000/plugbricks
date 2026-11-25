@@ -172,7 +172,7 @@ describe("with orders and shipping", () => {
 });
 
 describe("rendering rules on a hand-made plan", () => {
-  const base: Plan = { platform: "demo", services: [], requirements: [], scripts: [], volumes: [], secrets: [] };
+  const base: Plan = { platform: "demo", services: [], authorization: [], requirements: [], scripts: [], volumes: [], secrets: [] };
   const router = (
     config: string,
     subgraphs: NonNullable<Plan["router"]>["subgraphs"] = [{ service: "a-api", brick: "a", healthy: true }],

@@ -12,6 +12,17 @@ export interface AdminDependency {
   enabled: boolean;
 }
 
+/** What a brick's API asks of a token (D22). */
+export interface AdminAuthorization {
+  /** "roles": the API enforces the roles below; "open": it requires oidc and declares none, so any valid token may call it; "none": no token is involved. */
+  state: "roles" | "open" | "none";
+  /** The role each operation class asks for; null when the class is left out (any valid token). */
+  queries: string | null;
+  mutations: string | null;
+  /** "<brick>/<role>": the roles the brick's own service account is given on the bricks it depends on. */
+  grants: string[];
+}
+
 export interface AdminBrick {
   name: string;
   version: string;
@@ -32,6 +43,7 @@ export interface AdminBrick {
   removeBlockedBy: { code: string; message: string }[];
   /** The bricks this one needs, in name order. */
   dependsOn: AdminDependency[];
+  authorization: AdminAuthorization;
 }
 
 export interface RouterConfig {
