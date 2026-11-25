@@ -1,0 +1,34 @@
+{
+  "description": "create --image names a registry image in the manifest and in the build command (D28); an image that is not pinned is refused before anything is written; create prints how a Kubernetes cluster gets the image",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    {
+      "run": ["create", "inventory", "--kind", "api", "--image", "ghcr.io/acme/inventory-api:latest"],
+      "exit": 1,
+      "codes": ["IMAGE_FLOATING_TAG"],
+      "unchanged": true
+    },
+    {
+      "run": ["create", "inventory", "--kind", "api", "--image", "ghcr.io/acme/inventory-api"],
+      "exit": 1,
+      "codes": ["IMAGE_NOT_PINNED"],
+      "unchanged": true
+    },
+    {
+      "run": ["create", "inventory", "--kind", "api", "--image", "ghcr.io/acme/inventory-api:0.1.0"],
+      "stdout": [
+        "  docker build -t ghcr.io/acme/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .",
+        "On Kubernetes, the cluster needs the image: import it (k3d image import ghcr.io/acme/inventory-api:0.1.0 --cluster <name>,",
+        "  kind load docker-image ghcr.io/acme/inventory-api:0.1.0), or push it to a registry the cluster reads."
+      ],
+      "notStdout": "create with --image"
+    },
+    { "run": ["create", "shop", "--kind", "web"], "stdout": "  To name a registry image from the start, create with --image <registry>/<name>:<version>." },
+    { "run": ["status", "--image", "x:1.0.0"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "unchanged": true }
+  ],
+  "absent": ["services/inventory-api/node_modules"],
+  "expectRaw": {
+    "bricks/inventory-api/plugin.json": "\"image\": \"ghcr.io/acme/inventory-api:0.1.0\"",
+    "services/inventory-api/Dockerfile": "#   docker build -t ghcr.io/acme/inventory-api:0.1.0 -f services/inventory-api/Dockerfile ."
+  }
+}

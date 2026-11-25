@@ -65,6 +65,17 @@ describe("published package", () => {
     expect(files.filter((f) => /^(src|test|examples)\//.test(f))).toEqual([]);
   });
 
+  it("stops quietly when its reader closes the pipe early, as `plugbricks --help | head -1` does", async () => {
+    const child = spawn(process.execPath, [join(unpacked, "dist/bin.js"), "--help"], { stdio: ["ignore", "pipe", "pipe"] });
+    // Closed before the first line is written: every write of the CLI meets a closed pipe (EPIPE).
+    child.stdout.destroy();
+    let stderr = "";
+    child.stderr.on("data", (d: Buffer) => (stderr += d));
+    const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
+    expect(stderr, "no stack trace").not.toMatch(/EPIPE|Unhandled 'error' event/);
+    expect(code).toBe(0);
+  });
+
   it("creates a brick from the templates it ships (D28)", () => {
     const project = join(work, "create-project");
     mkdirSync(project);

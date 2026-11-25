@@ -55,7 +55,7 @@ Commands:
   add <name>             Install the brick bricks/<name> of this project (or the folder <name> here)
   add <path>             Install the brick at <path> (a directory with a plugin.json)
                          Either way, what it needs from bricks/ is proposed first (--yes: add it without asking)
-  create <name> --kind api|web
+  create <name> --kind api|web [--image <ref>]
                          Write a new brick <name>-api or <name>-web in bricks/ and its code in services/, and add it
   remove <name>          Uninstall a brick
   enable <name>          Deploy an installed brick again (it was disabled)
@@ -78,6 +78,7 @@ Options:
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
   -y, --yes              With add: also add what the brick needs from bricks/, without asking
   --kind api|web         With create: a GraphQL subgraph or a web brick
+  --image <ref>          With create: the image its manifest names (default <platform>/<name>:0.1.0), pinned
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
   -v, --version          Show the version
@@ -157,6 +158,7 @@ export function main(argv: string[], io: Io): number {
           "prune-volumes": { type: "boolean" },
           yes: { type: "boolean", short: "y" },
           kind: { type: "string" },
+          image: { type: "string" },
           port: { type: "string" },
           dev: { type: "boolean" },
           issuer: { type: "string" },
@@ -199,6 +201,7 @@ export function main(argv: string[], io: Io): number {
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
     if (values.yes !== undefined) optionFor("yes", "add");
     if (values.kind !== undefined) optionFor("kind", "create");
+    if (values.image !== undefined) optionFor("image", "create");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
       throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
@@ -328,7 +331,7 @@ export function main(argv: string[], io: Io): number {
               detail: `create needs --kind ${BRICK_KINDS.join(" or ")}${values.kind === undefined ? "" : ` (got "${values.kind}")`}`,
             });
           }
-          const r = createBrick(root, args[0], kind);
+          const r = createBrick(root, args[0], kind, { image: values.image });
           io.stdout(`Created ${r.name}: ${r.brickDir} (the brick) and ${r.serviceDir} (its code and image recipe)`);
           io.stdout(`Added ${r.added.name} ${r.added.version}`);
           // The build context is the project folder: the image of an API carries the schema of its brick.
@@ -337,6 +340,12 @@ export function main(argv: string[], io: Io): number {
           io.stdout("Next, build its image, then start the platform:");
           io.stdout(`  docker build -t ${r.image} -f ${at(`${r.serviceDir}/Dockerfile`)} ${here || "."}`);
           io.stdout(`  plugbricks up${values.dir !== undefined ? ` --dir ${values.dir}` : ""}`);
+          // On Kubernetes the image must be where the cluster pulls it: imported into a local cluster (kept, since a
+          // pinned tag is pulled only when missing), or pushed to a registry it reads.
+          io.stdout(`On Kubernetes, the cluster needs the image: import it (k3d image import ${r.image} --cluster <name>,`);
+          io.stdout(`  kind load docker-image ${r.image}), or push it to a registry the cluster reads.`);
+          if (values.image === undefined)
+            io.stdout("  To name a registry image from the start, create with --image <registry>/<name>:<version>.");
           return 0;
         }
         case "remove": {
