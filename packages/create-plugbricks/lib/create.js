@@ -94,6 +94,7 @@ export function create(args, io, deps = {}) {
   io.stdout("Next steps:");
   io.stdout(`  cd ${name}`);
   io.stdout("  npm install");
+  io.stdout("  npx plugbricks add postgres");
   io.stdout("  npx plugbricks status");
   io.stdout("Then read README.md: it explains every folder.");
   return 0;

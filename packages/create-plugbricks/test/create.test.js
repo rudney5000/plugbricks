@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -10,7 +10,16 @@ import { extractTgz, linkDir, npmPack } from "../../plugbricks/test/helpers/pack
 // Everything runs in .test-work/ inside this package (gitignored).
 const pkgDir = fileURLToPath(new URL("../", import.meta.url));
 const work = join(pkgDir, ".test-work");
-const postgresExample = fileURLToPath(new URL("../../plugbricks/examples/postgres", import.meta.url));
+const examplesDir = fileURLToPath(new URL("../../plugbricks/examples/", import.meta.url));
+/** The bricks a new project gets in bricks/ (D25): those whose images are public, on Docker Hub. */
+const SHIPPED_BRICKS = ["nats", "postgres", "rabbitmq"];
+
+/** Every file of a folder, relative and sorted, with "/" as the separator. */
+function filesOf(dir, prefix = "") {
+  return readdirSync(join(dir, prefix), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? filesOf(dir, `${prefix}${e.name}/`) : [`${prefix}${e.name}`]))
+    .sort();
+}
 const plugbricksVersion = JSON.parse(readFileSync(new URL("../../plugbricks/package.json", import.meta.url), "utf8")).version;
 
 function run(args, cwd) {
@@ -36,6 +45,11 @@ const STRUCTURE = [
   "config/README.md",
   "services/orders/plugin.json",
   "services/orders/schema.graphql",
+  "bricks/postgres/plugin.json",
+  "bricks/postgres/provision/create-database.sh",
+  "bricks/rabbitmq/plugin.json",
+  "bricks/rabbitmq/provision/create-vhost.sh",
+  "bricks/nats/plugin.json",
   ".platform/bricks/.gitkeep",
   ".generated",
   ".secrets",
@@ -109,6 +123,7 @@ describe("npm create plugbricks <name>", () => {
       "platform.json",
       "platform.lock",
       ".platform/bricks/",
+      "bricks/",
       "services/",
       "config/",
       ".generated/",
@@ -127,14 +142,38 @@ describe("npm create plugbricks <name>", () => {
     const ignored = (p) => spawnSync("git", ["check-ignore", "-q", p], { cwd: project }).status === 0;
     expect(ignored(".generated/compose.yaml")).toBe(true);
     expect(ignored(".secrets/db_password")).toBe(true);
-    for (const p of ["platform.json", "platform.lock", ".platform/bricks/.gitkeep", "services/orders/plugin.json", "config/README.md"]) {
+    for (const p of [
+      "platform.json",
+      "platform.lock",
+      ".platform/bricks/.gitkeep",
+      "services/orders/plugin.json",
+      "bricks/postgres/plugin.json",
+      "config/README.md",
+    ]) {
       expect(ignored(p), `${p} must be committed`).toBe(false);
     }
   });
 
-  it("lets a beginner follow the README: add a database, then services/orders", () => {
+  it("ships the bricks of bricks/ exactly as the examples of plugbricks (their scripts run through /bin/sh: no mode to keep)", () => {
+    expect(readdirSync(join(project, "bricks")).sort()).toEqual(SHIPPED_BRICKS);
+    for (const b of SHIPPED_BRICKS) {
+      const example = join(examplesDir, b);
+      const copy = join(project, "bricks", b);
+      expect(filesOf(copy), b).toEqual(filesOf(example));
+      for (const f of filesOf(example)) {
+        expect(readFileSync(join(copy, f), "utf8"), `bricks/${b}/${f} differs from examples/${b}/${f}`).toBe(
+          readFileSync(join(example, f), "utf8"),
+        );
+      }
+      expect(validateManifest(JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8"))), b).toEqual({ ok: true });
+    }
+  });
+
+  it("lets a beginner follow the README: add the database by name, then services/orders", () => {
     expect(cli(["add", "services/orders"], project)).toMatchObject({ code: 1 });
-    expect(cli(["add", postgresExample], project).code).toBe(0);
+    const pg = cli(["add", "postgres"], project);
+    expect(pg.code, pg.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(join(project, "platform.json"), "utf8")).bricks.postgres).toEqual({ source: "bricks/postgres" });
     const r = cli(["add", "services/orders"], project);
     expect(r.code, r.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(project, "platform.lock"), "utf8")).capabilities).toEqual({ database: "postgres" });
@@ -288,6 +327,8 @@ describe("published package", () => {
         "template/gitattributes",
         "template/README.md",
         "template/services/orders/plugin.json",
+        ...SHIPPED_BRICKS.map((b) => `template/bricks/${b}/plugin.json`),
+        "template/bricks/postgres/provision/create-database.sh",
       ]),
     );
     expect(files.filter((f) => f.startsWith("test/"))).toEqual([]);

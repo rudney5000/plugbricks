@@ -1,0 +1,43 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "nats",
+  "version": "0.1.0",
+  "description": "Base brick: a NATS server that provides the \"queue\" capability to every consumer that requires it. Core NATS only (publish/subscribe): JetStream and per-consumer accounts would need a configuration file or a command line the manifest cannot express yet (D13).",
+  "services": [
+    {
+      "name": "broker",
+      "image": "nats:2.11.6-alpine",
+      "port": 4222
+    }
+  ],
+  "provides": {
+    "queue": {
+      "service": "broker",
+      "ready": {
+        "exec": [
+          "nc",
+          "-z",
+          "-w",
+          "2",
+          "${provider.host}",
+          "${provider.port}"
+        ],
+        "image": "busybox:1.36",
+        "intervalSeconds": 2
+      },
+      "provision": {
+        "image": "busybox:1.36",
+        "command": [
+          "true"
+        ]
+      },
+      "inject": {
+        "NATS_URL": "nats://${provider.host}:${provider.port}",
+        "SUBJECT": "${consumer.name}"
+      }
+    }
+  },
+  "tags": [
+    "queue"
+  ]
+}

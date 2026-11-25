@@ -11,6 +11,7 @@ them and of what they need from each other.
 | `platform.json` | **What you want**: the list of installed bricks and where each came from, and the port of the GraphQL router (`router.port`, 4000 by default; you may change it). | yes | only `router.port`; use `plugbricks add` / `remove` for the bricks |
 | `platform.lock` | **What plugbricks resolved**: exact versions, a fingerprint of every brick, which brick provides which capability, the volumes kept after a removal, and the volumes waiting to be deleted (deleted only when you ask for it explicitly). | yes | never |
 | `.platform/bricks/` | A **copy of every installed brick**, so the project does not depend on where a brick came from. `plugbricks status` warns if a copy was changed. | yes | never |
+| `bricks/` | **Bricks ready to add by name**: `npx plugbricks add postgres` adds `bricks/postgres`. It comes with `postgres` (provides `database`), `rabbitmq` and `nats` (each provides `queue`), whose images are public. Put any brick you want to add by name here; the folder name must be the brick's `name`. | yes | yes, add your own |
 | `services/` | **Your own services.** Each folder is a brick: a `plugin.json` that says what the service is, plus its files. `services/orders/` is an example to start from. | yes | yes, this is your code |
 | `config/` | **Your non-secret settings** that services read. | yes | yes |
 | `.generated/` | Files **produced by plugbricks** (`compose/compose.yaml`, `k8s/*.yaml`) by `plugbricks generate` and `up`. Always rebuilt from the files above. | no (ignored) | never |
@@ -25,15 +26,18 @@ npm install                 # installs the plugbricks command locally
 npx plugbricks status       # an empty platform: no bricks yet
 ```
 
-`services/orders` needs a `database`, so add a brick that provides one first. There is no
-brick catalog yet: point `add` at a brick folder, for example the `postgres` example of the
-plugbricks repository.
+`services/orders` needs a `database`, so add a brick that provides one first. A name adds
+the brick of `bricks/`; a path (with a `/`) adds any brick folder.
 
 ```bash
-npx plugbricks add path/to/postgres     # provides "database"
+npx plugbricks add postgres             # bricks/postgres, provides "database"
 npx plugbricks add services/orders      # requires "database": now satisfied
 npx plugbricks status
 ```
+
+`services/orders` is an example to start from: its image, `ghcr.io/example/orders-app`,
+does not exist, so replace it with your own before `up`. For a brick folder next to you,
+write it as a path: `npx plugbricks add ./my-brick`.
 
 What plugbricks refuses, and why:
 
