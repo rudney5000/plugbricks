@@ -1,0 +1,135 @@
+{
+  "description": "logs and exec on Docker Compose (D32): the container is found by its Compose labels, the logs and the command are attached to the terminal, and the exit code of the command is the one of plugbricks",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "orders-api",
+        "--tail",
+        "5"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=orders-api-app --format {{.ID}}",
+        "docker logs --tail 5 abc123"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "logs",
+        "orders-api",
+        "-f"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=orders-api-app --format {{.ID}}",
+        "docker logs --follow abc123"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "logs",
+        "router"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "r0\n"
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=router --format {{.ID}}",
+        "docker logs r0"
+      ]
+    },
+    {
+      "run": [
+        "exec",
+        "orders-api",
+        "--",
+        "node",
+        "-e",
+        "console.log(1)"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "commands": [
+        "docker ps --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=orders-api-app --format {{.ID}}",
+        "docker exec -i abc123 node -e console.log(1)"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "exec",
+        "postgres"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "pg1\n"
+        }
+      ],
+      "commands": [
+        "docker ps --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=postgres-db --format {{.ID}}",
+        "docker exec -i pg1 sh"
+      ]
+    },
+    {
+      "run": [
+        "exec",
+        "orders-api",
+        "--",
+        "sh",
+        "-c",
+        "exit 7"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        },
+        {
+          "match": "docker exec",
+          "status": 7
+        }
+      ],
+      "exit": 7
+    }
+  ]
+}

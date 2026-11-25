@@ -119,6 +119,13 @@ export const MESSAGES = {
 
   // remove
   BRICK_NOT_INSTALLED: 'no brick named "{name}" is installed',
+  BRICK_DISABLED_NOT_RUNNING: 'brick "{brick}" is disabled, so nothing of it runs; "plugbricks enable {brick}", then up',
+  ROUTER_NOT_IN_PLATFORM: "this platform has no router: no installed brick serves a subgraph",
+  SERVICE_REQUIRED: 'brick "{brick}" has several services ({services}); name one with --service',
+  SERVICE_UNKNOWN: 'brick "{brick}" has no service "{service}"; its services: {services}',
+  SERVICE_NOT_RUNNING:
+    '"{name}" of platform "{platform}" is not running; start the platform with "plugbricks up", or see "plugbricks status --runtime"',
+  SERVICE_HAS_NO_CONTAINER: '"{name}" of platform "{platform}" has no container yet; start the platform with "plugbricks up"',
   CAPABILITY_IN_USE: 'cannot remove "{brick}": capability "{capability}" is still required by {consumers}',
 
   // status

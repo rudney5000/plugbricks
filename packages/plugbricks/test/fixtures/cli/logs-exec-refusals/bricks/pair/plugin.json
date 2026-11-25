@@ -1,0 +1,17 @@
+{
+  "name": "pair",
+  "version": "0.1.0",
+  "description": "Two services, for the --service rule of logs and exec.",
+  "services": [
+    {
+      "name": "front",
+      "image": "nats:2.11.6-alpine",
+      "port": 4222
+    },
+    {
+      "name": "back",
+      "image": "nats:2.11.6-alpine",
+      "port": 4223
+    }
+  ]
+}

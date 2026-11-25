@@ -68,6 +68,8 @@ export const defaultExec: Exec = (cmd, args, opts) => {
 
 export interface RuntimeDeps {
   exec?: Exec;
+  /** logs and exec (D32): a command attached to the terminal; tests pass a fake. */
+  attach?: import("./attach.js").Attach;
   restrict?: RestrictOptions;
   /** Secret generator; tests pass a deterministic one. */
   random?: () => string;
