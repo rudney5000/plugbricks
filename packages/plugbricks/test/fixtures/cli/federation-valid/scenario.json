@@ -24,7 +24,7 @@
       "run": [
         "status"
       ],
-      "stdout": "Federation: sales, shipping; composed with @wundergraph/composition 0.68.1"
+      "stdout": "Federation: sales, shipping; composed with @wundergraph/composition 0.68.2"
     },
     {
       "run": [

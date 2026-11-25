@@ -123,7 +123,7 @@ services:
       PROMETHEUS_ENABLED: "false"
       TRACING_ENABLED: "false"
     labels:
-      plugbricks.router-config-sha256: "5f008ab31e260fe15b7fc145ac080239a8c46561fc67b978a051f987536020f6"
+      plugbricks.router-config-sha256: "424bd1ef1fe3fe8ffe56c03ea73fbdac25631cbd70f989da7a9a2f0298a04fa3"
     volumes:
       - type: bind
         source: "./router-config.json"

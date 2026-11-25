@@ -73,7 +73,7 @@
   "federation": {
     "composer": {
       "name": "@wundergraph/composition",
-      "version": "0.68.1"
+      "version": "0.68.2"
     },
     "routerCompatibilityVersion": "1",
     "schemaSha256": "0ae549a35f5e03d034469210f8cf3f69416bd08c72871c65d161778fe2d77b4c",
