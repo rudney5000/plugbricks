@@ -323,7 +323,7 @@ Apache License 2.0: see `LICENSE` and `NOTICE`. The packages are not published y
 
 ## Roadmap
 
-What comes next (publication, an easy start for a newcomer, bringing existing services in) is in `docs/roadmap.md`.
+What comes next (publication, an easy start for a newcomer, a documentation site, bringing existing services in) is in `docs/roadmap.md`, with the order of work.
 
 1. **Manifest schema + examples** — done
    - `requires` as an object per capability, with an optional `wait` (`healthy` by default, or `started`).
