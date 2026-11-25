@@ -54,7 +54,11 @@ describe("example manifests (milestone 1 criterion)", () => {
   it("orders-web declares that it needs orders, which no capability says", () => {
     const m = load("examples/orders-web/plugin.json");
     expect(validateManifest(m)).toEqual({ ok: true });
-    expect(m.dependencies.map((d: { plugin: string }) => d.plugin)).toEqual(["orders"]);
+    // The shipment is shown when shipping is installed, and the page works without it: an optional dependency (D22).
+    expect(m.dependencies.map((d: { plugin: string; optional?: boolean }) => [d.plugin, d.optional === true])).toEqual([
+      ["orders", false],
+      ["shipping", true],
+    ]);
     expect(Object.keys(m.requires)).toEqual(["oidc"]);
   });
 

@@ -81,7 +81,7 @@
     "dependencies": {
       "type": "array",
       "uniqueItems": true,
-      "description": "Plugins this plugin needs to work, besides the capabilities it requires and the entities it extends: for example a web plugin that reads its data through the router needs the API plugin that serves it. The admin shows these links in its Dependencies tab. remove refuses a plugin that an installed plugin lists here, and disable refuses it while the declaring plugin is enabled (DEPENDENCY_IN_USE); add prints a warning when a listed plugin is not installed. plugbricks does not install them or order startup by them (a capability in requires does).",
+      "description": "Plugins this plugin needs to work, besides the capabilities it requires and the entities it extends: for example a web plugin that reads its data through the router needs the API plugin that serves it. The admin shows these links in its Dependencies tab. remove refuses a plugin that an installed plugin lists here, and disable refuses it while the declaring plugin is enabled (DEPENDENCY_IN_USE); add prints a warning when a listed plugin is not installed. An entry marked optional is none of that: it is only shown, and used for the roles it asks (D22). plugbricks does not install them or order startup by them (a capability in requires does).",
       "items": {
         "$ref": "#/$defs/dependency"
       }
@@ -355,6 +355,11 @@
           "type": "string",
           "maxLength": 200,
           "description": "Why it is needed, shown next to the link."
+        },
+        "optional": {
+          "type": "boolean",
+          "default": false,
+          "description": "The plugin works without the target (a page that shows more when the API is there): remove and disable do not refuse the target, add does not warn when it is missing, and the admin shows the link as optional. The operations it uses are still granted when the target is installed."
         },
         "operations": {
           "type": "array",

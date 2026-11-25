@@ -263,7 +263,7 @@ interface Manifest {
   subgraph?: { service: string; schema: string; path?: string };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
-  dependencies?: { plugin: string; description?: string; operations?: ("queries" | "mutations")[] }[];
+  dependencies?: { plugin: string; description?: string; optional?: boolean; operations?: ("queries" | "mutations")[] }[];
   /** The client roles that the tokens of the oidc provider need for this API (D22). */
   authorization?: { queries?: string; mutations?: string };
 }
@@ -569,13 +569,14 @@ export interface AddResult {
   reattachedVolumes: VolumeRef[];
   /** Volumes of this brick that were pending deletion; adding the brick back cancels that. */
   cancelledDeletions: VolumeRef[];
-  /** Declared dependencies (D21) that are not installed; "add" prints one warning line per name. */
+  /** Declared dependencies (D21), except the optional ones, that are not installed; "add" prints one warning line per name. */
   missingDependencies: string[];
 }
 
 /** Declared dependencies of `m` that no installed brick provides, sorted (the "add" warning, D21). */
 function missingDeclaredDependencies(m: Manifest, lock: Lock): string[] {
-  return [...new Set((m.dependencies ?? []).map((d) => d.plugin))].filter((dep) => !Object.hasOwn(lock.bricks, dep)).sort();
+  const needed = (m.dependencies ?? []).filter((d) => !d.optional).map((d) => d.plugin);
+  return [...new Set(needed)].filter((dep) => !Object.hasOwn(lock.bricks, dep)).sort();
 }
 
 /**
@@ -720,7 +721,8 @@ export interface RemoveResult {
 /**
  * The installed bricks that list `name` in their manifest's `dependencies` (D21). `enabledOnly` keeps the ones that
  * are enabled: `disable` uses it (a disabled brick does not run), while `remove` keeps disabled dependers too (they
- * would break when enabled again). A copy that cannot be read is left out; "status" reports it.
+ * would break when enabled again). An optional dependency does not count: its brick works without it. A copy that
+ * cannot be read is left out; "status" reports it.
  */
 function declaredDependents(project: Project, name: string, enabledOnly = false): string[] {
   const found: string[] = [];
@@ -729,7 +731,7 @@ function declaredDependents(project: Project, name: string, enabledOnly = false)
     if (enabledOnly && !isBrickEnabled(project.platform, other)) continue;
     try {
       const m = JSON.parse(readFileSync(join(project.root, BRICKS_DIR, other, "plugin.json"), "utf8")) as Manifest;
-      if ((m.dependencies ?? []).some((d) => d.plugin === name)) found.push(`"${other}"`);
+      if ((m.dependencies ?? []).some((d) => d.plugin === name && !d.optional)) found.push(`"${other}"`);
     } catch {
       // Unreadable or missing: reported by status, and it cannot be told what it declares.
     }
