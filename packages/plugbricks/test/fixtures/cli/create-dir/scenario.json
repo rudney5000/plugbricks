@@ -1,0 +1,12 @@
+{
+  "description": "with --dir, create writes into that platform and prints a build command that works from where it was typed (D28)",
+  "steps": [
+    { "run": ["init", "--name", "demo", "--dir", "proj"] },
+    {
+      "run": ["create", "inventory", "--kind", "api", "--dir", "proj"],
+      "stdout": ["docker build -t demo/inventory-api:0.1.0 -f proj/services/inventory-api/Dockerfile proj", "  plugbricks up --dir proj"]
+    }
+  ],
+  "exists": ["proj/bricks/inventory-api/plugin.json", "proj/services/inventory-api/src/main.ts"],
+  "absent": ["bricks", "services"]
+}

@@ -43,8 +43,7 @@ const STRUCTURE = [
   "platform.json",
   "platform.lock",
   "config/README.md",
-  "services/orders-api/plugin.json",
-  "services/orders-api/schema.graphql",
+  "services/README.md",
   "bricks/postgres/plugin.json",
   "bricks/postgres/provision/create-database.sh",
   "bricks/rabbitmq/plugin.json",
@@ -110,11 +109,6 @@ describe("npm create plugbricks <name>", () => {
     expect(pkg.devDependencies.plugbricks).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it("ships services/orders-api as a valid brick", () => {
-    const m = JSON.parse(readFileSync(join(project, "services/orders-api/plugin.json"), "utf8"));
-    expect(validateManifest(m)).toEqual({ ok: true });
-  });
-
   it("explains every folder in the README", () => {
     const readme = readFileSync(join(project, "README.md"), "utf8");
     expect(readme.startsWith("# mon-saas\n")).toBe(true);
@@ -142,11 +136,15 @@ describe("npm create plugbricks <name>", () => {
     const ignored = (p) => spawnSync("git", ["check-ignore", "-q", p], { cwd: project }).status === 0;
     expect(ignored(".generated/compose.yaml")).toBe(true);
     expect(ignored(".secrets/db_password")).toBe(true);
+    // What building a created service on this machine leaves (D28).
+    expect(ignored("services/inventory-api/node_modules/graphql/package.json")).toBe(true);
+    expect(ignored("services/inventory-api/dist/main.js")).toBe(true);
+    expect(ignored("services/inventory-api/src/main.ts")).toBe(false);
     for (const p of [
       "platform.json",
       "platform.lock",
       ".platform/bricks/.gitkeep",
-      "services/orders-api/plugin.json",
+      "services/README.md",
       "bricks/postgres/plugin.json",
       "config/README.md",
     ]) {
@@ -172,14 +170,21 @@ describe("npm create plugbricks <name>", () => {
     }
   });
 
-  it("lets a beginner follow the README: add the database by name, then services/orders-api", () => {
-    expect(cli(["add", "services/orders-api"], project)).toMatchObject({ code: 1 });
+  it("lets a beginner follow the README: add the database by name, then create a first API (D28)", () => {
     const pg = cli(["add", "postgres"], project);
     expect(pg.code, pg.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(project, "platform.json"), "utf8")).bricks.postgres).toEqual({ source: "bricks/postgres" });
-    const r = cli(["add", "services/orders-api"], project);
+    const r = cli(["create", "inventory", "--kind", "api"], project);
     expect(r.code, r.stderr).toBe(0);
-    expect(JSON.parse(readFileSync(join(project, "platform.lock"), "utf8")).capabilities).toEqual({ database: "postgres" });
+    // The build command of the README is the one create prints.
+    const readme = readFileSync(join(project, "README.md"), "utf8");
+    const build = /^ {2}(docker build .*)$/m.exec(r.stdout)[1];
+    expect(readme).toContain(build);
+    expect(Object.keys(JSON.parse(readFileSync(join(project, "platform.lock"), "utf8")).bricks).sort()).toEqual([
+      "inventory-api",
+      "postgres",
+    ]);
+    expect(existsSync(join(project, "services/inventory-api/src/main.ts"))).toBe(true);
   });
 });
 
@@ -329,7 +334,7 @@ describe("published package", () => {
         "template/gitignore",
         "template/gitattributes",
         "template/README.md",
-        "template/services/orders-api/plugin.json",
+        "template/services/README.md",
         ...SHIPPED_BRICKS.map((b) => `template/bricks/${b}/plugin.json`),
         "template/bricks/postgres/provision/create-database.sh",
       ]),

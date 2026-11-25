@@ -13,6 +13,7 @@ export default tseslint.config(
       "**/test/fixtures/**",
       "packages/plugbricks/examples/**",
       "packages/create-plugbricks/template/**",
+      "packages/plugbricks/templates/**",
       "**/dist/**",
       "**/node_modules/**",
       "**/.test-work/**",

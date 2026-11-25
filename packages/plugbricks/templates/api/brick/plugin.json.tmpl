@@ -1,0 +1,22 @@
+{
+  "$schema": "{{schema}}",
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "description": "A GraphQL subgraph created by plugbricks create. Its code is in services/{{name}}; build its image from the project folder with: docker build -t {{image}} -f services/{{name}}/Dockerfile .",
+  "tags": ["api", "graphql"],
+  "services": [
+    {
+      "name": "app",
+      "image": "{{image}}",
+      "port": 4000,
+      "healthcheck": {
+        "exec": ["wget", "-qO-", "http://localhost:4000/health"]
+      }
+    }
+  ],
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  }
+}

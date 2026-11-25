@@ -55,9 +55,32 @@ describe("published package", () => {
         "schemas/plugin-manifest.schema.json",
         "schemas/platform.schema.json",
         "schemas/platform-lock.schema.json",
+        // The templates of "create" (D28), with the lock file of the API service.
+        "templates/api/brick/plugin.json.tmpl",
+        "templates/api/service/package-lock.json",
+        "templates/api/service/src/main.ts.tmpl",
+        "templates/web/service/server.mjs.tmpl",
       ]),
     );
     expect(files.filter((f) => /^(src|test|examples)\//.test(f))).toEqual([]);
+  });
+
+  it("creates a brick from the templates it ships (D28)", () => {
+    const project = join(work, "create-project");
+    mkdirSync(project);
+    const cli = (...args: string[]) =>
+      spawnSync(process.execPath, [join(unpacked, "dist/bin.js"), ...args], { cwd: project, encoding: "utf8" });
+    expect(cli("init", "--name", "demo").status).toBe(0);
+    const r = cli("create", "inventory", "--kind", "api");
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .");
+    for (const f of [
+      "bricks/inventory-api/plugin.json",
+      "services/inventory-api/src/main.ts",
+      "services/inventory-api/package-lock.json",
+    ]) {
+      expect(existsSync(join(project, f)), f).toBe(true);
+    }
   });
 
   it("names every package built into the admin UI in its third-party notices", () => {

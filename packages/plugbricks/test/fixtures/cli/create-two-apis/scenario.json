@@ -1,0 +1,12 @@
+{
+  "description": "two APIs created by create compose together (D28): each names its type and its Query field after itself",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["create", "inventory", "--kind", "api"] },
+    { "run": ["create", "order-history", "--kind", "api"] },
+    { "run": ["status"], "stdout": "Federation: inventory-api, order-history-api" }
+  ],
+  "expectRaw": {
+    "bricks/order-history-api/schema.graphql": "  orderHistoryItems: [OrderHistoryItem!]!"
+  }
+}
