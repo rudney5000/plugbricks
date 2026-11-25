@@ -263,7 +263,9 @@ interface Manifest {
   subgraph?: { service: string; schema: string; path?: string };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
-  dependencies?: { plugin: string; description?: string }[];
+  dependencies?: { plugin: string; description?: string; operations?: ("queries" | "mutations")[] }[];
+  /** The client roles that the tokens of the oidc provider need for this API (D22). */
+  authorization?: { queries?: string; mutations?: string };
 }
 
 /** Files a manifest points at must ship with the brick. */

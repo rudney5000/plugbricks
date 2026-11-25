@@ -56,7 +56,9 @@ export interface BrickManifest {
   oidc?: { issuerPath: string; jwksPath: string; audience: string };
   extends?: { plugin: string; entities: string[] }[];
   /** Plugins this one needs besides its capabilities (the admin shows them; `remove` refuses their target). */
-  dependencies?: { plugin: string; description?: string }[];
+  dependencies?: { plugin: string; description?: string; operations?: ("queries" | "mutations")[] }[];
+  /** The client roles that the tokens of the oidc provider need for this API (D22). */
+  authorization?: { queries?: string; mutations?: string };
   provides?: Record<
     string,
     {

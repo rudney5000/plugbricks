@@ -68,6 +68,9 @@
     "oidc": {
       "$ref": "#/$defs/oidc"
     },
+    "authorization": {
+      "$ref": "#/$defs/authorization"
+    },
     "extends": {
       "type": "array",
       "description": "Entities owned by another plugin that this subgraph extends. The resolver activates the owner.",
@@ -85,6 +88,7 @@
     }
   },
   "dependentRequired": {
+    "authorization": ["subgraph", "requires"],
     "extends": ["subgraph"],
     "oidc": ["web", "provides"]
   },
@@ -351,8 +355,39 @@
           "type": "string",
           "maxLength": 200,
           "description": "Why it is needed, shown next to the link."
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["queries", "mutations"]
+          },
+          "default": ["queries"],
+          "description": "What this plugin does to the target through its GraphQL API, when the target declares an \"authorization\" block (D22): the platform gives this plugin's service account the target's role for each operation class listed here, and only those. Reading is the default; write \"mutations\" to be allowed to change data. Nothing is granted for a class the target left open, and nothing at all without a provider of \"oidc\"."
         }
       }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Who may call this plugin's GraphQL API, by operation class (D22). Each value is the name of a client role of this plugin's own OIDC client (the client the oidc provider creates for it, named like the plugin): a token that does not carry it is refused with the GraphQL code FORBIDDEN, after it was found valid. A class left out stays at D20: any valid token. Applies only when an enabled brick provides \"oidc\"; without one nothing is enforced. Needs a \"subgraph\" and \"requires.oidc\" (optional is fine).",
+      "properties": {
+        "queries": {
+          "$ref": "#/$defs/roleName",
+          "description": "The role needed to run a query on this API."
+        },
+        "mutations": {
+          "$ref": "#/$defs/roleName",
+          "description": "The role needed to run a mutation on this API."
+        }
+      }
+    },
+    "roleName": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9]*(?:[:._-][a-z0-9]+)*$"
     },
     "extends": {
       "type": "object",

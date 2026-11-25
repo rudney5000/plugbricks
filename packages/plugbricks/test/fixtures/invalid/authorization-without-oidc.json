@@ -1,0 +1,24 @@
+{
+  "$schema": "../../../schemas/plugin-manifest.schema.json",
+  "name": "orders",
+  "version": "0.1.0",
+  "services": [
+    {
+      "name": "app",
+      "image": "ghcr.io/example/orders-app:0.1.0",
+      "port": 4000
+    }
+  ],
+  "requires": {
+    "database": {}
+  },
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  },
+  "authorization": {
+    "queries": "orders:read",
+    "mutations": "orders:write"
+  }
+}

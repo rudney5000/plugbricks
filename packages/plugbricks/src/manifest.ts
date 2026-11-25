@@ -54,6 +54,8 @@ export function validateManifest(manifest: unknown): ValidationResult {
       }
     >;
     subgraph?: { service: string };
+    requires?: Record<string, unknown>;
+    authorization?: { queries?: string; mutations?: string };
     web?: { service: string; path?: string };
     oidc?: { issuerPath: string; jwksPath: string; audience: string };
   };
@@ -117,6 +119,9 @@ export function validateManifest(manifest: unknown): ValidationResult {
     else if (dependencies.has(d.plugin)) issues.push(issue("DUPLICATE_DEPENDENCY", `/dependencies/${i}/plugin`, { name: d.plugin }));
     dependencies.add(d.plugin);
   });
+  // The roles of "authorization" are the ones of the tokens of the oidc provider; without that requirement nothing
+  // would ever read the block (D22). The schema already asks for a subgraph and for some "requires".
+  if (m.authorization && !Object.hasOwn(m.requires ?? {}, "oidc")) issues.push(issue("AUTHORIZATION_WITHOUT_OIDC", "/authorization", {}));
   // The router reads the "oidc" block only from the brick that provides the capability (D19).
   if (m.oidc && !Object.hasOwn(m.provides ?? {}, "oidc")) issues.push(issue("OIDC_NOT_PROVIDED", "/oidc", {}));
   if (m.web) {
