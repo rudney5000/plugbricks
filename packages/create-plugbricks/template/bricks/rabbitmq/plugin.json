@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
   "name": "rabbitmq",
   "version": "0.1.0",
   "description": "Base brick: a RabbitMQ broker that provides the \"queue\" capability to every consumer that requires it. One broker is shared by all of them; the provision task gives each consumer its own vhost, user and permissions (D11, D12).",

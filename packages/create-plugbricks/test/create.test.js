@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
-import { main as plugbricks, validateManifest } from "plugbricks";
+import { main as plugbricks, MANIFEST_SCHEMA_ID, validateManifest } from "plugbricks";
 import { checkWindowsAcl, create, restrictToCurrentUser, WINDOWS_ACL_SCRIPT } from "../lib/create.js";
 import { extractTgz, linkDir, npmPack } from "../../plugbricks/test/helpers/pack.ts";
 
@@ -154,18 +154,21 @@ describe("npm create plugbricks <name>", () => {
     }
   });
 
-  it("ships the bricks of bricks/ exactly as the examples of plugbricks (their scripts run through /bin/sh: no mode to keep)", () => {
+  it("ships the bricks of bricks/ as the examples of plugbricks, with the published $schema (their scripts run through /bin/sh: no mode to keep)", () => {
     expect(readdirSync(join(project, "bricks")).sort()).toEqual(SHIPPED_BRICKS);
     for (const b of SHIPPED_BRICKS) {
       const example = join(examplesDir, b);
       const copy = join(project, "bricks", b);
       expect(filesOf(copy), b).toEqual(filesOf(example));
       for (const f of filesOf(example)) {
-        expect(readFileSync(join(copy, f), "utf8"), `bricks/${b}/${f} differs from examples/${b}/${f}`).toBe(
-          readFileSync(join(example, f), "utf8"),
-        );
+        // Only the $schema line differs: the example points at the schema file of the repository, the copy at its
+        // published URL, which an editor of the new project can reach.
+        const text = (file) => readFileSync(file, "utf8").replace(/^ {2}"\$schema": ".*",$/m, '  "$schema": "<schema>",');
+        expect(text(join(copy, f)), `bricks/${b}/${f} differs from examples/${b}/${f}`).toBe(text(join(example, f)));
       }
-      expect(validateManifest(JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8"))), b).toEqual({ ok: true });
+      const manifest = JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8"));
+      expect(manifest.$schema, `bricks/${b}/plugin.json`).toBe(MANIFEST_SCHEMA_ID);
+      expect(validateManifest(manifest), b).toEqual({ ok: true });
     }
   });
 

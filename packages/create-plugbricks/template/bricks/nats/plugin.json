@@ -1,5 +1,5 @@
 {
-  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
   "name": "nats",
   "version": "0.1.0",
   "description": "Base brick: a NATS server that provides the \"queue\" capability to every consumer that requires it. Core NATS only (publish/subscribe): JetStream and per-consumer accounts would need a configuration file or a command line the manifest cannot express yet (D13).",
