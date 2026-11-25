@@ -1,5 +1,5 @@
 {
-  "description": "postgres cannot go while orders requires database",
+  "description": "postgres cannot go while orders-api requires database",
   "steps": [
     {
       "run": [
@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {

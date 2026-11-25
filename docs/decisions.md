@@ -1825,6 +1825,32 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   command to run. The `$schema` of the bricks copied into a new project (D25) is the relative path of the
   repository, which an editor cannot resolve there.
 
+## D27. The example APIs are named `orders-api` and `shipping-api`, like `orders-web`
+
+- **Status:** implemented (2026-11-25), at the owner's request, before the first publication.
+- **Context:** the examples were `orders`, `shipping` and `orders-web`. Next to `orders-web`, `orders` read as "the
+  orders brick" rather than "the orders API", and `plugbricks create <name> --kind api|web` (roadmap, section 2, step 3)
+  will name new bricks `<name>-api` and `<name>-web`: our own examples should follow the convention they teach.
+  Nothing is published yet, so a rename breaks only our tests.
+- **Decision.** The bricks `orders` and `shipping` are now `orders-api` and `shipping-api`, on the model of `orders-web`:
+  the brick name, its folder in `packages/plugbricks/examples/`, its source in `apis/`, its image
+  (`plugbricks-example/orders-api:0.1.0`, `plugbricks-example/shipping-api:0.1.0`) and its npm package name.
+  `shipping-api` extends `orders-api`; `orders-web` declares both. The service `services/orders` of the project
+  template is `services/orders-api` too. `postgres`, `keycloak`, `rabbitmq`, `nats` (infrastructure) and
+  `queue-consumer` (a worker) keep their names.
+- **What follows from the brick name, and changes with it:** the runtime names (`orders-api-app`,
+  `orders-api-wait-database`, …), the database and role of each API (`orders-api`, quoted as an identifier by the
+  provision script), the secrets (`PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD`), the Keycloak client (`orders-api`)
+  and the grants of a caller (`orders-api/orders:read`).
+- **What does not change:** what the APIs serve and the roles they declare. The GraphQL fields (`orders`, `Order`), the
+  tables and the roles (`orders:read`, `orders:write`, `shipping:read`, `shipping:write`) name the domain, not the brick.
+  The unit tests that build their own bricks (`plan`, `needs`, `federation`, the admin's `lib`) keep their own names.
+  The decisions above keep the names they had when they were written.
+- **For a platform already running the old names:** `remove orders` (and `shipping`) then `add orders-api`; the new API
+  gets a new database, so the old orders are not carried over. This only concerns our own test platforms.
+- **Not done here:** the screenshots of the README show the old names; they will be taken again with the next change
+  of the admin.
+
 ---
 
 ## Already applied (milestone 2)

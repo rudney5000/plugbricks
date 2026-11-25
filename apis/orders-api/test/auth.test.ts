@@ -41,7 +41,7 @@ const withRoles = { ...valid, resource_access: { orders: { roles: ["orders:read"
 describe("the API's token check (D20)", () => {
   it("keeps the same auth.ts in orders and shipping", () => {
     const here = fileURLToPath(new URL("../src/auth.ts", import.meta.url));
-    const shipping = fileURLToPath(new URL("../../shipping/src/auth.ts", import.meta.url));
+    const shipping = fileURLToPath(new URL("../../shipping-api/src/auth.ts", import.meta.url));
     expect(readFileSync(shipping, "utf8")).toBe(readFileSync(here, "utf8"));
   });
   it("returns the caller of a valid token", async () => {

@@ -3,8 +3,8 @@
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
-    { "run": ["add", "examples/orders"] },
-    { "run": ["add", "examples/shipping"] },
-    { "run": ["disable", "orders"], "exit": 1, "codes": ["EXTENDS_IN_USE"], "unchanged": true }
+    { "run": ["add", "examples/orders-api"] },
+    { "run": ["add", "examples/shipping-api"] },
+    { "run": ["disable", "orders-api"], "exit": 1, "codes": ["EXTENDS_IN_USE"], "unchanged": true }
   ]
 }

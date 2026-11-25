@@ -5,39 +5,36 @@ import { GraphQLError, parse } from "graphql";
 import { createYoga } from "graphql-yoga";
 import type pg from "pg";
 import { authorizationPlugin, type Authorization, type Caller, type TokenCheck } from "./auth.js";
-import { createOrder, findOrder, listOrders } from "./db.js";
+import { createShipment, findShipment, isOrderId } from "./db.js";
 
-/** The SDL shipped with the brick (examples/orders/schema.graphql holds the same text). */
+/** The SDL shipped with the brick (examples/shipping-api/schema.graphql holds the same text). */
 export const typeDefs = readFileSync(new URL("../schema.graphql", import.meta.url), "utf8");
 
-const MAX_TOTAL = 9_999_999_999.99;
-const MAX_LIMIT = 500;
+const MAX_CARRIER = 40;
+
+// A GraphQLError is shown to the client as is; any other error is masked by Yoga.
+const badInput = (message: string) => new GraphQLError(message, { extensions: { code: "BAD_USER_INPUT" } });
 
 function resolvers(pool: pg.Pool) {
   return {
     Query: {
-      orders: (_: unknown, args: { limit: number }) => {
-        if (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > MAX_LIMIT) {
-          throw new GraphQLError(`limit must be between 1 and ${MAX_LIMIT}`, { extensions: { code: "BAD_USER_INPUT" } });
-        }
-        return listOrders(pool, args.limit);
-      },
-      order: (_: unknown, args: { id: string }) => findOrder(pool, args.id),
+      shipment: (_: unknown, args: { orderId: string }) => findShipment(pool, args.orderId),
     },
     Mutation: {
-      createOrder: (_: unknown, args: { total: number }, context: { caller?: Caller }) => {
-        if (!Number.isFinite(args.total) || args.total < 0 || args.total > MAX_TOTAL) {
-          // A GraphQLError is shown to the client as is; any other error is masked by Yoga.
-          throw new GraphQLError(`total must be between 0 and ${MAX_TOTAL}`, { extensions: { code: "BAD_USER_INPUT" } });
-        }
-        // The numeric(12, 2) column rounds half away from zero; rounding here in floating point would not (1.005).
-        // Who created it (D20 point 4): the caller of the verified token, never a header the request sets itself.
-        return createOrder(pool, args.total, context.caller?.name ?? null);
+      shipOrder: async (_: unknown, args: { orderId: string; carrier: string }) => {
+        if (!isOrderId(args.orderId)) throw badInput("orderId must be an order id: a positive whole number without leading zeros");
+        const carrier = args.carrier.trim();
+        if (carrier.length < 1 || carrier.length > MAX_CARRIER) throw badInput(`carrier must be between 1 and ${MAX_CARRIER} characters`);
+        const shipment = await createShipment(pool, args.orderId, carrier);
+        if (!shipment) throw badInput(`order ${args.orderId} already has a shipment`);
+        return shipment;
       },
     },
     Order: {
-      // Called by the router with { __typename: "Order", id } when another subgraph refers to an order.
-      __resolveReference: (ref: { id: string }) => findOrder(pool, ref.id),
+      // Called by the router with { __typename: "Order", id } when a query asks for fields of an order that
+      // this subgraph adds. Orders are not stored here: the reference is all there is.
+      __resolveReference: (ref: { id: string }) => ({ id: ref.id }),
+      shipment: (order: { id: string }) => findShipment(pool, order.id),
     },
   };
 }

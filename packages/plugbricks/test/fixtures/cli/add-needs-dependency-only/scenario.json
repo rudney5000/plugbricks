@@ -17,8 +17,8 @@
     {
       "mutate": {
         "copyDir": {
-          "from": "examples/orders",
-          "to": "bricks/orders"
+          "from": "examples/orders-api",
+          "to": "bricks/orders-api"
         }
       }
     },
@@ -28,10 +28,10 @@
         "examples/orders-web"
       ],
       "stdout": [
-        "orders-web needs:\n  orders (bricks/orders): declared in the dependencies of orders-web",
+        "orders-web needs:\n  orders-api (bricks/orders-api): declared in the dependencies of orders-web",
         "  not added; \"plugbricks add examples/orders-web --yes\" adds them too",
         "Added orders-web",
-        "dependency \"orders\" is not installed"
+        "dependency \"orders-api\" is not installed"
       ]
     },
     {
@@ -41,7 +41,7 @@
         "--yes"
       ],
       "stdout": [
-        "Added orders 0.1.0 (declared in the dependencies of orders-web)",
+        "Added orders-api 0.1.0 (declared in the dependencies of orders-web)",
         "orders-web 0.1.0 is already installed; nothing changed"
       ],
       "notStdout": "is not installed"

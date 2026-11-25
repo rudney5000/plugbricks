@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
@@ -32,14 +32,14 @@
         {
           "match": "up --detach",
           "status": 1,
-          "stderr": "service \"orders-wait-database\" didn't complete successfully: exit 124"
+          "stderr": "service \"orders-api-wait-database\" didn't complete successfully: exit 124"
         },
         {
           "match": "ps --all",
-          "stdout": "{\"Service\":\"orders-wait-database\",\"ExitCode\":124}\n{\"Service\":\"postgres-db\",\"ExitCode\":0}\n"
+          "stdout": "{\"Service\":\"orders-api-wait-database\",\"ExitCode\":124}\n{\"Service\":\"postgres-db\",\"ExitCode\":0}\n"
         }
       ],
-      "stderr": "\"orders\" gave up waiting for capability \"database\" from \"postgres\" after 120s",
+      "stderr": "\"orders-api\" gave up waiting for capability \"database\" from \"postgres\" after 120s",
       "commands": [
         "docker compose version",
         "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420",

@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {

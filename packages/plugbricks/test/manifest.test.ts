@@ -10,7 +10,7 @@ const root = new URL("../", import.meta.url);
 const read = (p: string) => readFileSync(new URL(p, root), "utf8");
 const load = (p: string) => JSON.parse(read(p));
 
-const EXAMPLES = ["postgres", "orders", "shipping", "rabbitmq", "queue-consumer", "nats"];
+const EXAMPLES = ["postgres", "orders-api", "shipping-api", "rabbitmq", "queue-consumer", "nats"];
 
 /**
  * Windows has no executable bit in the file system (mode & 0o111 is always 0), so there the mode
@@ -56,14 +56,14 @@ describe("example manifests (milestone 1 criterion)", () => {
     expect(validateManifest(m)).toEqual({ ok: true });
     // The shipment is shown when shipping is installed, and the page works without it: an optional dependency (D22).
     expect(m.dependencies.map((d: { plugin: string; optional?: boolean }) => [d.plugin, d.optional === true])).toEqual([
-      ["orders", false],
-      ["shipping", true],
+      ["orders-api", false],
+      ["shipping-api", true],
     ]);
     expect(Object.keys(m.requires)).toEqual(["oidc"]);
   });
 
   it("accepts the roles of an API and the operations a dependency uses (D22)", () => {
-    const orders = load("examples/orders/plugin.json");
+    const orders = load("examples/orders-api/plugin.json");
     const withBlock = (authorization: unknown) => validateManifest({ ...orders, authorization });
     expect(withBlock({ queries: "orders:read", mutations: "orders:write" })).toEqual({ ok: true });
     // One class alone is a manifest of its own: the other class stays at D20, any valid token.
@@ -71,11 +71,11 @@ describe("example manifests (milestone 1 criterion)", () => {
     expect(withBlock({ mutations: "orders_write-2" })).toEqual({ ok: true });
     const web = load("examples/orders-web/plugin.json");
     for (const operations of [["queries"], ["mutations"], ["queries", "mutations"]]) {
-      expect(validateManifest({ ...web, dependencies: [{ plugin: "orders", operations }] }), operations.join()).toEqual({ ok: true });
+      expect(validateManifest({ ...web, dependencies: [{ plugin: "orders-api", operations }] }), operations.join()).toEqual({ ok: true });
     }
     // Neither an empty list (the default is "queries": leave the field out), nor the same class twice.
     for (const operations of [[], ["queries", "queries"]]) {
-      expect(validateManifest({ ...web, dependencies: [{ plugin: "orders", operations }] }).ok, JSON.stringify(operations)).toBe(false);
+      expect(validateManifest({ ...web, dependencies: [{ plugin: "orders-api", operations }] }).ok, JSON.stringify(operations)).toBe(false);
     }
   });
 
@@ -120,7 +120,7 @@ describe("invalid manifests are refused with a stable code and the faulty field"
         {
           code: "IMAGE_FLOATING_TAG",
           message: expect.stringContaining('floating tag "latest"'),
-          params: { image: "ghcr.io/example/orders-app:latest", tag: "latest" },
+          params: { image: "ghcr.io/example/orders-api-app:latest", tag: "latest" },
         },
       ],
     });

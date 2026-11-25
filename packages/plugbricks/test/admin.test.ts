@@ -39,7 +39,7 @@ beforeAll(() => {
 const log = process.env.PB_FAKE_LOG;
 if (log) appendFileSync(log, JSON.stringify({ argv: process.argv.slice(2), env: process.env }) + String.fromCharCode(10));
 console.log("fake cli started");
-if (process.argv.slice(2).join(" ") === "add examples/orders-web") console.log('  dependency "orders" is not installed; orders-web will not work without it');
+if (process.argv.slice(2).join(" ") === "add examples/orders-web") console.log('  dependency "orders-api" is not installed; orders-web will not work without it');
 const mode = process.env.PB_FAKE_MODE ?? "ok";
 if (mode === "slow") {
   setTimeout(() => process.exit(0), 700);
@@ -290,12 +290,12 @@ describe("the admin server", () => {
     for (const args of [
       ["init", "--name", "broken-demo"],
       ["add", "examples/postgres"],
-      ["add", "examples/orders"],
+      ["add", "examples/orders-api"],
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
     }
     // A brick whose installed copy cannot be read: platformStatus reports it, planProject throws.
-    writeFileSync(join(brokenRoot, ".platform", "bricks", "orders", "plugin.json"), "{ not json");
+    writeFileSync(join(brokenRoot, ".platform", "bricks", "orders-api", "plugin.json"), "{ not json");
     const { base } = await start({ root: brokenRoot });
     const res = await fetch(`${base}/api/bricks`);
     expect(res.status).toBe(200);
@@ -314,8 +314,8 @@ describe("the admin server", () => {
     for (const args of [
       ["init", "--name", "router-demo"],
       ["add", "examples/postgres"],
-      ["add", "examples/orders"],
-      ["add", "examples/shipping"],
+      ["add", "examples/orders-api"],
+      ["add", "examples/shipping-api"],
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
     }
@@ -350,8 +350,8 @@ describe("the admin server", () => {
     for (const args of [
       ["init", "--name", "blocked-demo"],
       ["add", "examples/postgres"],
-      ["add", "examples/orders"],
-      ["add", "examples/shipping"],
+      ["add", "examples/orders-api"],
+      ["add", "examples/shipping-api"],
       ["add", "examples/orders-web"],
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
@@ -361,19 +361,19 @@ describe("the admin server", () => {
       bricks: { name: string; webUrl: string | null; removeBlockedBy: { code: string; message: string }[] }[];
     };
     const blocked = Object.fromEntries(view.bricks.map((b) => [b.name, b.removeBlockedBy.map((r) => r.code)]));
-    expect(blocked).toEqual({ postgres: ["CAPABILITY_IN_USE"], orders: ["EXTENDS_IN_USE"], shipping: [], "orders-web": [] });
+    expect(blocked).toEqual({ postgres: ["CAPABILITY_IN_USE"], "orders-api": ["EXTENDS_IN_USE"], "shipping-api": [], "orders-web": [] });
     // The web brick's entry page (D17): its webPort from platform.json and its path from the manifest.
     expect(Object.fromEntries(view.bricks.map((b) => [b.name, b.webUrl]))).toEqual({
       postgres: null,
-      orders: null,
-      shipping: null,
+      "orders-api": null,
+      "shipping-api": null,
       "orders-web": "http://127.0.0.1:8080/orders",
     });
-    expect(view.bricks.find((b) => b.name === "orders")!.removeBlockedBy[0].message).toContain('"shipping"');
+    expect(view.bricks.find((b) => b.name === "orders-api")!.removeBlockedBy[0].message).toContain('"shipping-api"');
 
     // The CLI refuses with the same code the admin showed.
     const err: string[] = [];
-    expect(main(["remove", "orders"], { ...rio, stderr: (s: string) => err.push(s) })).not.toBe(0);
+    expect(main(["remove", "orders-api"], { ...rio, stderr: (s: string) => err.push(s) })).not.toBe(0);
     expect(err.join("")).toContain("EXTENDS_IN_USE");
   });
 
@@ -387,8 +387,8 @@ describe("the admin server", () => {
       ["init", "--name", "needs-demo"],
       ["add", "examples/postgres"],
       ["add", "examples/keycloak"],
-      ["add", "examples/orders"],
-      ["add", "examples/shipping"],
+      ["add", "examples/orders-api"],
+      ["add", "examples/shipping-api"],
       ["add", "examples/orders-web"],
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
@@ -405,31 +405,31 @@ describe("the admin server", () => {
     // orders-web requires no capability that links it to orders: the manifest says so, and nothing else does.
     expect(await needs()).toEqual({
       keycloak: ["postgres capability: database"],
-      orders: ["keycloak capability optional: oidc", "postgres capability: database"],
+      "orders-api": ["keycloak capability optional: oidc", "postgres capability: database"],
       "orders-web": [
         "keycloak capability optional: oidc",
-        "orders declared: the page reads its orders from the orders subgraph, through the router",
-        "shipping declared optional: the page shows each order's shipment when the shipping subgraph is installed; without it the orders still show",
+        "orders-api declared: the page reads its orders from the orders-api subgraph, through the router",
+        "shipping-api declared optional: the page shows each order's shipment when the shipping-api subgraph is installed; without it the orders still show",
       ],
       postgres: [],
-      shipping: ["keycloak capability optional: oidc", "orders extends: Order", "postgres capability: database"],
+      "shipping-api": ["keycloak capability optional: oidc", "orders-api extends: Order", "postgres capability: database"],
     });
 
     // An optional capability nobody provides is not wired, so it is no dependency.
     expect(main(["disable", "keycloak"], rio)).toBe(0);
     const without = await needs();
     expect(without["orders-web"]).toEqual([
-      "orders declared: the page reads its orders from the orders subgraph, through the router",
-      "shipping declared optional: the page shows each order's shipment when the shipping subgraph is installed; without it the orders still show",
+      "orders-api declared: the page reads its orders from the orders-api subgraph, through the router",
+      "shipping-api declared optional: the page shows each order's shipment when the shipping-api subgraph is installed; without it the orders still show",
     ]);
-    expect(without.orders).toEqual(["postgres capability: database"]);
+    expect(without["orders-api"]).toEqual(["postgres capability: database"]);
 
     // With shipping gone, only orders-web's declaration protects orders: the admin shows the CLI's refusal.
-    expect(main(["remove", "shipping"], rio)).toBe(0);
+    expect(main(["remove", "shipping-api"], rio)).toBe(0);
     const view = (await (await fetch(`${base}/api/bricks`)).json()) as {
       bricks: { name: string; removeBlockedBy: { code: string; message: string }[] }[];
     };
-    const orders = view.bricks.find((b) => b.name === "orders")!;
+    const orders = view.bricks.find((b) => b.name === "orders-api")!;
     expect(orders.removeBlockedBy.map((r) => r.code)).toEqual(["DEPENDENCY_IN_USE"]);
     expect(orders.removeBlockedBy[0].message).toContain('"orders-web"');
     expect(view.bricks.find((b) => b.name === "orders-web")!.removeBlockedBy).toEqual([]);
@@ -439,7 +439,7 @@ describe("the admin server", () => {
     expect(added.status).toBe(202);
     const action = await waitAction(base, JSON.parse(added.body).id);
     expect(action.state).toBe("succeeded");
-    expect(action.output.join("\n")).toContain('dependency "orders" is not installed; orders-web will not work without it');
+    expect(action.output.join("\n")).toContain('dependency "orders-api" is not installed; orders-web will not work without it');
   });
 
   it("tells what each API asks of a token and what its service account holds, with the CLI's own rules (D22)", async () => {
@@ -448,7 +448,7 @@ describe("the admin server", () => {
     mkdirSync(root, { recursive: true });
     cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
     // shipping is the open one here: it requires oidc and serves a subgraph, but declares no roles.
-    const shipping = join(root, "examples/shipping/plugin.json");
+    const shipping = join(root, "examples/shipping-api/plugin.json");
     const manifest = JSON.parse(readFileSync(shipping, "utf8"));
     delete manifest.authorization;
     writeFileSync(shipping, JSON.stringify(manifest, null, 2));
@@ -457,8 +457,8 @@ describe("the admin server", () => {
       ["init", "--name", "roles-demo"],
       ["add", "examples/postgres"],
       ["add", "examples/keycloak"],
-      ["add", "examples/orders"],
-      ["add", "examples/shipping"],
+      ["add", "examples/orders-api"],
+      ["add", "examples/shipping-api"],
       ["add", "examples/orders-web"],
     ]) {
       expect(main(args, rio), args.join(" ")).toBe(0);
@@ -474,17 +474,17 @@ describe("the admin server", () => {
     expect(await authorization()).toEqual({
       keycloak: none,
       postgres: none,
-      orders: { state: "roles", queries: "orders:read", mutations: "orders:write", grants: [] },
+      "orders-api": { state: "roles", queries: "orders:read", mutations: "orders:write", grants: [] },
       // No block: any valid token may call it, and the admin says so.
-      shipping: { state: "open", queries: null, mutations: null, grants: [] },
+      "shipping-api": { state: "open", queries: null, mutations: null, grants: [] },
       // A web brick has no API to protect, but its service account is given the roles of what it reads (queries by
       // default). shipping declares no roles, so nothing is granted on it.
-      "orders-web": { ...none, grants: ["orders/orders:read"] },
+      "orders-web": { ...none, grants: ["orders-api/orders:read"] },
     });
 
     // Without the provider nothing is wired: no token, no rule, no grant.
     expect(main(["disable", "keycloak"], rio)).toBe(0);
-    expect(await authorization()).toEqual({ keycloak: none, postgres: none, orders: none, shipping: none, "orders-web": none });
+    expect(await authorization()).toEqual({ keycloak: none, postgres: none, "orders-api": none, "shipping-api": none, "orders-web": none });
   });
 
   it("refuses the API without a session when dev mode is off", async () => {

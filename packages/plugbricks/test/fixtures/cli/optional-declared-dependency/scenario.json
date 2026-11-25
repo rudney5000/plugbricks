@@ -1,5 +1,5 @@
 {
-  "description": "orders-web lists shipping as an optional dependency (D22): adding it without shipping prints no warning, and shipping can then be disabled and removed while orders-web stays installed; the required one, orders, is still protected",
+  "description": "orders-web lists shipping-api as an optional dependency (D22): adding it without shipping-api prints no warning, and shipping-api can then be disabled and removed while orders-web stays installed; the required one, orders-api, is still protected",
   "steps": [
     {
       "run": [
@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
@@ -30,31 +30,31 @@
     {
       "run": [
         "add",
-        "examples/shipping"
+        "examples/shipping-api"
       ]
     },
     {
       "run": [
         "disable",
-        "shipping"
+        "shipping-api"
       ]
     },
     {
       "run": [
         "enable",
-        "shipping"
+        "shipping-api"
       ]
     },
     {
       "run": [
         "remove",
-        "shipping"
+        "shipping-api"
       ]
     },
     {
       "run": [
         "remove",
-        "orders"
+        "orders-api"
       ],
       "exit": 1,
       "codes": [
@@ -65,6 +65,6 @@
     }
   ],
   "absent": [
-    ".platform/bricks/shipping"
+    ".platform/bricks/shipping-api"
   ]
 }

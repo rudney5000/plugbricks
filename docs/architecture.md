@@ -9,8 +9,8 @@ document links to them instead of repeating them.
 
 | Word | Meaning |
 |---|---|
-| **Brick** | A directory with a `plugin.json` (the manifest): one or more services, what it provides, what it requires, optionally a GraphQL subgraph. Example: `postgres`, `orders`, `shipping`. |
-| **Service** | One container of a brick. Its runtime name is `<brick>-<service>` (`postgres-db`, `orders-app`), which is also its DNS name on the runtime network. |
+| **Brick** | A directory with a `plugin.json` (the manifest): one or more services, what it provides, what it requires, optionally a GraphQL subgraph. Example: `postgres`, `orders-api`, `shipping-api`. |
+| **Service** | One container of a brick. Its runtime name is `<brick>-<service>` (`postgres-db`, `orders-api-app`), which is also its DNS name on the runtime network. |
 | **Capability** | A named thing a brick provides and others require, for example `database`. One provider per capability on a platform. |
 | **Subgraph** | The GraphQL schema a brick serves (`subgraph` in the manifest), written in Federation v2. |
 | **Router** | The Cosmo router, the single GraphQL entry point. Not a brick: plugbricks adds it when at least one brick serves a subgraph (D9). |
@@ -40,8 +40,8 @@ flowchart LR
   end
   GEN -->|"up / down"| DP
   subgraph DP["Data plane (containers)"]
-    R["router"] --> A["orders-app"]
-    R --> B["shipping-app"]
+    R["router"] --> A["orders-api-app"]
+    R --> B["shipping-api-app"]
     A --> P["postgres-db"]
     B --> P
   end
@@ -94,7 +94,7 @@ port. The router then requires a token (D19) and passes it on to the subgraphs (
 
 ## 4. Data plane: the example shop (built)
 
-With `postgres`, `orders` and `shipping` installed on Docker Compose, `generate` renders these
+With `postgres`, `orders-api` and `shipping-api` installed on Docker Compose, `generate` renders these
 services (golden file `test/fixtures/cli/generate-compose`, plus shipping):
 
 ```mermaid
@@ -103,11 +103,11 @@ flowchart TB
 
   subgraph NET["runtime network (Compose project / Kubernetes namespace)"]
     R["router<br/>cosmo/router 0.372.0 (digest)<br/>:3002, uid 65532, read-only"]
-    R -->|"GraphQL http://orders-app:4000/graphql"| OA["orders-app<br/>:4000"]
-    R -->|"GraphQL http://shipping-app:4000/graphql"| SA["shipping-app<br/>:4000"]
+    R -->|"GraphQL http://orders-api-app:4000/graphql"| OA["orders-api-app<br/>:4000"]
+    R -->|"GraphQL http://shipping-api-app:4000/graphql"| SA["shipping-api-app<br/>:4000"]
 
-    OA -->|"DATABASE_URL<br/>role orders, db orders"| PG["postgres-db<br/>:5432, volume postgres-db-data"]
-    SA -->|"DATABASE_URL<br/>role shipping, db shipping"| PG
+    OA -->|"DATABASE_URL<br/>role orders-api, db orders-api"| PG["postgres-db<br/>:5432, volume postgres-db-data"]
+    SA -->|"DATABASE_URL<br/>role shipping-api, db shipping-api"| PG
 
     OW["orders-wait-database"] -.->|"pg_isready"| PG
     OP["orders-provision-database"] -.->|"create role + db"| PG
@@ -122,11 +122,11 @@ Who talks to whom:
 |---|---|---|---|---|
 | client | router | HTTP, `127.0.0.1:<router.port>` only | a JWT when an `oidc` provider is enabled (D19), none otherwise | the published GraphQL entry point (D9) |
 | client | `orders-web-app` | HTTP, `127.0.0.1:<webPort>` only | none | the shop page (D17) |
-| router | `orders-app`, `shipping-app` | GraphQL over HTTP, internal names | the caller's `Authorization` header, propagated (D20) | federated query plan |
+| router | `orders-api-app`, `shipping-api-app` | GraphQL over HTTP, internal names | the caller's `Authorization` header, propagated (D20) | federated query plan |
 | `orders-web-app` | `keycloak-app` | OIDC token endpoint (HTTP) | its own client id and secret | gets a token for the router (D19) |
-| `orders-app`, `shipping-app` | `keycloak-app` | JWKS over HTTP | none | verifies the token it receives (D20) |
-| `orders-app` | `postgres-db` | PostgreSQL | its own role and password, `DATABASE_URL` | its data |
-| `shipping-app` | `postgres-db` | PostgreSQL | its own role and password | its data; refused on the `orders` database |
+| `orders-api-app`, `shipping-api-app` | `keycloak-app` | JWKS over HTTP | none | verifies the token it receives (D20) |
+| `orders-api-app` | `postgres-db` | PostgreSQL | its own role and password, `DATABASE_URL` | its data |
+| `shipping-api-app` | `postgres-db` | PostgreSQL | its own role and password | its data; refused on the `orders-api` database |
 | `<consumer>-wait-database` | `postgres-db` | `pg_isready` | none | waits until the database answers |
 | `<consumer>-provision-database` | `postgres-db` | `psql` | superuser password | creates the consumer's role and database, idempotent |
 
@@ -172,7 +172,7 @@ sequenceDiagram
   participant P as postgres-db
   participant W as orders-wait-database
   participant V as orders-provision-database
-  participant O as orders-app
+  participant O as orders-api-app
   P->>P: starts (secret POSTGRES_PASSWORD)
   loop every ready.intervalSeconds, at most timeoutSeconds
     W->>P: pg_isready -h postgres-db
@@ -188,7 +188,7 @@ containers `wait-database` and `provision-database` in each consumer pod.
 
 Secret scope (D6): a secret the provider's own services use belongs to the provider
 (`PB_POSTGRES__SUPERUSER_PASSWORD`); any other secret in `provision` or `inject` is generated per
-consumer (`PB_POSTGRES__ORDERS__CONSUMER_PASSWORD`).
+consumer (`PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD`).
 
 The same wiring carries `queue` (D11, D12). `examples/rabbitmq` provides one broker; `ready` is a TCP
 check, and the provision task creates the consumer's vhost, user and permissions through the management
@@ -199,7 +199,7 @@ no JetStream.
 
 **Optional requirements, and `oidc` (D19).** A requirement may say `"optional": true`: without a
 provider the brick runs as it is; when a provider is added (or enabled) later, the plan wires it. This is
-how `orders-web`, `orders` and `shipping` run with or without Keycloak. `examples/keycloak` provides
+how `orders-web`, `orders-api` and `shipping-api` run with or without Keycloak. `examples/keycloak` provides
 `oidc`: `ready` asks for the realm's discovery document; `provision` creates one confidential client per
 consumer (its own secret, an audience mapper adding `plugbricks-router`); `inject` adds
 `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_ISSUER`, `OIDC_JWKS_URL` and
@@ -207,11 +207,11 @@ consumer (its own secret, an audience mapper adding `plugbricks-router`); `injec
 tells the router and the admin where the issuer and the keys are.
 
 A capability is not the only way a brick can need another one. `orders-web` reads its orders through the router,
-so it cannot work without `orders`, and no capability says so. A manifest can list such plugins in
+so it cannot work without `orders-api`, and no capability says so. A manifest can list such plugins in
 `dependencies` (D21). The admin shows them with the capabilities and the extended entities; `remove` refuses a
 brick that another declares (`DEPENDENCY_IN_USE`), `disable` refuses it while the declaring brick is enabled,
 `add` warns when a declared brick is not installed, and `up` does not wait for it. An entry marked `optional`
-(`orders-web` lists `shipping` that way: its page shows the shipment when shipping is there and works without it)
+(`orders-web` lists `shipping-api` that way: its page shows the shipment when shipping is there and works without it)
 is only shown, and used for the roles below.
 
 An API says who may call it with an `authorization` block (D22): `{ "queries": "orders:read", "mutations":
@@ -233,11 +233,11 @@ Each API brick serves a **subgraph**. Both examples declare Federation 2.5:
 extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
 ```
 
-**Entity ownership.** `orders` owns the entity `Order` (`id`, `total`, `status`) with
-`@key(fields: "id")`. `shipping` declares the same entity with the same key and adds one field,
+**Entity ownership.** `orders-api` owns the entity `Order` (`id`, `total`, `status`) with
+`@key(fields: "id")`. `shipping-api` declares the same entity with the same key and adds one field,
 `shipment`. Its manifest says so explicitly: `"extends": [{ "plugin": "orders", "entities": ["Order"] }]`.
-That field is what lets plugbricks refuse `shipping` without `orders` (`EXTENDS_OWNER_MISSING`) and
-refuse `remove orders` while shipping is installed (`EXTENDS_IN_USE`); composition alone cannot see
+That field is what lets plugbricks refuse `shipping-api` without `orders-api` (`EXTENDS_OWNER_MISSING`) and
+refuse `remove orders-api` while shipping is installed (`EXTENDS_IN_USE`); composition alone cannot see
 that intent (D8).
 
 **At add time** (`src/federation.ts`, the only file importing the composer):
@@ -259,8 +259,8 @@ flowchart LR
 sequenceDiagram
   participant C as client
   participant R as router
-  participant O as orders-app
-  participant S as shipping-app
+  participant O as orders-api-app
+  participant S as shipping-api-app
   C->>R: { order(id: "1") { total shipment { carrier status } } }
   R->>O: { order(id: "1") { __typename id total } }
   O-->>R: { __typename: "Order", id: "1", total: 10 }

@@ -1,5 +1,5 @@
 {
-  "description": "the real example bricks: shipping is refused while orders is not installed, then orders and shipping are added; removing orders while shipping extends it is refused",
+  "description": "the real example bricks: shipping-api is refused while orders-api is not installed, then orders-api and shipping-api are added; removing orders-api while shipping-api extends it is refused",
   "steps": [
     {
       "run": [
@@ -17,43 +17,43 @@
     {
       "run": [
         "add",
-        "examples/shipping"
+        "examples/shipping-api"
       ],
       "exit": 1,
       "codes": [
         "EXTENDS_OWNER_MISSING"
       ],
-      "stderr": "extends entity \"Order\" of brick \"orders\", which is not installed; add \"orders\" first",
+      "stderr": "extends entity \"Order\" of brick \"orders-api\", which is not installed; add \"orders-api\" first",
       "unchanged": true
     },
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
       "run": [
         "add",
-        "examples/shipping"
+        "examples/shipping-api"
       ]
     },
     {
       "run": [
         "status"
       ],
-      "stdout": "Federation: orders, shipping; composed with @wundergraph/composition 0.68.2"
+      "stdout": "Federation: orders-api, shipping-api; composed with @wundergraph/composition 0.68.2"
     },
     {
       "run": [
         "remove",
-        "orders"
+        "orders-api"
       ],
       "exit": 1,
       "codes": [
         "EXTENDS_IN_USE"
       ],
-      "stderr": "its entities are still extended by \"shipping\"",
+      "stderr": "its entities are still extended by \"shipping-api\"",
       "unchanged": true
     }
   ]

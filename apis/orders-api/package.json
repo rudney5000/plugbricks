@@ -1,7 +1,7 @@
 {
-  "name": "plugbricks-example-orders",
+  "name": "plugbricks-example-orders-api",
   "version": "0.1.0",
-  "description": "Example subgraph for plugbricks: orders stored in PostgreSQL, federation v2. Built as the image plugbricks-example/orders:0.1.0.",
+  "description": "Example subgraph for plugbricks: orders stored in PostgreSQL, federation v2. Built as the image plugbricks-example/orders-api:0.1.0.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",

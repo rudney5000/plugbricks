@@ -18,7 +18,7 @@ import { readProject } from "../src/platform.js";
 import { defaultAsyncExec, statusRuntime, statusRuntimeAsync, type AsyncExec, type Exec, type ExecResult } from "../src/runtime.js";
 import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 
-// status --runtime, without Docker or a cluster: the real plan of a platform postgres + orders + shipping,
+// status --runtime, without Docker or a cluster: the real plan of a platform postgres + orders-api + shipping-api,
 // against recorded `docker compose ps` output and hand-written `kubectl get -o json` Lists
 // (test/fixtures/runtime/README.md says where each one comes from). Pure parsing: runs on every OS.
 
@@ -35,10 +35,10 @@ let plan: Plan;
 function makePlatform(): void {
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work, { recursive: true });
-  for (const b of ["postgres", "orders", "shipping"]) cpSync(join(pkg, "examples", b), join(work, b), { recursive: true });
+  for (const b of ["postgres", "orders-api", "shipping-api"]) cpSync(join(pkg, "examples", b), join(work, b), { recursive: true });
   const io = { cwd: work, stdout: () => {}, stderr: () => {} };
   expect(main(["init", "--name", "demo"], io)).toBe(0);
-  for (const b of ["postgres", "orders", "shipping"]) expect(main(["add", b], io)).toBe(0);
+  for (const b of ["postgres", "orders-api", "shipping-api"]) expect(main(["add", b], io)).toBe(0);
   const file = join(work, "platform.json");
   writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), router: { port: 14109 } }, null, 2) + "\n");
 }
@@ -83,9 +83,9 @@ describe("status --runtime on Docker Compose (recorded with Compose 5.5.1)", () 
   it("healthy: every service healthy; the router runs with no health check, published on 127.0.0.1, with its digest", () => {
     const s = checked(compose("compose/healthy.ndjson"));
     expect(s.state).toBe("healthy");
-    for (const n of ["orders-app", "postgres-db", "shipping-app"])
+    for (const n of ["orders-api-app", "postgres-db", "shipping-api-app"])
       expect(svc(s, n)).toMatchObject({ state: "healthy", deployed: true, mismatch: null });
-    expect(svc(s, "orders-app")).toMatchObject({ subgraph: true, instances: ["demo-orders-app-1"], restarts: 0 });
+    expect(svc(s, "orders-api-app")).toMatchObject({ subgraph: true, instances: ["demo-orders-api-app-1"], restarts: 0 });
     expect(svc(s, "postgres-db").subgraph).toBe(false);
     expect(s.router).toMatchObject({
       state: "unknown",
@@ -93,8 +93,8 @@ describe("status --runtime on Docker Compose (recorded with Compose 5.5.1)", () 
       address: "127.0.0.1:14109",
       digest: "sha256:bfe6d89a89ab70975bc874dc234600fe5a6ba6d9498485465a31be4c5b9d0205",
       subgraphs: [
-        { brick: "orders", name: "orders-app", state: "healthy" },
-        { brick: "shipping", name: "shipping-app", state: "healthy" },
+        { brick: "orders-api", name: "orders-api-app", state: "healthy" },
+        { brick: "shipping-api", name: "shipping-api-app", state: "healthy" },
       ],
     });
     // The one-shot wait and provision tasks are not services, and not "undeclared" either.
@@ -104,9 +104,9 @@ describe("status --runtime on Docker Compose (recorded with Compose 5.5.1)", () 
   it("exited: a stopped subgraph is stopped with its exit code, and shows under the router too", () => {
     const s = checked(compose("compose/stopped.ndjson"));
     expect(s.state).toBe("degraded");
-    expect(brief(svc(s, "shipping-app"))).toBe("stopped: exited with code 0");
-    expect(svc(s, "shipping-app").deployed).toBe(true);
-    expect(s.router!.subgraphs.find((g) => g.name === "shipping-app")!.state).toBe("stopped");
+    expect(brief(svc(s, "shipping-api-app"))).toBe("stopped: exited with code 0");
+    expect(svc(s, "shipping-api-app").deployed).toBe(true);
+    expect(s.router!.subgraphs.find((g) => g.name === "shipping-api-app")!.state).toBe("stopped");
   });
 
   it("restarting: the exit code comes from Status (ExitCode is 0 while restarting), the count from docker inspect", () => {
@@ -115,21 +115,21 @@ describe("status --runtime on Docker Compose (recorded with Compose 5.5.1)", () 
     // Not published while restarting: Compose lists no publisher then.
     expect(s.router!.address).toBeNull();
     const r = checked(compose("compose/unhealthy-restarting.ndjson", "inspect/unhealthy-restarting.ndjson"));
-    expect(svc(r, "shipping-app")).toMatchObject({ state: "unhealthy", reason: "restarting after exit code 3", restarts: 6 });
+    expect(svc(r, "shipping-api-app")).toMatchObject({ state: "unhealthy", reason: "restarting after exit code 3", restarts: 6 });
   });
 
   it("unhealthy and starting: the health check's own state", () => {
     const s = checked(compose("compose/unhealthy-restarting.ndjson", "inspect/unhealthy-restarting.ndjson"));
-    expect(brief(svc(s, "orders-app"))).toBe("unhealthy: health check failing");
+    expect(brief(svc(s, "orders-api-app"))).toBe("unhealthy: health check failing");
     expect(brief(svc(checked(compose("compose/starting.ndjson")), "postgres-db"))).toBe("starting: health check not passed yet");
   });
 
   it("created but never started: stopped", () => {
-    expect(brief(svc(checked(compose("compose/created.ndjson")), "shipping-app"))).toBe("stopped: created, never started");
+    expect(brief(svc(checked(compose("compose/created.ndjson")), "shipping-api-app"))).toBe("stopped: created, never started");
   });
 
   it("a wait task that gave up names WAIT_TIMEOUT as the reason its consumer does not run", () => {
-    expect(brief(svc(checked(compose("compose/wait-timeout.ndjson")), "shipping-app"))).toBe(
+    expect(brief(svc(checked(compose("compose/wait-timeout.ndjson")), "shipping-api-app"))).toBe(
       "stopped: WAIT_TIMEOUT: gave up waiting for database from postgres after 120s",
     );
   });
@@ -137,9 +137,14 @@ describe("status --runtime on Docker Compose (recorded with Compose 5.5.1)", () 
   it("image pull failure and partial deployment: no container means not deployed, flagged as a mismatch", () => {
     for (const f of ["compose/pull-failure.ndjson", "compose/partial.ndjson"]) {
       const s = checked(compose(f));
-      expect(svc(s, "shipping-app"), f).toMatchObject({ state: "not deployed", deployed: false, enabled: true, mismatch: "not-deployed" });
+      expect(svc(s, "shipping-api-app"), f).toMatchObject({
+        state: "not deployed",
+        deployed: false,
+        enabled: true,
+        mismatch: "not-deployed",
+      });
       expect(s.state).toBe("degraded");
-      expect(s.router!.subgraphs.find((g) => g.name === "shipping-app")!.state).toBe("not deployed");
+      expect(s.router!.subgraphs.find((g) => g.name === "shipping-api-app")!.state).toBe("not deployed");
     }
   });
 
@@ -178,8 +183,8 @@ describe("status --runtime on Kubernetes (Lists written after the Kubernetes API
     const s = checked(k8s("k8s/healthy.json"));
     expect(s.state).toBe("healthy");
     expect(s.context).toBe("k3d-pbtest-x");
-    for (const n of ["orders-app", "postgres-db", "shipping-app"]) expect(svc(s, n).state).toBe("healthy");
-    expect(svc(s, "orders-app").instances).toEqual(["orders-app-6f7d9c-x2k4q"]);
+    for (const n of ["orders-api-app", "postgres-db", "shipping-api-app"]) expect(svc(s, n).state).toBe("healthy");
+    expect(svc(s, "orders-api-app").instances).toEqual(["orders-api-app-6f7d9c-x2k4q"]);
     expect(s.router).toMatchObject({
       state: "healthy",
       address: "10.43.0.13:4000",
@@ -188,12 +193,12 @@ describe("status --runtime on Kubernetes (Lists written after the Kubernetes API
   });
 
   it.each([
-    ["k8s/crashloop.json", "orders-app", "unhealthy: CrashLoopBackOff (last exit code 1)", 4],
-    ["k8s/pending.json", "shipping-app", "unhealthy: Pending: Unschedulable", 0],
-    ["k8s/image-pull.json", "shipping-app", "unhealthy: image pull error (ImagePullBackOff)", 0],
-    ["k8s/wait-timeout.json", "shipping-app", "unhealthy: WAIT_TIMEOUT: init container wait-database gave up, CrashLoopBackOff", 5],
-    ["k8s/starting.json", "orders-app", "starting: readiness probe not passed yet", 0],
-    ["k8s/readiness-failing.json", "orders-app", "unhealthy: readiness probe failing", 0],
+    ["k8s/crashloop.json", "orders-api-app", "unhealthy: CrashLoopBackOff (last exit code 1)", 4],
+    ["k8s/pending.json", "shipping-api-app", "unhealthy: Pending: Unschedulable", 0],
+    ["k8s/image-pull.json", "shipping-api-app", "unhealthy: image pull error (ImagePullBackOff)", 0],
+    ["k8s/wait-timeout.json", "shipping-api-app", "unhealthy: WAIT_TIMEOUT: init container wait-database gave up, CrashLoopBackOff", 5],
+    ["k8s/starting.json", "orders-api-app", "starting: readiness probe not passed yet", 0],
+    ["k8s/readiness-failing.json", "orders-api-app", "unhealthy: readiness probe failing", 0],
   ])("%s: %s is %s", (file, name, expected, restarts) => {
     const s = checked(k8s(file));
     expect(brief(svc(s, name))).toBe(expected);
@@ -203,7 +208,7 @@ describe("status --runtime on Kubernetes (Lists written after the Kubernetes API
 
   it("partial: a Deployment deleted by hand is not deployed; one of a removed brick is not declared", () => {
     const s = checked(k8s("k8s/partial.json"));
-    expect(svc(s, "shipping-app")).toMatchObject({ state: "not deployed", mismatch: "not-deployed" });
+    expect(svc(s, "shipping-api-app")).toMatchObject({ state: "not deployed", mismatch: "not-deployed" });
     // Not declared, so plugbricks does not know whether it has a health check: unknown, never "healthy".
     expect(s.undeclared.map((u) => [u.name, u.mismatch, u.state])).toEqual([["cache-redis", "not-declared", "unknown"]]);
   });
@@ -274,7 +279,7 @@ describe("plugbricks status --runtime", () => {
     const r = run(["status", "--runtime", "compose"], f.exec);
     expect(r.code).toBe(3);
     expect(r.out).toMatch(/^Runtime \(Docker Compose, project demo\): degraded, /m);
-    expect(r.out).toMatch(/^ {2}shipping {2}shipping-app +yes +yes +stopped +0 +demo-shipping-app-1 +exited with code 0$/m);
+    expect(r.out).toMatch(/^ {2}shipping-api {2}shipping-api-app +yes +yes +stopped +0 +demo-shipping-api-app-1 +exited with code 0$/m);
   });
 
   it.each<[string, Partial<ExecResult>, string]>([
@@ -354,12 +359,12 @@ describe("plugbricks status --runtime", () => {
     const dir = join(pkg, ".test-work/live/disabled");
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
-    for (const b of ["postgres", "orders"]) cpSync(join(pkg, "examples", b), join(dir, b), { recursive: true });
+    for (const b of ["postgres", "orders-api"]) cpSync(join(pkg, "examples", b), join(dir, b), { recursive: true });
     const io = { cwd: dir, stdout: () => {}, stderr: () => {} };
     expect(main(["init", "--name", "demo"], io)).toBe(0);
     expect(main(["add", "postgres"], io)).toBe(0);
-    expect(main(["add", "orders"], io)).toBe(0);
-    expect(main(["disable", "orders"], io)).toBe(0);
+    expect(main(["add", "orders-api"], io)).toBe(0);
+    expect(main(["disable", "orders-api"], io)).toBe(0);
 
     const project = readProject(dir);
     const plan = planProject(project);
@@ -374,11 +379,11 @@ describe("plugbricks status --runtime", () => {
       problems: [],
       observed,
       routerAddress: null,
-      disabled: [{ name: "orders", tags: ["api", "graphql"], services: [{ name: "orders-app", service: "app" }] }],
+      disabled: [{ name: "orders-api", tags: ["api", "graphql"], services: [{ name: "orders-api-app", service: "app" }] }],
     });
     expect(schemaIssues(statusRuntimeSchema.validate, report)).toEqual([]);
-    expect(report.bricks.find((b) => b.name === "orders")).toMatchObject({ enabled: false, tags: ["api", "graphql"] });
-    const orders = report.bricks.flatMap((b) => b.services).find((s) => s.name === "orders-app")!;
+    expect(report.bricks.find((b) => b.name === "orders-api")).toMatchObject({ enabled: false, tags: ["api", "graphql"] });
+    const orders = report.bricks.flatMap((b) => b.services).find((s) => s.name === "orders-api-app")!;
     expect(orders).toMatchObject({
       enabled: false,
       deployed: false,

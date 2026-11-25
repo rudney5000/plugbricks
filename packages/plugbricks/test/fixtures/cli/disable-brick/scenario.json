@@ -3,8 +3,8 @@
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
-    { "run": ["add", "examples/orders"] },
-    { "run": ["disable", "orders"], "stdout": "Disabled orders" },
+    { "run": ["add", "examples/orders-api"] },
+    { "run": ["disable", "orders-api"], "stdout": "Disabled orders-api" },
     { "run": ["status", "--json"], "stdout": "\"enabled\": false" },
     { "run": ["generate"] },
     { "run": ["generate", "--runtime", "k8s"] }

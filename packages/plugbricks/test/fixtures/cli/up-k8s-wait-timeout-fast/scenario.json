@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
@@ -34,7 +34,7 @@
       ],
       "fake": [
         {
-          "match": "rollout status deployment/orders-app",
+          "match": "rollout status deployment/orders-api-app",
           "status": 1,
           "stderr": "error: timed out waiting for the condition"
         },
@@ -48,9 +48,9 @@
         "kubectl --context test-cluster apply --filename .generated/k8s/namespace.yaml",
         "kubectl --context test-cluster apply --filename .secrets/k8s-secret.yaml",
         "kubectl --context test-cluster apply --filename .generated/k8s/resources.yaml",
-        "kubectl --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick,plugbricks/brick notin (orders,postgres) --ignore-not-found",
-        "kubectl --context test-cluster --namespace demo rollout status deployment/orders-app --timeout=15s",
-        "kubectl --context test-cluster --namespace demo get pods --selector plugbricks/service=orders-app --output json"
+        "kubectl --context test-cluster --namespace demo delete deployment,service,configmap --selector app.kubernetes.io/managed-by=plugbricks,plugbricks/brick,plugbricks/brick notin (orders-api,postgres) --ignore-not-found",
+        "kubectl --context test-cluster --namespace demo rollout status deployment/orders-api-app --timeout=15s",
+        "kubectl --context test-cluster --namespace demo get pods --selector plugbricks/service=orders-api-app --output json"
       ]
     }
   ]

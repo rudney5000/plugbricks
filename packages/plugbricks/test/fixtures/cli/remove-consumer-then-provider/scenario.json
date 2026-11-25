@@ -1,5 +1,5 @@
 {
-  "description": "remove in dependency order: orders, then postgres",
+  "description": "remove in dependency order: orders-api, then postgres",
   "steps": [
     {
       "run": [
@@ -17,13 +17,13 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
       "run": [
         "remove",
-        "orders"
+        "orders-api"
       ]
     },
     {
@@ -34,7 +34,7 @@
     }
   ],
   "absent": [
-    ".platform/bricks/orders",
+    ".platform/bricks/orders-api",
     ".platform/bricks/postgres"
   ]
 }

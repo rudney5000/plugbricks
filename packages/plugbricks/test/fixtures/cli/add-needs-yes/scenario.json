@@ -1,15 +1,15 @@
 {
-  "description": "add --yes adds first what the brick needs from bricks/ (D26), in order and transitively: orders-web declares orders, which requires database from postgres; each brick added is listed with why",
+  "description": "add --yes adds first what the brick needs from bricks/ (D26), in order and transitively: orders-web declares orders-api, which requires database from postgres; each brick added is listed with why",
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
-    { "mutate": { "copyDir": { "from": "examples/orders", "to": "bricks/orders" } } },
+    { "mutate": { "copyDir": { "from": "examples/orders-api", "to": "bricks/orders-api" } } },
     { "mutate": { "copyDir": { "from": "examples/orders-web", "to": "bricks/orders-web" } } },
     {
       "run": ["add", "orders-web", "--yes"],
       "stdout": [
-        "orders-web needs:\n  postgres (bricks/postgres): provides \"database\" to orders\n  orders (bricks/orders): declared in the dependencies of orders-web",
-        "Added postgres 1.0.0 (provides \"database\" to orders)\nAdded orders 0.1.0 (declared in the dependencies of orders-web)\nAdded orders-web"
+        "orders-web needs:\n  postgres (bricks/postgres): provides \"database\" to orders-api\n  orders-api (bricks/orders-api): declared in the dependencies of orders-web",
+        "Added postgres 1.0.0 (provides \"database\" to orders-api)\nAdded orders-api 0.1.0 (declared in the dependencies of orders-web)\nAdded orders-web"
       ],
       "notStdout": "is not installed"
     },

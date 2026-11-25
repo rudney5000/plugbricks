@@ -1,5 +1,5 @@
 {
-  "description": "orders and shipping declare the roles of their queries and mutations (D22): with keycloak, each API gets them in its env and its provision task creates them on its own client, and orders-web, which lists orders and shipping, is granted their read roles and nothing more",
+  "description": "orders-api and shipping-api declare the roles of their queries and mutations (D22): with keycloak, each API gets them in its env and its provision task creates them on its own client, and orders-web, which lists orders-api and shipping-api, is granted their read roles and nothing more",
   "steps": [
     {
       "run": [
@@ -23,13 +23,13 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
       "run": [
         "add",
-        "examples/shipping"
+        "examples/shipping-api"
       ]
     },
     {

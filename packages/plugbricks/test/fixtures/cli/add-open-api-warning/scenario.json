@@ -1,5 +1,5 @@
 {
-  "description": "a GraphQL API that requires oidc without an authorization block gets a warning at add (D22): any valid token may call it; orders, which declares its roles, gets none",
+  "description": "a GraphQL API that requires oidc without an authorization block gets a warning at add (D22): any valid token may call it; orders-api, which declares its roles, gets none",
   "steps": [
     {
       "run": [
@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ],
       "notStdout": "authorization"
     },

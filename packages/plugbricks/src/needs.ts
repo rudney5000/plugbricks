@@ -1,6 +1,6 @@
 // What "add" proposes to add with a brick (D26): the bricks of the project's bricks/ folder that provide what it
 // requires and the bricks its manifest declares in "dependencies", and in turn what those need. Never the other way
-// round: adding orders proposes postgres, never orders-web. Reads only; "add" writes, brick by brick.
+// round: adding orders-api proposes postgres, never orders-web. Reads only; "add" writes, brick by brick.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { validateManifest } from "./manifest.js";
@@ -19,7 +19,7 @@ export interface Proposal {
   name: string;
   /** Its folder, bricks/<name>. */
   dir: string;
-  /** Why: `provides "database" to orders`, or `declared in the dependencies of orders-web`. */
+  /** Why: `provides "database" to orders-api`, or `declared in the dependencies of orders-web`. */
   reason: string;
   /**
    * Whether the brick asked for cannot be added without it: it provides a capability that the brick, or a brick it

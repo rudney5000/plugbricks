@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform.schema.json",
   "bricks": {
-    "orders": {
-      "source": "examples/orders"
+    "orders-api": {
+      "source": "examples/orders-api"
     },
     "orders-web": {
       "source": "examples/orders-web",

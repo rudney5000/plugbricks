@@ -65,7 +65,7 @@ const SHIP = "mutation($id: ID!, $c: String!) { shipOrder(orderId: $id, carrier:
 
 describe("shipping API", () => {
   it("ships the same SDL as the brick", () => {
-    const brick = readFileSync(new URL("../../../packages/plugbricks/examples/shipping/schema.graphql", import.meta.url), "utf8");
+    const brick = readFileSync(new URL("../../../packages/plugbricks/examples/shipping-api/schema.graphql", import.meta.url), "utf8");
     expect(brick).toBe(typeDefs);
   });
 

@@ -64,7 +64,7 @@ describe("without a subgraph", () => {
 
 describe("with orders and shipping", () => {
   beforeAll(() => {
-    withRouter = project("both", ["postgres", "orders", "shipping"]);
+    withRouter = project("both", ["postgres", "orders-api", "shipping-api"]);
   });
 
   it("the router configuration is the same text on every generate, on both runtimes, and after the generated folder is deleted", () => {
@@ -84,8 +84,8 @@ describe("with orders and shipping", () => {
   it("the configuration names both subgraphs with the URLs of our runtime names", () => {
     const config = JSON.parse(readFileSync(join(withRouter, COMPOSE_ROUTER_CONFIG), "utf8"));
     expect(config.subgraphs).toEqual([
-      { id: "0", name: "orders", routingUrl: "http://orders-app:4000/graphql" },
-      { id: "1", name: "shipping", routingUrl: "http://shipping-app:4000/graphql" },
+      { id: "0", name: "orders-api", routingUrl: "http://orders-api-app:4000/graphql" },
+      { id: "1", name: "shipping-api", routingUrl: "http://shipping-api-app:4000/graphql" },
     ]);
     expect(config.version).toBe("00000000-0000-0000-0000-000000000000");
   });
@@ -97,7 +97,7 @@ describe("with orders and shipping", () => {
 
   it("a changed subgraph changes the configuration hash, which recreates the router", () => {
     const before = planProject(readProject(withRouter)).router!.configSha256;
-    const other = project("both-other", ["postgres", "orders"]);
+    const other = project("both-other", ["postgres", "orders-api"]);
     expect(planProject(readProject(other)).router!.configSha256).not.toBe(before);
   });
 
@@ -109,7 +109,7 @@ describe("with orders and shipping", () => {
 
   it("with no web brick, the router accepts only its own origin, which follows router.port (D17)", () => {
     expect(planProject(readProject(withRouter)).router!.allowedOrigins).toEqual(["http://127.0.0.1:4000"]);
-    const moved = project("router-port-cors", ["postgres", "orders"]);
+    const moved = project("router-port-cors", ["postgres", "orders-api"]);
     const file = join(moved, "platform.json");
     writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, "utf8")), router: { port: 14000 } }, null, 2) + "\n");
     expect(planProject(readProject(moved)).router!.allowedOrigins).toEqual(["http://127.0.0.1:14000"]);
@@ -136,7 +136,7 @@ describe("with orders and shipping", () => {
       const yaml = renderCompose(plan())[".generated/compose/compose.yaml"];
       const router = yaml.slice(yaml.indexOf("\n  router:\n"));
       expect(router).toContain(
-        "    depends_on:\n      orders-app:\n        condition: service_healthy\n      shipping-app:\n        condition: service_healthy\n",
+        "    depends_on:\n      orders-api-app:\n        condition: service_healthy\n      shipping-api-app:\n        condition: service_healthy\n",
       );
     });
 
@@ -155,7 +155,7 @@ describe("with orders and shipping", () => {
         expect(yaml, forbidden).not.toContain(forbidden);
       }
       expect(yaml).toContain("type: ClusterIP");
-      expect(yaml.match(/^kind: Service$/gm)).toHaveLength(4); // postgres-db, orders-app, shipping-app and router
+      expect(yaml.match(/^kind: Service$/gm)).toHaveLength(4); // postgres-db, orders-api-app, shipping-api-app and router
       const router = yaml.slice(yaml.indexOf("name: router\n", yaml.indexOf("kind: Deployment", yaml.indexOf("name: router\n"))));
       for (const needle of [
         "runAsNonRoot: true",

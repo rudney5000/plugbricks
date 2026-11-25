@@ -1,12 +1,12 @@
 {
   "$schema": "../../schemas/plugin-manifest.schema.json",
-  "name": "orders",
+  "name": "orders-api",
   "version": "0.1.0",
-  "description": "Example API: a GraphQL subgraph that stores orders in PostgreSQL. With an oidc provider it asks every request for a token that carries the client role orders:read (queries) or orders:write (mutations), which the provider gives to the services that say they use it (D22). Its source is apis/orders; build the image with: docker build -t plugbricks-example/orders:0.1.0 apis/orders",
+  "description": "Example API: a GraphQL subgraph that stores orders in PostgreSQL. With an oidc provider it asks every request for a token that carries the client role orders:read (queries) or orders:write (mutations), which the provider gives to the services that say they use it (D22). Its source is apis/orders-api; build the image with: docker build -t plugbricks-example/orders-api:0.1.0 apis/orders-api",
   "services": [
     {
       "name": "app",
-      "image": "plugbricks-example/orders:0.1.0",
+      "image": "plugbricks-example/orders-api:0.1.0",
       "port": 4000,
       "healthcheck": {
         "exec": [

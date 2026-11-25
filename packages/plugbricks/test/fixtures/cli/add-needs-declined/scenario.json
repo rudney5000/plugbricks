@@ -3,20 +3,20 @@
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
-    { "mutate": { "copyDir": { "from": "examples/orders", "to": "bricks/orders" } } },
+    { "mutate": { "copyDir": { "from": "examples/orders-api", "to": "bricks/orders-api" } } },
     {
-      "run": ["add", "orders"],
+      "run": ["add", "orders-api"],
       "answers": [""],
       "exit": 1,
       "codes": ["ADD_NOT_CONFIRMED"],
-      "stderr": "orders cannot be added without postgres; nothing was added",
+      "stderr": "orders-api cannot be added without postgres; nothing was added",
       "unchanged": true
     },
     { "run": ["add", "postgres"] },
     {
       "run": ["add", "examples/orders-web"],
       "answers": ["n"],
-      "stdout": ["Add orders too? [y/N] n", "Added orders-web", "dependency \"orders\" is not installed"]
+      "stdout": ["Add orders-api too? [y/N] n", "Added orders-web", "dependency \"orders-api\" is not installed"]
     }
   ]
 }

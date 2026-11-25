@@ -17,13 +17,13 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
       "run": [
         "add",
-        "examples/shipping"
+        "examples/shipping-api"
       ]
     },
     {

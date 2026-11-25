@@ -75,15 +75,15 @@ services:
       postgres-db:
         condition: service_started
     restart: "no"
-  orders-app:
-    image: plugbricks-example/orders:0.1.0
+  orders-api-app:
+    image: plugbricks-example/orders-api:0.1.0
     environment:
       AUTHORIZATION_MUTATIONS_ROLE: orders:write
       AUTHORIZATION_QUERIES_ROLE: orders:read
-      DATABASE_URL: "postgres://orders:${PB_POSTGRES__ORDERS__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders"
+      DATABASE_URL: "postgres://orders-api:${PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders-api"
       OIDC_AUDIENCE: plugbricks-router
-      OIDC_CLIENT_ID: orders
-      OIDC_CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS__CLIENT_SECRET:?missing secret; run plugbricks generate}"
+      OIDC_CLIENT_ID: orders-api
+      OIDC_CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET:?missing secret; run plugbricks generate}"
       OIDC_ISSUER: http://127.0.0.1:8080/realms/plugbricks
       OIDC_JWKS_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs
       OIDC_TOKEN_URL: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/token
@@ -98,20 +98,20 @@ services:
       retries: 10
       start_period: "0s"
     depends_on:
-      orders-provision-database:
+      orders-api-provision-database:
         condition: service_completed_successfully
-      orders-provision-oidc:
+      orders-api-provision-oidc:
         condition: service_completed_successfully
     restart: unless-stopped
-  orders-provision-database:
+  orders-api-provision-database:
     image: postgres:16.4-alpine
     entrypoint:
       - /bin/sh
       - /provision/create-database.sh
     environment:
-      APP_DATABASE: orders
-      APP_PASSWORD: "${PB_POSTGRES__ORDERS__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}"
-      APP_ROLE: orders
+      APP_DATABASE: orders-api
+      APP_PASSWORD: "${PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}"
+      APP_ROLE: orders-api
       PGHOST: postgres-db
       PGPASSWORD: "${PB_POSTGRES__SUPERUSER_PASSWORD:?missing secret; run plugbricks generate}"
       PGPORT: "5432"
@@ -121,10 +121,10 @@ services:
         target: /provision
         read_only: true
     depends_on:
-      orders-wait-database:
+      orders-api-wait-database:
         condition: service_completed_successfully
     restart: "no"
-  orders-provision-oidc:
+  orders-api-provision-oidc:
     image: plugbricks-example/keycloak:0.1.0
     entrypoint:
       - /bin/bash
@@ -132,8 +132,8 @@ services:
     environment:
       ADMIN_PASSWORD: "${PB_KEYCLOAK__ADMIN_PASSWORD:?missing secret; run plugbricks generate}"
       AUDIENCE: plugbricks-router
-      CLIENT_ID: orders
-      CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS__CLIENT_SECRET:?missing secret; run plugbricks generate}"
+      CLIENT_ID: orders-api
+      CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET:?missing secret; run plugbricks generate}"
       GRANTS: ""
       KEYCLOAK_URL: http://keycloak-app:8080
       REALM: plugbricks
@@ -144,10 +144,10 @@ services:
         target: /provision
         read_only: true
     depends_on:
-      orders-wait-oidc:
+      orders-api-wait-oidc:
         condition: service_completed_successfully
     restart: "no"
-  orders-wait-database:
+  orders-api-wait-database:
     image: postgres:16.4-alpine
     entrypoint:
       - /bin/sh
@@ -164,14 +164,14 @@ services:
       - "-t"
       - "2"
     environment:
-      PB_WAIT_FOR: "database from postgres-db (for orders)"
+      PB_WAIT_FOR: "database from postgres-db (for orders-api)"
       PB_WAIT_INTERVAL: "2"
       PB_WAIT_TIMEOUT: "120"
     depends_on:
       postgres-db:
         condition: service_started
     restart: "no"
-  orders-wait-oidc:
+  orders-api-wait-oidc:
     image: plugbricks-example/keycloak:0.1.0
     entrypoint:
       - /bin/sh
@@ -183,7 +183,7 @@ services:
       - "-c"
       - "exec 3<>/dev/tcp/keycloak-app/8080 && printf 'GET /realms/plugbricks/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"
     environment:
-      PB_WAIT_FOR: "oidc from keycloak-app (for orders)"
+      PB_WAIT_FOR: "oidc from keycloak-app (for orders-api)"
       PB_WAIT_INTERVAL: "2"
       PB_WAIT_TIMEOUT: "300"
     depends_on:
@@ -231,7 +231,7 @@ services:
       AUDIENCE: plugbricks-router
       CLIENT_ID: orders-web
       CLIENT_SECRET: "${PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET:?missing secret; run plugbricks generate}"
-      GRANTS: orders/orders:read
+      GRANTS: orders-api/orders:read
       KEYCLOAK_URL: http://keycloak-app:8080
       REALM: plugbricks
       ROLES: ""
@@ -301,7 +301,7 @@ services:
       PROMETHEUS_ENABLED: "false"
       TRACING_ENABLED: "false"
     labels:
-      plugbricks.router-config-sha256: "424bd1ef1fe3fe8ffe56c03ea73fbdac25631cbd70f989da7a9a2f0298a04fa3"
+      plugbricks.router-config-sha256: "005385839208d44103972437751ad3e3b38cda2e5d489b58b5150e5dd8446dc7"
       plugbricks.router-auth-sha256: "47f3346e09b0d3ee12329a86ccd52bada15df44e8b357d14b3931be13bd57039"
     volumes:
       - type: bind
@@ -318,7 +318,7 @@ services:
         host_ip: "127.0.0.1"
         protocol: tcp
     depends_on:
-      orders-app:
+      orders-api-app:
         condition: service_healthy
       keycloak-app:
         condition: service_healthy

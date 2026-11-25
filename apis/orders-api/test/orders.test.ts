@@ -63,7 +63,7 @@ afterAll(async () => {
 
 describe("orders API", () => {
   it("ships the same SDL as the brick", () => {
-    const brick = readFileSync(new URL("../../../packages/plugbricks/examples/orders/schema.graphql", import.meta.url), "utf8");
+    const brick = readFileSync(new URL("../../../packages/plugbricks/examples/orders-api/schema.graphql", import.meta.url), "utf8");
     expect(brick).toBe(typeDefs);
   });
 

@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
   "bricks": {
-    "orders": {
-      "integrity": "sha256-b0452131e9207a0042773302b3352b3bedbee64a73bae9f290fe04816d2a6d3f",
+    "orders-api": {
+      "integrity": "sha256-b0c2923a2f93e06f11ba86d77e4b3cb19922234da0de54711311db87942858e9",
       "provides": [],
       "requires": {
         "database": {
@@ -16,7 +16,7 @@
           "wait": "healthy"
         }
       },
-      "source": "examples/orders",
+      "source": "examples/orders-api",
       "tags": [
         "api",
         "graphql"
@@ -43,8 +43,8 @@
         }
       ]
     },
-    "shipping": {
-      "integrity": "sha256-af86c39adbbe1c617124e8a7a00661476b7d51d73f266f8dedc0eca2f9a0a60b",
+    "shipping-api": {
+      "integrity": "sha256-15bcaa189eb62bd09a7556c05ff5f87e35e33a4da34bb4f167f2eda0ebf06967",
       "provides": [],
       "requires": {
         "database": {
@@ -58,7 +58,7 @@
           "wait": "healthy"
         }
       },
-      "source": "examples/shipping",
+      "source": "examples/shipping-api",
       "tags": [
         "api",
         "graphql"
@@ -78,8 +78,8 @@
     "routerCompatibilityVersion": "1",
     "schemaSha256": "0ae549a35f5e03d034469210f8cf3f69416bd08c72871c65d161778fe2d77b4c",
     "subgraphs": [
-      "orders",
-      "shipping"
+      "orders-api",
+      "shipping-api"
     ]
   },
   "lockfileVersion": 1,

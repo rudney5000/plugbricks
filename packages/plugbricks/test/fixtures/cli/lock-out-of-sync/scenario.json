@@ -37,7 +37,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ],
       "exit": 1,
       "codes": [

@@ -210,7 +210,7 @@ describe("published package", () => {
 
     expect(cli("init", "--name", "demo").status).toBe(0);
     expect(cli("add", "examples/postgres").status).toBe(0);
-    expect(cli("add", "examples/orders").status).toBe(0);
+    expect(cli("add", "examples/orders-api").status).toBe(0);
 
     const status = cli("status", "--json");
     expect(status.status, status.stderr).toBe(0);
@@ -227,6 +227,6 @@ describe("published package", () => {
     const usage = cli("deploy");
     expect(usage.status).toBe(2);
     expect(usage.stderr).toMatch(/^error USAGE_UNKNOWN_COMMAND: /);
-    expect(existsSync(join(project, ".platform/bricks/orders/schema.graphql"))).toBe(true);
+    expect(existsSync(join(project, ".platform/bricks/orders-api/schema.graphql"))).toBe(true);
   });
 });

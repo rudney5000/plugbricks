@@ -1,5 +1,5 @@
 {
-  "description": "orders-web declares that it needs orders (D21), so removing orders is refused while it is installed; removing in the right order works",
+  "description": "orders-web declares that it needs orders-api (D21), so removing orders-api is refused while it is installed; removing in the right order works",
   "steps": [
     {
       "run": [
@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
@@ -29,7 +29,7 @@
     {
       "run": [
         "remove",
-        "orders"
+        "orders-api"
       ],
       "exit": 1,
       "codes": [
@@ -47,12 +47,12 @@
     {
       "run": [
         "remove",
-        "orders"
+        "orders-api"
       ]
     }
   ],
   "absent": [
-    ".platform/bricks/orders",
+    ".platform/bricks/orders-api",
     ".platform/bricks/orders-web"
   ]
 }

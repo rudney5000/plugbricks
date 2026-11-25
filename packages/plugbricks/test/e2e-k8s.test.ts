@@ -178,15 +178,15 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       const nodes = kc(["get", "nodes", "--no-headers"]);
       expect(nodes.status, `the cluster ${context} does not answer: ${nodes.stderr}`).toBe(0);
 
-      loadImage("orders");
+      loadImage("orders-api");
 
       const ns = "pbtest-k8s";
       const work = project(ns, ["scratch"]);
-      cpSync(join(pkg, "examples/orders"), join(work, "orders"), { recursive: true });
+      cpSync(join(pkg, "examples/orders-api"), join(work, "orders-api"), { recursive: true });
       for (const args of [
         ["init", "--name", ns],
         ["add", "postgres"],
-        ["add", "orders"],
+        ["add", "orders-api"],
         ["add", "scratch"],
       ])
         expect(cli(work, args).code).toBe(0);
@@ -200,7 +200,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         status: { phase: string };
       }[];
       expect(podList.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual([
-        "orders-app",
+        "orders-api-app",
         "postgres-db",
         // orders serves a subgraph, so plugbricks also deploys the router (4b-3). This is the first time it
         // runs on a cluster: its probes, security context and image pull are checked here.
@@ -218,7 +218,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(schemaIssues(statusRuntimeSchema.validate, report)).toEqual([]);
       expect(report).toMatchObject({ runtime: "k8s", context, state: "healthy", undeclared: [] });
       const states = Object.fromEntries(report.bricks.flatMap((b) => b.services).map((x) => [x.name, x.state]));
-      expect(states).toMatchObject({ "orders-app": "healthy", "postgres-db": "healthy" });
+      expect(states).toMatchObject({ "orders-api-app": "healthy", "postgres-db": "healthy" });
       expect(report.router).toMatchObject({ state: "healthy", deployed: true });
       expect(report.router!.address).toMatch(/^\d+\.\d+\.\d+\.\d+:\d+$/);
       expect(report.router!.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
@@ -246,7 +246,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
             "content-type: application/json",
             "--post-data",
             JSON.stringify({ query }),
-            "http://orders-app:4000/graphql",
+            "http://orders-api-app:4000/graphql",
           ]);
           if (last.status === 0) return JSON.parse(last.stdout);
           if (!/can't connect|timed out|bad address/i.test(last.stderr)) break;
@@ -289,16 +289,16 @@ describe("Kubernetes driver against a real k3d cluster", () => {
   it.skipIf(!ready)(
     `serves orders and shipping through the router, rolls the router when the composition changes, and down removes the workloads${why}`,
     async () => {
-      loadImage("orders");
-      loadImage("shipping");
+      loadImage("orders-api");
+      loadImage("shipping-api");
       const ns = "pbtest-k8s-router";
       const work = project(ns, []);
-      for (const brick of ["orders", "shipping"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const brick of ["orders-api", "shipping-api"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
       for (const args of [
         ["init", "--name", ns],
         ["add", "postgres"],
-        ["add", "orders"],
-        ["add", "shipping"],
+        ["add", "orders-api"],
+        ["add", "shipping-api"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
 
@@ -308,10 +308,10 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       console.log(`kubectl get pods (namespace ${ns}):\n${kc(["--namespace", ns, "get", "pods", "--output", "wide"]).stdout}`);
       const pods = podsOf(ns);
       expect(pods.map((p) => p.metadata.name.replace(/-[a-z0-9]+-[a-z0-9]+$/, "")).sort()).toEqual([
-        "orders-app",
+        "orders-api-app",
         "postgres-db",
         "router",
-        "shipping-app",
+        "shipping-api-app",
       ]);
       for (const p of pods) {
         expect(p.status.phase, p.metadata.name).toBe("Running");
@@ -328,10 +328,10 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(names(ns, "ingress")).toEqual([]);
       const services = JSON.parse(kc(["--namespace", ns, "get", "service", "--output", "json"]).stdout).items;
       expect(services.map((s: { metadata: { name: string } }) => s.metadata.name).sort()).toEqual([
-        "orders-app",
+        "orders-api-app",
         "postgres-db",
         "router",
-        "shipping-app",
+        "shipping-api-app",
       ]);
       expect(services.map((s: { spec: { type: string } }) => s.spec.type)).toEqual(["ClusterIP", "ClusterIP", "ClusterIP", "ClusterIP"]);
       const everything = JSON.stringify(services) + kc(["--namespace", ns, "get", "pods", "--output", "json"]).stdout;
@@ -393,7 +393,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       const shipmentOf = { carrier: "ups", trackingNumber: tracking, status: "SHIPPED" };
 
       // remove shipping, then up: the router Deployment is rolled (its pod template carries a new config hash), and the field is gone.
-      expect(cli(work, ["remove", "shipping"]).code).toBe(0);
+      expect(cli(work, ["remove", "shipping-api"]).code).toBe(0);
       const removed = cli(work, ["up"]);
       expect(removed.code, `${removed.out}\n${removed.err}`).toBe(0);
       const without = routerState(ns);
@@ -401,7 +401,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(without.generation).toBeGreaterThan(before.generation);
       expect(without.pods).toHaveLength(1);
       expect(without.pods).not.toEqual(before.pods);
-      expect(names(ns, "deployment")).toEqual(["deployment.apps/orders-app", "deployment.apps/postgres-db", "deployment.apps/router"]);
+      expect(names(ns, "deployment")).toEqual(["deployment.apps/orders-api-app", "deployment.apps/postgres-db", "deployment.apps/router"]);
       console.log(
         `router after remove shipping: hash ${without.hash.slice(0, 12)} (was ${before.hash.slice(0, 12)}), generation ${without.generation} (was ${before.generation}), pod ${without.pods[0]} (was ${before.pods[0]})`,
       );
@@ -415,7 +415,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       });
 
       // add shipping again, then up: rolled again, the annotation is back to the original value, and so is the field with its data.
-      expect(cli(work, ["add", "shipping"]).code).toBe(0);
+      expect(cli(work, ["add", "shipping-api"]).code).toBe(0);
       const added = cli(work, ["up"]);
       expect(added.code, `${added.out}\n${added.err}`).toBe(0);
       const again = routerState(ns);
@@ -628,16 +628,16 @@ describe("Kubernetes driver against a real k3d cluster", () => {
   it.skipIf(!ready)(
     `serves a web brick's page through port-forward on its webPort, with the router accepting its origin only${why}`,
     async () => {
-      for (const api of ["orders", "shipping", "orders-web"]) loadImage(api);
+      for (const api of ["orders-api", "shipping-api", "orders-web"]) loadImage(api);
       const ns = "pbtest-k8s-web";
       const work = project(ns, []);
-      for (const brick of ["orders", "shipping", "orders-web"])
+      for (const brick of ["orders-api", "shipping-api", "orders-web"])
         cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
       for (const args of [
         ["init", "--name", ns],
         ["add", "postgres"],
-        ["add", "orders"],
-        ["add", "shipping"],
+        ["add", "orders-api"],
+        ["add", "shipping-api"],
         ["add", "orders-web"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
@@ -657,11 +657,11 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         spec: { type: string };
       }[];
       expect(services.map((s) => s.metadata.name).sort()).toEqual([
-        "orders-app",
+        "orders-api-app",
         "orders-web-app",
         "postgres-db",
         "router",
-        "shipping-app",
+        "shipping-api-app",
       ]);
       expect(services.every((s) => s.spec.type === "ClusterIP")).toBe(true);
 
@@ -736,7 +736,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         expect(shown).toContain('data-graphql="http://127.0.0.1:4000/graphql"');
 
         // Shipping scaled to zero: the page still lists the order, its shipment unavailable.
-        expect(kc(["--namespace", ns, "scale", "deployment/shipping-app", "--replicas=0"]).status).toBe(0);
+        expect(kc(["--namespace", ns, "scale", "deployment/shipping-api-app", "--replicas=0"]).status).toBe(0);
         let degraded = "";
         await until(
           "the degraded page",
@@ -763,17 +763,17 @@ describe("Kubernetes driver against a real k3d cluster", () => {
   it.skipIf(!ready)(
     `requires Keycloak's tokens through the router and in orders itself, and records who created an order${why}`,
     async () => {
-      for (const api of ["keycloak", "orders", "orders-web"]) loadImage(api);
+      for (const api of ["keycloak", "orders-api", "orders-web"]) loadImage(api);
       const ns = "pbtest-k8s-oidc";
       const work = project(ns, []);
-      for (const brick of ["keycloak", "orders", "orders-web"])
+      for (const brick of ["keycloak", "orders-api", "orders-web"])
         cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
       for (const args of [
         ["init", "--name", ns],
         ["add", "postgres"],
         ["add", "keycloak"],
         ["add", "orders-web"],
-        ["add", "orders"],
+        ["add", "orders-api"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
       // The issuer the tokens carry is Keycloak's web origin: the local port of its forward must be its webPort.
@@ -864,7 +864,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
             "k=/opt/keycloak/bin/kcadm.sh; c=$(mktemp -d)",
             'login() { "$k" "$@" --config "$c/kcadm.config"; }',
             "login config credentials --server http://127.0.0.1:8080 --realm master --user admin >/dev/null",
-            "login add-roles -r plugbricks --uusername service-account-orders-web --cclientid orders --rolename orders:write",
+            "login add-roles -r plugbricks --uusername service-account-orders-web --cclientid orders-api --rolename orders:write",
           ].join("; "),
         ]);
         expect(grant.status, grant.stderr).toBe(0);
@@ -889,7 +889,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
             "-e",
             `const h = { "content-type": "application/json", "x-user-sub": "admin-forged" };
              if (process.argv[1]) h.authorization = "Bearer " + process.argv[1];
-             const r = await fetch("http://orders-app:4000/graphql", { method: "POST", headers: h, body: '{"query":"{ orders(limit: 1) { id } }"}' });
+             const r = await fetch("http://orders-api-app:4000/graphql", { method: "POST", headers: h, body: '{"query":"{ orders(limit: 1) { id } }"}' });
              console.log(r.status);`,
             bearer,
           ]);
@@ -902,7 +902,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
             "--",
             "node",
             "-e",
-            `const r = await fetch("http://orders-app:4000/graphql", { method: "POST",
+            `const r = await fetch("http://orders-api-app:4000/graphql", { method: "POST",
                headers: { "content-type": "application/json", authorization: "Bearer " + process.argv[1] },
                body: '{"query":"mutation { createOrder(total: 1) { id } }"}' });
              console.log(r.status);`,
@@ -955,14 +955,14 @@ describe("Kubernetes driver against a real k3d cluster", () => {
   it.skipIf(!ready)(
     `recovers after the database pod is killed, and keeps the data${why}`,
     async () => {
-      loadImage("orders");
+      loadImage("orders-api");
       const ns = "pbtest-k8s-recovery";
       const work = project(ns, []);
-      cpSync(join(pkg, "examples/orders"), join(work, "orders"), { recursive: true });
+      cpSync(join(pkg, "examples/orders-api"), join(work, "orders-api"), { recursive: true });
       for (const args of [
         ["init", "--name", ns],
         ["add", "postgres"],
-        ["add", "orders"],
+        ["add", "orders-api"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
 
@@ -977,7 +977,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
             "--namespace",
             ns,
             "exec",
-            "deployment/orders-app",
+            "deployment/orders-api-app",
             "--",
             "wget",
             "-qO-",
@@ -1019,7 +1019,7 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       await until(
         "the orders API to answer /health again",
         async () => {
-          const r = kc(["--namespace", ns, "exec", "deployment/orders-app", "--", "wget", "-qO-", "http://localhost:4000/health"]);
+          const r = kc(["--namespace", ns, "exec", "deployment/orders-api-app", "--", "wget", "-qO-", "http://localhost:4000/health"]);
           return r.status === 0;
         },
         120_000,

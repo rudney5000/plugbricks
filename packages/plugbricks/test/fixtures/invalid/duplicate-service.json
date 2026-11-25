@@ -6,7 +6,7 @@
   "services": [
     {
       "name": "app",
-      "image": "ghcr.io/example/orders-app:0.1.0",
+      "image": "ghcr.io/example/orders-api-app:0.1.0",
       "port": 4000,
       "healthcheck": {
         "exec": [
@@ -18,7 +18,7 @@
     },
     {
       "name": "app",
-      "image": "ghcr.io/example/orders-app:0.1.0",
+      "image": "ghcr.io/example/orders-api-app:0.1.0",
       "port": 4000,
       "healthcheck": {
         "exec": [

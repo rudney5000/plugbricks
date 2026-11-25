@@ -9,7 +9,7 @@ plugbricks is a command-line tool that assembles a federated GraphQL platform fr
 - **It does set conventions.** The project layout (`platform.json`, `platform.lock`, the bricks), the manifest, and the variables injected into a brick are the contract between a brick and the platform. This contract is what a brick author depends on, more than the command line. While the version is 0.x it can change in a minor version.
 - **A small programmatic API exists** (the `plugbricks` package exports its manifest validation, composition and planning), used by the admin and by `create-plugbricks`. It is not the way to use the tool.
 
-Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka deferred), step 6 done (the admin)** — the `orders` API and the `shipping` API that extends it (GraphQL subgraphs, each with its own database), composition checked when a brick is added, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17; the router and shipping scenario runs there since 2026-11-18). The Cosmo router is rendered for both runtimes (its configuration, its pinned image, loopback-only on Compose, a ClusterIP Service on Kubernetes). On Docker Compose and on Kubernetes, real requests through it reach the real `orders` and `shipping` APIs and their databases (end-to-end tests). `plugbricks status --runtime` reports what the runtime really runs, read-only, with a versioned JSON report (D10).
+Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka deferred), step 6 done (the admin)** — the `orders-api` API and the `shipping-api` API that extends it (GraphQL subgraphs, each with its own database), composition checked when a brick is added, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17; the router and shipping scenario runs there since 2026-11-18). The Cosmo router is rendered for both runtimes (its configuration, its pinned image, loopback-only on Compose, a ClusterIP Service on Kubernetes). On Docker Compose and on Kubernetes, real requests through it reach the real `orders-api` and `shipping-api` APIs and their databases (end-to-end tests). `plugbricks status --runtime` reports what the runtime really runs, read-only, with a versioned JSON report (D10).
 
 ## Use
 
@@ -17,16 +17,16 @@ Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka d
 npm create plugbricks mon-saas      # a new project; its README explains every folder
 cd mon-saas
 npx plugbricks add postgres         # bricks/postgres, shipped in a new project: provides "database"
-npx plugbricks add services/orders  # a path: requires "database"
+npx plugbricks add services/orders-api  # a path: requires "database"
 npx plugbricks add rabbitmq         # bricks/rabbitmq: provides "queue" (D11)
 npx plugbricks status               # add --json for machine-readable output
 npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
 npx plugbricks up                    # Docker Compose
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept
-npx plugbricks remove orders
-npx plugbricks disable shipping      # installed but no longer deployed; volumes and secrets are kept
-npx plugbricks enable shipping       # deploy it again
+npx plugbricks remove orders-api
+npx plugbricks disable shipping-api      # installed but no longer deployed; volumes and secrets are kept
+npx plugbricks enable shipping-api       # deploy it again
 npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendingDeletion
 ```
 
@@ -36,7 +36,7 @@ where you typed the command; when both exist, `add` refuses and asks for a path 
 Anything with a `/` is a path (D25).
 
 `add` also proposes what the brick needs from `bricks/`: the providers of what it requires and the bricks it declares
-in `dependencies`, and what those need in turn (`add orders-web` proposes `postgres` and `orders`). In a terminal it
+in `dependencies`, and what those need in turn (`add orders-web` proposes `postgres` and `orders-api`). In a terminal it
 asks; `--yes` adds them without asking; in a CI or a script without `--yes` it refuses a brick that cannot work without
 them, and says what it would add and the command to run again. When several bricks of `bricks/` provide the same
 capability, it asks which one, and `--yes` refuses (D26).
@@ -94,7 +94,7 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
       "tags": ["api", "graphql"],
       "services": [
         {
-          "name": "shipping-app",
+          "name": "shipping-api-app",
           "service": "app",
           "enabled": true,
           "deployed": true,
@@ -121,8 +121,8 @@ Exit codes of `status --runtime`: **0** every enabled service and the router are
     "image": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a…0205",
     "digest": "sha256:bfe6d89a…0205",
     "subgraphs": [
-      { "brick": "orders", "name": "orders-app", "state": "healthy" },
-      { "brick": "shipping", "name": "shipping-app", "state": "stopped" }
+      { "brick": "orders", "name": "orders-api-app", "state": "healthy" },
+      { "brick": "shipping", "name": "shipping-api-app", "state": "stopped" }
     ]
   },
   "undeclared": [],
@@ -142,7 +142,7 @@ viewer sees the same pages and cannot change anything. The Router page shows the
 size, source, composition and composed schema. The published package carries the built UI
 (`prepack` copies it to `dist/admin/ui`), and the `dist` test checks it.
 
-The screenshots below were taken on a real platform (`postgres`, `orders`, `shipping`, `orders-web` and
+The screenshots below were taken on a real platform (`postgres`, `orders-api`, `shipping-api`, `orders-web` and
 the router on Docker Compose, admin in `--dev`). On Compose the router has no healthcheck (its image has no shell,
 D9), so its state is shown as `Unknown` while it runs.
 
@@ -153,18 +153,18 @@ through the router, a web brick's page on its own loopback port.
 
 **What a brick needs**: a click on a brick opens a panel under the table. *Dependencies* draws everything the brick
 needs, transitively: the capabilities it requires, the entities it extends, and the plugins its manifest lists in
-`dependencies` (D21). Here `orders-web` needs `orders`, which needs `postgres`; the arrow says why. Below it, the
+`dependencies` (D21). Here `orders-web` needs `orders-api`, which needs `postgres`; the arrow says why. Below it, the
 bricks needed first, in order, and who requires this one. A brick that is needed but not installed is flagged. *Details*
 gathers status, restarts, port, `provides`, `requires`, `extends` and what would refuse its removal. A declared
-dependency protects its target from `remove` (`DEPENDENCY_IN_USE`), here `orders` while `orders-web` is installed,
+dependency protects its target from `remove` (`DEPENDENCY_IN_USE`), here `orders-api` while `orders-web` is installed,
 and from `disable` while the declaring brick is enabled; `add` warns when the declared brick is not installed, and `enable` when it is disabled;
-`up` waits only for the capabilities a brick requires. A dependency marked `optional` (here `shipping`, which
+`up` waits only for the capabilities a brick requires. A dependency marked `optional` (here `shipping-api`, which
 `orders-web` can run without) is shown as optional and protects nothing.
 
 ![The Dependencies panel of orders-web: orders-web needs orders, which needs postgres](docs/screenshots/admin-dependencies.png)
 
-**Removing a brick**: the dialog shows the CLI's refusal before anything runs, here `orders`, whose
-`Order` entity `shipping` extends.
+**Removing a brick**: the dialog shows the CLI's refusal before anything runs, here `orders-api`, whose
+`Order` entity `shipping-api` extends.
 
 ![The removal dialog for orders, blocked with EXTENDS_IN_USE](docs/screenshots/admin-remove-blocked.png)
 
@@ -238,7 +238,7 @@ the admin must run on port 4100, the redirect URI of the realm's client (D18).
 
 ```bash
 npx plugbricks add rabbitmq           # provides "queue"
-npx plugbricks add services/orders    # requires "queue": receives AMQP_URL
+npx plugbricks add services/orders-api    # requires "queue": receives AMQP_URL
 ```
 
 Each consumer gets its **own vhost, user and password**: `AMQP_URL=amqp://<brick>:<its secret>@rabbitmq-broker:5672/<brick>` and `QUEUE_NAME=<its brick name>` (D11, D12). A service declares and uses its own queue on the shared broker; the broker's administrator password is only used by the provision task, never injected into a consumer. The broker is never published, its data volume is kept by `down` and by `remove`, and its management port 15672 is an extra port of its Service (ClusterIP, never on the host).
@@ -256,7 +256,7 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `schemas/platform.schema.json`, `schemas/platform-lock.schema.json` — the two project files, as strict as the manifest.
   - `schemas/status-runtime.schema.json` — the report of `status --runtime --json`, version 1 (D10).
   - `examples/postgres/` — a base brick that provides the `database` capability; `provision/create-database.sh` creates one role and one database per consumer (idempotent).
-  - `examples/orders/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
+  - `examples/orders-api/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
   - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting its own vhost, user and `QUEUE_NAME` (D11, D12); its provision script creates them through the management API.
   - `examples/nats/` — a second `queue` provider: a NATS server (core publish/subscribe), `NATS_URL` and `SUBJECT` per consumer, no accounts or JetStream (D13).
   - `examples/queue-consumer/` — an API that requires `queue`: it declares its queue, publishes one message, consumes it, and exposes the round-trip on `/health` (`apis/queue-consumer`).
@@ -275,9 +275,9 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `test/fixtures/invalid/` — one invalid manifest per file, each with exactly one fault; `expected.json` gives the code and path it must produce.
   - `test/fixtures/cli/` — one folder per CLI scenario: `scenario.json` (steps, expected exit code, error codes, output, and the exact `docker`/`kubectl` commands, run by a fake executor), optional `bricks/` and golden `expected/` files (including `.generated/` output). Regenerate the golden files with `PLUGBRICKS_UPDATE_GOLDEN=1 npm test -w plugbricks`, then review the diff.
   - `test/` — Vitest suite, including `dist.test.ts`, which packs the package with `npm pack` and runs the built CLI, and `e2e-compose.test.ts`, which runs `up`/`down` against a real Docker engine (skipped, with the reason, where no Linux engine answers).
-- `apis/orders/` — the source of the `orders` example API (Node 22, GraphQL Yoga, `@apollo/subgraph`, `pg`): a federation v2 subgraph with its own migrations and `/health`. Built as the image `plugbricks-example/orders:0.1.0` (`docker build -t plugbricks-example/orders:0.1.0 apis/orders`), which `examples/orders/plugin.json` runs. A standalone package with its own lockfile: the brick folder holds only the manifest and the SDL, so `add` never copies `node_modules`. Its tests check that its SDL is the brick's. The image is built locally and is not published to a registry yet: build it before `up`, and load it into a Kubernetes cluster (for example `k3d image import`) before `up --runtime k8s`.
-- `apis/shipping/` — the source of the `shipping` example API, same shape as `apis/orders` (its own lockfile, migrations, `/health`, image `plugbricks-example/shipping:0.1.0`, built with `docker build -t plugbricks-example/shipping:0.1.0 apis/shipping`). Its subgraph extends the `Order` entity of the orders API with a `shipment` field (`examples/shipping/plugin.json` declares `extends: [{ plugin: "orders", entities: ["Order"] }]`) and keeps its data in its own database, which the orders API cannot reach. Its tests check that its SDL is the brick's, and a test composes all the example bricks together.
-- `apis/queue-consumer/` — the source of the queue consumer example (Node 22, `amqplib`, `/health`), same shape as `apis/orders`: a standalone package with its own lockfile, image `plugbricks-example/queue-consumer:0.1.0`, built with `docker build -t plugbricks-example/queue-consumer:0.1.0 apis/queue-consumer`. It connects with its own `AMQP_URL`, declares `QUEUE_NAME`, publishes one message and consumes it; `/health` answers 200 only after that round-trip. Its tests check the health state machine.
+- `apis/orders-api/` — the source of the `orders-api` example API (Node 22, GraphQL Yoga, `@apollo/subgraph`, `pg`): a federation v2 subgraph with its own migrations and `/health`. Built as the image `plugbricks-example/orders-api:0.1.0` (`docker build -t plugbricks-example/orders-api:0.1.0 apis/orders-api`), which `examples/orders-api/plugin.json` runs. A standalone package with its own lockfile: the brick folder holds only the manifest and the SDL, so `add` never copies `node_modules`. Its tests check that its SDL is the brick's. The image is built locally and is not published to a registry yet: build it before `up`, and load it into a Kubernetes cluster (for example `k3d image import`) before `up --runtime k8s`.
+- `apis/shipping-api/` — the source of the `shipping-api` example API, same shape as `apis/orders-api` (its own lockfile, migrations, `/health`, image `plugbricks-example/shipping-api:0.1.0`, built with `docker build -t plugbricks-example/shipping-api:0.1.0 apis/shipping-api`). Its subgraph extends the `Order` entity of the orders API with a `shipment` field (`examples/shipping-api/plugin.json` declares `extends: [{ plugin: "orders", entities: ["Order"] }]`) and keeps its data in its own database, which the orders API cannot reach. Its tests check that its SDL is the brick's, and a test composes all the example bricks together.
+- `apis/queue-consumer/` — the source of the queue consumer example (Node 22, `amqplib`, `/health`), same shape as `apis/orders-api`: a standalone package with its own lockfile, image `plugbricks-example/queue-consumer:0.1.0`, built with `docker build -t plugbricks-example/queue-consumer:0.1.0 apis/queue-consumer`. It connects with its own `AMQP_URL`, declares `QUEUE_NAME`, publishes one message and consumes it; `/health` answers 200 only after that round-trip. Its tests check the health state machine.
 - `packages/create-plugbricks/` — `npm create plugbricks <name>`: copies `template/`, writes `package.json`, and calls `initPlatform` from `plugbricks`.
 - `docs/decisions.md` — design decisions taken ahead of their implementation, with their evidence.
 - `docs/architecture.md` — how the pieces fit together, from the manifest to the running containers, with what is built and what is planned.
@@ -348,11 +348,11 @@ What comes next (publication, an easy start for a newcomer, a documentation site
    - Done: the Kubernetes end-to-end test (`packages/plugbricks/test/e2e-k8s.test.ts`) and the CI job "kubernetes (k3d)": `up` with postgres and orders, a GraphQL call, `down`, `remove` + `up --prune-volumes`, `WAIT_TIMEOUT`, on a throwaway k3d cluster named `pbtest-*` (it is skipped for any other context). Its `WAIT_TIMEOUT` scenario used to wait about five minutes for the rollout deadline; `up` now reads the wait init containers every 15 s and reports it at once (D5).
    - Later pass: kill the database pod, then `up` again, and check that the platform recovers and the data is kept.
 4. **Federation**: real APIs, the Cosmo router, composition checked at `add`, a second API with `extends`
-   - Done: the `orders` API (`apis/orders`), tested alone and on a platform.
+   - Done: the `orders-api` API (`apis/orders-api`), tested alone and on a platform.
    - Done: composition of the subgraphs checked at `add`, `remove` and `status` (`@wundergraph/composition`, D8): `COMPOSITION_FAILED`, `SUBGRAPH_SCHEMA_INVALID`, `EXTENDS_*`; a `federation` section in `platform.lock`.
-   - Done (4b-2): the `shipping` API (`apis/shipping`) extends `Order` of `orders` (`examples/shipping`), tested alone, composed with `orders` in the tests, and end to end on Docker Compose (own database, no access to the orders database, `_entities` answered, data kept across `down` and `up`).
+   - Done (4b-2): the `shipping-api` API (`apis/shipping-api`) extends `Order` of `orders-api` (`examples/shipping-api`), tested alone, composed with `orders-api` in the tests, and end to end on Docker Compose (own database, no access to the orders database, `_entities` answered, data kept across `down` and `up`).
    - Done (4b-3): the router is rendered for Docker Compose and Kubernetes: `router-config.json` built in process from the composition, the router image pinned by digest (`tools.json`), `router.port` in `platform.json`, golden-file tests (D9).
-   - Done (4b-4): real requests through the router on Docker Compose (`e2e-compose`): an order created through the router, then shipped, then read back in one request that reaches both `orders` and `shipping`; a validation error does not crash it; the playground is off; `remove shipping` then `up` recreates the router without the `shipment` field, `add shipping` brings it back; `remove orders` stays refused while shipping extends it; after `down` no router and no published port; with no subgraph, no router. The known limits observed there are in D8.
+   - Done (4b-4): real requests through the router on Docker Compose (`e2e-compose`): an order created through the router, then shipped, then read back in one request that reaches both `orders-api` and `shipping-api`; a validation error does not crash it; the playground is off; `remove shipping-api` then `up` recreates the router without the `shipment` field, `add shipping-api` brings it back; `remove orders-api` stays refused while shipping extends it; after `down` no router and no published port; with no subgraph, no router. The known limits observed there are in D8.
    - Done (4b-5): the cross-check of our router configuration against `wgc router compose` (wgc 0.133.12, pinned in `tools/wgc-crosscheck`): equal except an empty `featureFlagConfigs` (D9). The end-to-end test of the router and shipping on k3d, with requests through the router, a rollout when the composition changes and `down`, runs green in the `kubernetes (k3d)` job since 2026-11-18 (PR #14, and on `main`).
    - Done (5a): `status --runtime compose|k8s [--json]`: what the runtime really runs next to what is declared, read-only (D10), with a versioned JSON report (`schemas/status-runtime.schema.json`) and its own exit codes (3 degraded, 4 `RUNTIME_UNAVAILABLE`). Tested with recorded Compose output and hand-written Kubernetes Lists, end to end on Docker Compose, and on k3d in CI.
    - Before the first publication: the licence (Apache-2.0, D23), the version (0.1.0) and the publish workflow are in place (D24); what is left is in `docs/pre-publication-checklist.md`: the npm account and token, the example bricks for a new project, the signature of the tool checksums and the open audit items.
@@ -373,8 +373,8 @@ What comes next (publication, an easy start for a newcomer, a documentation site
    - Done (8b): `examples/keycloak` provides `oidc`: each brick that requires it gets its own confidential client and `OIDC_TOKEN_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`; `orders-web` requires it optionally (D19).
    - Done (8c): with a brick that provides `oidc`, the router requires a token of its issuer and audience (`router.yaml`, D19), starts after the provider, and `orders-web` sends its own; without one, nothing changes. Tested end to end on Docker Compose.
    - Done (8d): `plugbricks admin` finds the issuer of the platform's own oidc provider when `--issuer` is not given (D19).
-   - Done (9a, 9b): with a brick that provides `oidc`, the router passes the token on and `orders` and `shipping` check it themselves (401 without a valid token, even called directly inside the platform) (D20).
-   - Done (9c): `orders` records who created an order, `Order.createdBy` (the verified caller's `preferred_username`, else `sub`, never a header; null without a token check); the tokens, `createdBy` and the direct call refused without a token are tested end to end on Docker Compose and on k3d (D20).
-   - Done (10): `dependencies` in the manifest (`orders-web` declares `orders`), and a panel in the admin under the Bricks table: what a brick needs, transitively, in what order, and who requires it (D21). `remove orders` is refused while `orders-web` declares it, `disable orders` while `orders-web` is enabled (both `DEPENDENCY_IN_USE`), and `add` warns when the declared brick is missing; `up` does not wait for it.
-   - Done (11): an API says who may call it with an `authorization` block (`orders`: `orders:read`, `orders:write`; `shipping`: `shipping:read`, `shipping:write`). With an `oidc` provider, a valid token without the role of the operation (query or mutation) is refused by the API itself, `FORBIDDEN` and HTTP 403, even called directly; a token that is not valid is still 401. The Keycloak brick creates the roles on the API's own client and gives a brick that lists the API in `dependencies` the roles of the operations it says it uses (`orders-web` reads orders and shipments and cannot write; `"optional": true` for a dependency that is not needed to run). Without an `oidc` provider nothing changes. Tested end to end with a real Keycloak on Docker Compose and on k3d (D22). Not built: a rule on one field (`@requiresScopes`), the router enforcing the roles, and taking a role back at once (a token keeps its roles for its 300 s).
+   - Done (9a, 9b): with a brick that provides `oidc`, the router passes the token on and `orders-api` and `shipping-api` check it themselves (401 without a valid token, even called directly inside the platform) (D20).
+   - Done (9c): `orders-api` records who created an order, `Order.createdBy` (the verified caller's `preferred_username`, else `sub`, never a header; null without a token check); the tokens, `createdBy` and the direct call refused without a token are tested end to end on Docker Compose and on k3d (D20).
+   - Done (10): `dependencies` in the manifest (`orders-web` declares `orders-api`), and a panel in the admin under the Bricks table: what a brick needs, transitively, in what order, and who requires it (D21). `remove orders-api` is refused while `orders-web` declares it, `disable orders-api` while `orders-web` is enabled (both `DEPENDENCY_IN_USE`), and `add` warns when the declared brick is missing; `up` does not wait for it.
+   - Done (11): an API says who may call it with an `authorization` block (`orders-api`: `orders:read`, `orders:write`; `shipping-api`: `shipping:read`, `shipping:write`). With an `oidc` provider, a valid token without the role of the operation (query or mutation) is refused by the API itself, `FORBIDDEN` and HTTP 403, even called directly; a token that is not valid is still 401. The Keycloak brick creates the roles on the API's own client and gives a brick that lists the API in `dependencies` the roles of the operations it says it uses (`orders-web` reads orders and shipments and cannot write; `"optional": true` for a dependency that is not needed to run). Without an `oidc` provider nothing changes. Tested end to end with a real Keycloak on Docker Compose and on k3d (D22). Not built: a rule on one field (`@requiresScopes`), the router enforcing the roles, and taking a role back at once (a token keeps its roles for its 300 s).
    - Done (12): the admin shows what each API asks of a token and what its service account holds (D22): the "Authorization" and "Roles held" rows of the Details tab, and `open` for an API that requires `oidc` but declares no roles.

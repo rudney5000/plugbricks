@@ -51,12 +51,12 @@
       "apiVersion": "apps/v1",
       "kind": "Deployment",
       "metadata": {
-        "name": "orders-app",
+        "name": "orders-api-app",
         "namespace": "demo",
         "labels": {
           "app.kubernetes.io/managed-by": "plugbricks",
           "app.kubernetes.io/part-of": "demo",
-          "plugbricks/brick": "orders"
+          "plugbricks/brick": "orders-api"
         }
       },
       "spec": {
@@ -66,7 +66,7 @@
             "containers": [
               {
                 "name": "app",
-                "image": "plugbricks-example/orders:0.1.0"
+                "image": "plugbricks-example/orders-api:0.1.0"
               }
             ]
           }
@@ -93,12 +93,12 @@
       "apiVersion": "apps/v1",
       "kind": "Deployment",
       "metadata": {
-        "name": "shipping-app",
+        "name": "shipping-api-app",
         "namespace": "demo",
         "labels": {
           "app.kubernetes.io/managed-by": "plugbricks",
           "app.kubernetes.io/part-of": "demo",
-          "plugbricks/brick": "shipping"
+          "plugbricks/brick": "shipping-api"
         }
       },
       "spec": {
@@ -108,7 +108,7 @@
             "containers": [
               {
                 "name": "app",
-                "image": "plugbricks-example/shipping:0.1.0"
+                "image": "plugbricks-example/shipping-api:0.1.0"
               }
             ]
           }
@@ -232,20 +232,20 @@
       "apiVersion": "v1",
       "kind": "Pod",
       "metadata": {
-        "name": "orders-app-6f7d9c-x2k4q",
+        "name": "orders-api-app-6f7d9c-x2k4q",
         "namespace": "demo",
         "labels": {
           "app.kubernetes.io/managed-by": "plugbricks",
           "app.kubernetes.io/part-of": "demo",
-          "plugbricks/service": "orders-app",
-          "plugbricks/brick": "orders"
+          "plugbricks/service": "orders-api-app",
+          "plugbricks/brick": "orders-api"
         }
       },
       "spec": {
         "containers": [
           {
             "name": "app",
-            "image": "plugbricks-example/orders:0.1.0",
+            "image": "plugbricks-example/orders-api:0.1.0",
             "env": [
               {
                 "name": "DATABASE_URL",
@@ -269,8 +269,8 @@
         "containerStatuses": [
           {
             "name": "app",
-            "image": "plugbricks-example/orders:0.1.0",
-            "imageID": "docker.io/plugbricks-example/orders:0.1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "image": "plugbricks-example/orders-api:0.1.0",
+            "imageID": "docker.io/plugbricks-example/orders-api:0.1.0@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "ready": true,
             "started": true,
             "restartCount": 0,
@@ -311,20 +311,20 @@
       "apiVersion": "v1",
       "kind": "Pod",
       "metadata": {
-        "name": "shipping-app-6f7d9c-x2k4q",
+        "name": "shipping-api-app-6f7d9c-x2k4q",
         "namespace": "demo",
         "labels": {
           "app.kubernetes.io/managed-by": "plugbricks",
           "app.kubernetes.io/part-of": "demo",
-          "plugbricks/service": "shipping-app",
-          "plugbricks/brick": "shipping"
+          "plugbricks/service": "shipping-api-app",
+          "plugbricks/brick": "shipping-api"
         }
       },
       "spec": {
         "containers": [
           {
             "name": "app",
-            "image": "plugbricks-example/shipping:0.1.0",
+            "image": "plugbricks-example/shipping-api:0.1.0",
             "env": [
               {
                 "name": "DATABASE_URL",
@@ -461,13 +461,13 @@
       "apiVersion": "v1",
       "kind": "Service",
       "metadata": {
-        "name": "orders-app",
+        "name": "orders-api-app",
         "namespace": "demo",
         "labels": {
           "app.kubernetes.io/managed-by": "plugbricks",
           "app.kubernetes.io/part-of": "demo",
-          "plugbricks/service": "orders-app",
-          "plugbricks/brick": "orders"
+          "plugbricks/service": "orders-api-app",
+          "plugbricks/brick": "orders-api"
         }
       },
       "spec": {
@@ -484,13 +484,13 @@
       "apiVersion": "v1",
       "kind": "Service",
       "metadata": {
-        "name": "shipping-app",
+        "name": "shipping-api-app",
         "namespace": "demo",
         "labels": {
           "app.kubernetes.io/managed-by": "plugbricks",
           "app.kubernetes.io/part-of": "demo",
-          "plugbricks/service": "shipping-app",
-          "plugbricks/brick": "shipping"
+          "plugbricks/service": "shipping-api-app",
+          "plugbricks/brick": "shipping-api"
         }
       },
       "spec": {

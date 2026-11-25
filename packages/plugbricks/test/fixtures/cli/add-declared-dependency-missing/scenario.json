@@ -1,13 +1,13 @@
 {
-  "description": "orders-web declares that it needs orders (D21): adding it without orders succeeds and prints a warning; adding orders then re-adding orders-web is unchanged and silent",
+  "description": "orders-web declares that it needs orders-api (D21): adding it without orders-api succeeds and prints a warning; adding orders-api then re-adding orders-web is unchanged and silent",
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
     {
       "run": ["add", "examples/orders-web"],
-      "stdout": "dependency \"orders\" is not installed; orders-web will not work without it"
+      "stdout": "dependency \"orders-api\" is not installed; orders-web will not work without it"
     },
-    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/orders-api"] },
     {
       "run": ["add", "examples/orders-web"],
       "unchanged": true,

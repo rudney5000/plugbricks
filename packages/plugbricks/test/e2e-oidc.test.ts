@@ -129,7 +129,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
   let admin: AdminServer | undefined;
 
   beforeAll(async () => {
-    for (const api of ["keycloak", "orders", "orders-web"]) {
+    for (const api of ["keycloak", "orders-api", "orders-web"]) {
       const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
         encoding: "utf8",
       });
@@ -139,7 +139,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     spawnSync("docker", ["compose", "--project-name", brickProject, "down", "--volumes", "--remove-orphans"], { encoding: "utf8" });
     rmSync(work, { recursive: true, force: true });
     mkdirSync(project, { recursive: true });
-    for (const brick of ["postgres", "keycloak", "orders", "orders-web"])
+    for (const brick of ["postgres", "keycloak", "orders-api", "orders-web"])
       cpSync(join(pkg, "examples", brick), join(project, brick), { recursive: true });
     for (const args of [
       ["init", "--name", brickProject],
@@ -148,7 +148,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       // orders-web requires oidc optionally (D19): with keycloak here, it gets its own client.
       ["add", "orders-web"],
       // A subgraph, so the platform has a router; with keycloak providing oidc, it requires a token (D19).
-      ["add", "orders"],
+      ["add", "orders-api"],
     ]) {
       const r = cli(args);
       expect(r.code, `${args.join(" ")}\n${r.out}`).toBe(0);
@@ -212,9 +212,9 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
       azp: "orders-web",
     });
     expect(token.aud).toContain("plugbricks-router");
-    // D22: orders-web lists orders (queries by default), so its service account holds orders:read under the client of
-    // orders, and nothing else of orders: no orders:write. The roles are in the token, not looked up when it is used.
-    expect(token.roles.orders).toEqual({ roles: ["orders:read"] });
+    // D22: orders-web lists orders-api (queries by default), so its service account holds orders:read under the client
+    // of orders-api, and nothing else of it: no orders:write. The roles are in the token, not looked up when it is used.
+    expect(token.roles["orders-api"]).toEqual({ roles: ["orders:read"] });
 
     // The provision task ran once per up and is idempotent; its secret never went on a command line.
     const provision = spawnSync(
@@ -324,7 +324,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
           "k=/opt/keycloak/bin/kcadm.sh; c=$(mktemp -d)",
           'login() { "$k" "$@" --config "$c/kcadm.config"; }',
           "login config credentials --server http://127.0.0.1:8080 --realm master --user admin >/dev/null",
-          "login add-roles -r plugbricks --uusername service-account-orders-web --cclientid orders --rolename orders:write",
+          "login add-roles -r plugbricks --uusername service-account-orders-web --cclientid orders-api --rolename orders:write",
         ].join("; "),
       ],
       { encoding: "utf8" },
@@ -354,7 +354,7 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
           "orders-web-app",
           "node",
           "-e",
-          `const r = await fetch("http://orders-app:4000/graphql", { method: "POST", headers: ${JSON.stringify({ "content-type": "application/json", ...headers })}, body: JSON.stringify({ query: ${JSON.stringify(query)} }) }); console.log(r.status);`,
+          `const r = await fetch("http://orders-api-app:4000/graphql", { method: "POST", headers: ${JSON.stringify({ "content-type": "application/json", ...headers })}, body: JSON.stringify({ query: ${JSON.stringify(query)} }) }); console.log(r.status);`,
         ],
         { encoding: "utf8" },
       );
