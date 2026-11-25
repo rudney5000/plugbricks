@@ -150,7 +150,7 @@ function readJson(file: string, label: string): unknown {
  * platform.lock are identical on Linux, macOS and Windows. `p` is the path flavour of the
  * running OS; tests pass path.win32 to check the Windows behaviour on any machine.
  */
-export function portableRelative(from: string, to: string, p: path.PlatformPath = path): string | undefined {
+export function portableRelative(from: string, to: string, p: typeof path = path): string | undefined {
   const rel = p.relative(from, to);
   // On Windows, two paths on different drives have no relative path: path.relative returns the
   // absolute target ("D:\\bricks\\pg"), which would be meaningless on another machine or OS.
@@ -163,10 +163,13 @@ export function portableRelative(from: string, to: string, p: path.PlatformPath 
  * Refuses (BRICK_PATH_NOT_PORTABLE) a folder on another Windows drive, and a folder name that
  * contains a backslash (legal on Linux and macOS, a separator on Windows).
  */
-export function brickSource(root: string, brickDir: string, brick: string, p: path.PlatformPath = path): string {
+export function brickSource(root: string, brickDir: string, brick: string, p: typeof path = path): string {
   const rel = portableRelative(root, brickDir, p);
   if (rel === undefined) {
-    const drive = p.parse(p.resolve(brickDir)).root.replace(/[\\/]+$/, "");
+    // The separators at the end of the root are cut one by one: a regular expression on a library's string is flagged
+    // as slow on long runs of "/" (CodeQL js/polynomial-redos), and a drive root is two or three characters.
+    let drive = p.parse(p.resolve(brickDir)).root;
+    while (drive.endsWith("/") || drive.endsWith("\\")) drive = drive.slice(0, -1);
     fail("BRICK_PATH_NOT_PORTABLE", {
       brick,
       detail: `its folder is on another drive (${drive}) than the platform; copy the brick under the platform folder`,

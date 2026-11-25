@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "rootDir": ".",
     "noEmit": true,
-    "newLine": "lf"
+    "newLine": "lf",
+    "types": ["node"]
   },
   "include": ["src", "test"]
 }
