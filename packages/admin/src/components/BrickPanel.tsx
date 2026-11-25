@@ -220,7 +220,8 @@ function Dependencies({ bricks, brick }: { bricks: AdminBrick[]; brick: AdminBri
       </div>
       <p className="text-xs text-slate-500">
         The order is the one the links give. When you deploy, plugbricks itself waits only for the capabilities a brick requires. A declared
-        link keeps its target from being removed while this brick is installed, and from being disabled while this brick is enabled.
+        link keeps its target from being removed while this brick is installed, and from being disabled while this brick is enabled, unless
+        it is optional.
       </p>
     </div>
   );

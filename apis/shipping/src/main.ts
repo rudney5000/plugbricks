@@ -1,6 +1,6 @@
 import pg from "pg";
 import { createApp } from "./app.js";
-import { tokenCheckFromEnv } from "./auth.js";
+import { authorizationFromEnv, tokenCheckFromEnv } from "./auth.js";
 import { migrate } from "./db.js";
 
 // OIDC_ISSUER, OIDC_JWKS_URL and OIDC_AUDIENCE come with the oidc capability (D20): every request then needs a valid token.
@@ -14,6 +14,23 @@ const checkToken = (() => {
   }
 })();
 if (checkToken) console.log(`shipping: requests need a token from ${process.env.OIDC_ISSUER}`);
+
+// AUTHORIZATION_QUERIES_ROLE and AUTHORIZATION_MUTATIONS_ROLE come from the brick's "authorization" block (D22): a valid token
+// then also needs the role of the class of its operation. Set without the token check, they stop the API.
+const authorization = (() => {
+  try {
+    return authorizationFromEnv(process.env);
+  } catch (e) {
+    console.error(`shipping: ${(e as Error).message}`);
+    process.exit(1);
+  }
+})();
+if (authorization) {
+  const need = (["queries", "mutations"] as const).map((c) =>
+    authorization[c] ? `${c} need "${authorization[c]}"` : `${c} are open to any valid token`,
+  );
+  console.log(`shipping: ${need.join(", ")} (roles of client "${authorization.client}")`);
+}
 
 // DATABASE_URL is injected by plugbricks from the postgres brick. It holds a password: never log it.
 const url = process.env.DATABASE_URL;
@@ -37,7 +54,7 @@ pool.on("error", (e) => console.error(`shipping: idle database connection lost: 
 const applied = await migrate(pool);
 if (applied.length) console.log(`shipping: applied migrations ${applied.join(", ")}`);
 
-const server = createApp(pool, checkToken);
+const server = createApp(pool, checkToken, authorization);
 server.listen(port, () => console.log(`shipping: listening on :${port} (/graphql, /health)`));
 
 // docker stop and Kubernetes send SIGTERM: finish the requests in flight, then close the pool.

@@ -509,7 +509,7 @@ function dependenciesOf(name: string, m: BrickManifest | undefined, status: Retu
     }
   }
   for (const e of m?.extends ?? []) add(e.plugin, "extends", e.entities.join(", "), false);
-  for (const d of m?.dependencies ?? []) add(d.plugin, "declared", d.description ?? "declared in its manifest", false);
+  for (const d of m?.dependencies ?? []) add(d.plugin, "declared", d.description ?? "declared in its manifest", d.optional === true);
   return [...found.values()].sort((a, b) => a.brick.localeCompare(b.brick));
 }
 

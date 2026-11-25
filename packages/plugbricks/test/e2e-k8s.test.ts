@@ -804,17 +804,21 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       const router = await forward(ns, "router", 4000);
       try {
         // orders-web's own client, as its server asks for it: client credentials, from the issuer the browser reaches.
-        const asked = await fetch(`http://127.0.0.1:${kcPort}/realms/plugbricks/protocol/openid-connect/token`, {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            grant_type: "client_credentials",
-            client_id: "orders-web",
-            client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
-          }),
-        });
-        expect(asked.status).toBe(200);
-        const token = ((await asked.json()) as { access_token: string }).access_token;
+        const asOrdersWeb = async () => {
+          const asked = await fetch(`http://127.0.0.1:${kcPort}/realms/plugbricks/protocol/openid-connect/token`, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "client_credentials",
+              client_id: "orders-web",
+              client_secret: secretOf("PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET"),
+            }),
+          });
+          expect(asked.status).toBe(200);
+          return ((await asked.json()) as { access_token: string }).access_token;
+        };
+        // D22: orders-web lists orders, so its service account holds orders:read, and not orders:write.
+        const token = await asOrdersWeb();
 
         const graphql = async (query: string, bearer?: string) => {
           const r = await fetch(`http://127.0.0.1:${router.port}/graphql`, {
@@ -838,8 +842,35 @@ describe("Kubernetes driver against a real k3d cluster", () => {
         // No token: nothing runs through the router, not even a read.
         expect((await graphql("{ orders(limit: 1) { id } }")).status).toBe(401);
         expect((await graphql("mutation { createOrder(total: 1) { id } }")).status).toBe(401);
-        // With orders-web's token: the router passes it on, orders checks it again and records who created the order.
-        const created = await graphql("mutation { createOrder(total: 42.5) { id createdBy } }", token);
+        // orders-web's token is valid but has no write role: the router passes it on and orders refuses the mutation (D22).
+        const refused = await graphql("mutation { createOrder(total: 1) { id } }", token);
+        expect(refused.body?.data?.createOrder ?? null).toBeNull();
+        expect(JSON.stringify(refused.body)).toMatch(/FORBIDDEN|forbidden/);
+        // The operator gives the service account the write role in Keycloak, with kcadm inside its pod. A token asked
+        // afterwards has it; the one above keeps what it had until it expires.
+        const keycloakPod = podsOf(ns, "--selector", "plugbricks/service=keycloak-app").find((p) => !p.metadata.deletionTimestamp)!;
+        const grant = kc([
+          "--namespace",
+          ns,
+          "exec",
+          keycloakPod.metadata.name,
+          "--",
+          "env",
+          `KC_CLI_PASSWORD=${secretOf("PB_KEYCLOAK__ADMIN_PASSWORD")}`,
+          "bash",
+          "-c",
+          [
+            "set -e",
+            "k=/opt/keycloak/bin/kcadm.sh; c=$(mktemp -d)",
+            'login() { "$k" "$@" --config "$c/kcadm.config"; }',
+            "login config credentials --server http://127.0.0.1:8080 --realm master --user admin >/dev/null",
+            "login add-roles -r plugbricks --uusername service-account-orders-web --cclientid orders --rolename orders:write",
+          ].join("; "),
+        ]);
+        expect(grant.status, grant.stderr).toBe(0);
+        // With a token asked after the grant, the router passes it on, orders checks it again and records who created the order.
+        const writer = await asOrdersWeb();
+        const created = await graphql("mutation { createOrder(total: 42.5) { id createdBy } }", writer);
         expect(created.status).toBe(200);
         expect(created.body?.data?.createOrder?.createdBy).toBe("service-account-orders-web");
         const id = created.body!.data.createOrder.id as string;
@@ -862,11 +893,30 @@ describe("Kubernetes driver against a real k3d cluster", () => {
              console.log(r.status);`,
             bearer,
           ]);
+        const directMutation = (bearer: string) =>
+          kc([
+            "--namespace",
+            ns,
+            "exec",
+            pod.metadata.name,
+            "--",
+            "node",
+            "-e",
+            `const r = await fetch("http://orders-app:4000/graphql", { method: "POST",
+               headers: { "content-type": "application/json", authorization: "Bearer " + process.argv[1] },
+               body: '{"query":"mutation { createOrder(total: 1) { id } }"}' });
+             console.log(r.status);`,
+            bearer,
+          ]);
         const without = direct("");
         expect(without.status, without.stderr).toBe(0);
         expect(without.stdout.trim().split("\n").pop()).toBe("401");
         const withToken = direct(token);
         expect(withToken.stdout.trim().split("\n").pop()).toBe("200");
+        // Past the router the roles apply too: the read-only token is refused a mutation by orders itself (403).
+        const readOnlyWrites = directMutation(token);
+        expect(readOnlyWrites.stdout.trim().split("\n").pop()).toBe("403");
+        expect(directMutation(writer).stdout.trim().split("\n").pop()).toBe("200");
       } finally {
         router.stop();
         keycloak.stop();

@@ -223,6 +223,11 @@ export function main(argv: string[], io: Io): number {
           for (const dep of r.missingDependencies) {
             io.stdout(`  dependency "${dep}" is not installed; ${r.name} will not work without it`);
           }
+          if (r.openApi) {
+            io.stdout(
+              `  ${r.name} serves GraphQL and requires oidc but has no "authorization" block: with an oidc provider, any valid token can call it`,
+            );
+          }
           return 0;
         }
         case "remove": {

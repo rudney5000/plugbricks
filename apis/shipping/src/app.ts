@@ -4,7 +4,7 @@ import { buildSubgraphSchema } from "@apollo/subgraph";
 import { GraphQLError, parse } from "graphql";
 import { createYoga } from "graphql-yoga";
 import type pg from "pg";
-import type { Caller, TokenCheck } from "./auth.js";
+import { authorizationPlugin, type Authorization, type Caller, type TokenCheck } from "./auth.js";
 import { createShipment, findShipment, isOrderId } from "./db.js";
 
 /** The SDL shipped with the brick (examples/shipping/schema.graphql holds the same text). */
@@ -43,10 +43,12 @@ function resolvers(pool: pg.Pool) {
  * The HTTP server: GraphQL on /graphql, and /health, which answers 200 only while the database
  * answers (the brick's healthcheck calls it). Nothing else is served.
  */
-export function createApp(pool: pg.Pool, checkToken?: TokenCheck): Server {
+export function createApp(pool: pg.Pool, checkToken?: TokenCheck, authorization?: Authorization): Server {
   const schema = buildSubgraphSchema([{ typeDefs: parse(typeDefs), resolvers: resolvers(pool) as never }]);
   // The resolvers find the caller, checked below, in their context (D20); undefined without a token check.
-  const yoga = createYoga<{ caller?: Caller }>({ schema, graphqlEndpoint: "/graphql", landingPage: false, logging: "warn" });
+  // With roles (D22), an operation whose class the caller's token has no role for stops before any resolver runs.
+  const plugins = checkToken && authorization ? [authorizationPlugin(authorization)] : [];
+  const yoga = createYoga<{ caller?: Caller }>({ schema, graphqlEndpoint: "/graphql", landingPage: false, logging: "warn", plugins });
   return createServer((req: IncomingMessage, res: ServerResponse) => {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
     if (path === "/health") {

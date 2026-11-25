@@ -54,8 +54,29 @@ describe("example manifests (milestone 1 criterion)", () => {
   it("orders-web declares that it needs orders, which no capability says", () => {
     const m = load("examples/orders-web/plugin.json");
     expect(validateManifest(m)).toEqual({ ok: true });
-    expect(m.dependencies.map((d: { plugin: string }) => d.plugin)).toEqual(["orders"]);
+    // The shipment is shown when shipping is installed, and the page works without it: an optional dependency (D22).
+    expect(m.dependencies.map((d: { plugin: string; optional?: boolean }) => [d.plugin, d.optional === true])).toEqual([
+      ["orders", false],
+      ["shipping", true],
+    ]);
     expect(Object.keys(m.requires)).toEqual(["oidc"]);
+  });
+
+  it("accepts the roles of an API and the operations a dependency uses (D22)", () => {
+    const orders = load("examples/orders/plugin.json");
+    const withBlock = (authorization: unknown) => validateManifest({ ...orders, authorization });
+    expect(withBlock({ queries: "orders:read", mutations: "orders:write" })).toEqual({ ok: true });
+    // One class alone is a manifest of its own: the other class stays at D20, any valid token.
+    expect(withBlock({ queries: "orders.read" })).toEqual({ ok: true });
+    expect(withBlock({ mutations: "orders_write-2" })).toEqual({ ok: true });
+    const web = load("examples/orders-web/plugin.json");
+    for (const operations of [["queries"], ["mutations"], ["queries", "mutations"]]) {
+      expect(validateManifest({ ...web, dependencies: [{ plugin: "orders", operations }] }), operations.join()).toEqual({ ok: true });
+    }
+    // Neither an empty list (the default is "queries": leave the field out), nor the same class twice.
+    for (const operations of [[], ["queries", "queries"]]) {
+      expect(validateManifest({ ...web, dependencies: [{ plugin: "orders", operations }] }).ok, JSON.stringify(operations)).toBe(false);
+    }
   });
 
   it("postgres keeps its data volume when removed", () => {
