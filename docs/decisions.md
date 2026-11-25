@@ -1781,6 +1781,50 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done here.** The admin's "add" takes the same argument (it runs the CLI) but does not list `bricks/`; adding
   what a brick needs, with confirmation, is the next step of the roadmap (section 2, step 2).
 
+## D26. `add` proposes what a brick needs from `bricks/`, and adds it only with the person's agreement
+
+- **Status:** implemented (2026-11-25). Step 2 of section 2 of `docs/roadmap.md`; it builds on D25.
+- **Context:** `add orders` on a platform without a database was refused (`REQUIRED_CAPABILITY_MISSING`), and the
+  person had to find which brick provides `database`. With D25, the project's `bricks/` folder says what can be
+  added. D21 records what a brick declares it needs besides its capabilities (`orders-web` needs `orders`).
+- **Decision.**
+  - **What is proposed** (`src/needs.ts`): for each capability the brick requires (not the optional ones, D19) that
+    no installed brick provides, the brick of `bricks/` that provides it; for each plugin it declares in
+    `dependencies` (not the optional ones) and that is not installed, `bricks/<plugin>`; and, in turn, what those
+    need. Each brick comes after what it needs. Never the other way round: `add orders` never proposes `orders-web`.
+    Only the valid bricks of `bricks/` whose folder carries their name are proposed (as `add <name>`, D25).
+  - **Required or declared.** A proposed brick is *required* when the brick asked for cannot be added without it:
+    it provides what that brick requires, or what such a required brick requires. One reached only through a
+    declared dependency is not (D21 made a missing dependency a warning, not a refusal).
+  - **Asking.** In a terminal (`bin.ts`: file descriptors 0 and 1 are both terminals) `add` lists the bricks with
+    why, then asks `Add … too? [y/N]`; only `y` or `yes` agrees. `--yes` (`-y`, `add` only) agrees in advance and
+    asks nothing. Otherwise nothing waits: a CI, a pipe, and the admin's actions, which run the CLI as a child
+    process.
+  - **Without agreement.** When one of the proposed bricks is required: `ADD_NEEDS_CONFIRMATION` without a
+    terminal (the message ends with the command to run again, `plugbricks add <same argument> --yes`, with `--dir`
+    when it was given), `ADD_NOT_CONFIRMED` when the person said no; nothing is written. When none is: the brick is
+    added alone, with the warning of the missing dependency and the command that adds them too.
+  - **Several providers.** When several bricks of `bricks/` provide a capability, the person chooses: in a terminal
+    `add` asks which one (three tries; an empty answer cancels), with `--yes` or without a terminal it refuses
+    (`CAPABILITY_PROVIDER_CHOICE`, naming the candidates and `plugbricks add <the first>` as an example). Nothing is
+    picked silently.
+  - **When nothing can be proposed.** A need that no brick of `bricks/` meets, a brick that would be refused, or
+    another brick of the same name installed: `add` proposes nothing and says what it said before.
+  - **A brick already installed as it is** still gets what it lacks. The warning line says
+    `plugbricks add orders-web --yes` adds the dependency too, so that command must work on an installed
+    `orders-web`.
+- **Writing.** The bricks are added one by one with the same checks as any `add`, in one run under the platform lock
+  (D16). If one is refused on the way (a composition error, say), the ones before it stay added, each a valid platform,
+  and the output lists them.
+- **Tested.** Unit tests of `planNeeds` (`test/needs.test.ts`: order, required or declared, a cycle of declared
+  dependencies, optional needs, choices, unmet needs and bricks skipped). CLI scenarios `add-needs-yes` (golden
+  files), `add-needs-no-terminal`, `add-needs-dependency-only`, `add-needs-asked`, `add-needs-declined` and
+  `add-needs-choice`, with a step field `answers` for what the person types. By hand in a pseudo-terminal (`script`):
+  the choice between `nats` and `rabbitmq`, then the confirmation, then the order of the adds.
+- **Not done here.** The admin cannot answer: an add from the admin that needs another brick is refused with the
+  command to run. The `$schema` of the bricks copied into a new project (D25) is the relative path of the
+  repository, which an editor cannot resolve there.
+
 ---
 
 ## Already applied (milestone 2)

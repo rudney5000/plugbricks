@@ -35,6 +35,12 @@ A name (`postgres`) adds the brick of the project's `bricks/` folder; a new proj
 where you typed the command; when both exist, `add` refuses and asks for a path (`./postgres` or `bricks/postgres`).
 Anything with a `/` is a path (D25).
 
+`add` also proposes what the brick needs from `bricks/`: the providers of what it requires and the bricks it declares
+in `dependencies`, and what those need in turn (`add orders-web` proposes `postgres` and `orders`). In a terminal it
+asks; `--yes` adds them without asking; in a CI or a script without `--yes` it refuses a brick that cannot work without
+them, and says what it would add and the command to run again. When several bricks of `bricks/` provide the same
+capability, it asks which one, and `--yes` refuses (D26).
+
 `plugbricks` manages three things in a project:
 
 - `platform.json` — what you want: installed bricks and where each came from, and `router.port` (default 4000, 1024 to 65535): the port the router is published on, on `127.0.0.1` only, with Docker Compose, and the port of its ClusterIP Service on Kubernetes.

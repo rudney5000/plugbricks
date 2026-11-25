@@ -1,0 +1,22 @@
+{
+  "description": "in a terminal, an answer other than yes refuses a brick that cannot work without what was proposed (ADD_NOT_CONFIRMED, D26), and writes nothing; for a declared dependency only, the brick is added alone",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
+    { "mutate": { "copyDir": { "from": "examples/orders", "to": "bricks/orders" } } },
+    {
+      "run": ["add", "orders"],
+      "answers": [""],
+      "exit": 1,
+      "codes": ["ADD_NOT_CONFIRMED"],
+      "stderr": "orders cannot be added without postgres; nothing was added",
+      "unchanged": true
+    },
+    { "run": ["add", "postgres"] },
+    {
+      "run": ["add", "examples/orders-web"],
+      "answers": ["n"],
+      "stdout": ["Add orders too? [y/N] n", "Added orders-web", "dependency \"orders\" is not installed"]
+    }
+  ]
+}

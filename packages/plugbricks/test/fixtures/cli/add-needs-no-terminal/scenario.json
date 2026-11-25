@@ -1,0 +1,20 @@
+{
+  "description": "without a terminal and without --yes, add does not wait (D26): it refuses a brick that cannot work without what bricks/ would give it (ADD_NEEDS_CONFIRMATION), says what it would add and the command to run again, and writes nothing",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
+    {
+      "run": ["add", "examples/orders"],
+      "exit": 1,
+      "codes": ["ADD_NEEDS_CONFIRMATION"],
+      "stdout": "orders needs:\n  postgres (bricks/postgres): provides \"database\" to orders",
+      "stderr": "orders cannot be added without postgres, which add would take from bricks/; nothing was added. To add them too: plugbricks add examples/orders --yes",
+      "unchanged": true
+    },
+    {
+      "run": ["add", "postgres", "--dir", "."],
+      "stdout": "Added postgres 1.0.0",
+      "notStdout": "needs:"
+    }
+  ]
+}

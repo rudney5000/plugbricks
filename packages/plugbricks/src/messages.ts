@@ -92,6 +92,11 @@ export const MESSAGES = {
   BRICK_NOT_FOUND: "no plugin.json found at {path}",
   BRICK_NOT_IN_FOLDER: 'no brick named "{name}" in {folder}: {detail}',
   BRICK_NAME_AMBIGUOUS: 'both {folder}{name} and the folder "{name}" here hold a brick; write ./{name} or {folder}{name} to say which one',
+  ADD_NEEDS_CONFIRMATION:
+    "{brick} cannot be added without {bricks}, which add would take from {folder}; nothing was added. To add them too: {command}",
+  ADD_NOT_CONFIRMED: "{brick} cannot be added without {bricks}; nothing was added",
+  CAPABILITY_PROVIDER_CHOICE:
+    'several bricks of {folder} provide "{capability}", which {brick} requires: {candidates}; add the one you want first, for example: {command}',
   BRICK_NAME_MISMATCH: '{path} is the brick "{actual}", not "{name}"; name its folder after the brick, or add it by its path',
   BRICK_PATH_NOT_PORTABLE: 'brick "{brick}" cannot be used on every OS: {detail}',
   MANIFEST_INVALID: "{path} is not a valid plugin manifest; see the issues below",
