@@ -9,6 +9,13 @@ updates:
     groups:
       npm-dependencies:
         patterns: ["*"]
+    # The composer (@wundergraph/composition, cosmo-shared) asks for graphql ^16.9 and @graphql-tools/utils ^12.1:
+    # a new major of either cannot be taken until it does (D8). Patches and minors still come.
+    ignore:
+      - dependency-name: "graphql"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@graphql-tools/utils"
+        update-types: ["version-update:semver-major"]
 
   # apis/orders-api is a standalone package with its own lock file (not an npm workspace).
   - package-ecosystem: npm

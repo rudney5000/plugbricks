@@ -182,8 +182,8 @@ object store (MinIO), a test mail server (Mailpit). Kafka stays deferred (sectio
 - **Sign-in to the admin on k3d.** The sign-in is tested end to end on Docker Compose only; the k3d job covers the
   tokens through the router (D18).
 - **D22 step B**: a rule per field (`@requiresScopes`) and the router enforcing it too. Only if a real field asks for it.
-- **A Dependabot `ignore` rule** for `graphql` and `@graphql-tools/utils`: the composer needs 16 and 12, and Dependabot
-  proposes 17 and 13 again (#62 and #65). Note it in D8.
+- ~~**A Dependabot `ignore` rule** for `graphql` and `@graphql-tools/utils`~~: done on 2026-11-25 (majors ignored for the
+  root directory, D8).
 - **Kafka**, deferred (and section 7 for the other bricks).
 - **Taking grants back** in Keycloak when a dependency is removed (D22 limit).
 - **The newcomer's test** (`npm create plugbricks`, then `npm install`) resumes when the packages are published; the
