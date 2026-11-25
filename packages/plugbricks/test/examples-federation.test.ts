@@ -29,15 +29,15 @@ function exampleSubgraphs(): SubgraphInput[] {
 describe("the example bricks, composed together", () => {
   it("orders and shipping compose, and shipping extends the Order entity of orders", () => {
     const inputs = exampleSubgraphs();
-    expect(inputs.map((i) => i.brick)).toEqual(["orders", "shipping"]);
-    expect(inputs.find((i) => i.brick === "shipping")?.extends).toEqual([{ plugin: "orders", entities: ["Order"] }]);
+    expect(inputs.map((i) => i.brick)).toEqual(["orders-api", "shipping-api"]);
+    expect(inputs.find((i) => i.brick === "shipping-api")?.extends).toEqual([{ plugin: "orders-api", entities: ["Order"] }]);
     const result = composeSubgraphs(inputs);
     expect(result.ok, result.ok ? "" : result.issues.map((i) => i.message).join("\n")).toBe(true);
-    if (result.ok) expect(result.federation?.subgraphs).toEqual(["orders", "shipping"]);
+    if (result.ok) expect(result.federation?.subgraphs).toEqual(["orders-api", "shipping-api"]);
   });
 
   it("shipping alone is refused: its owner is missing", () => {
-    const shippingOnly = exampleSubgraphs().filter((i) => i.brick === "shipping");
+    const shippingOnly = exampleSubgraphs().filter((i) => i.brick === "shipping-api");
     const result = composeSubgraphs(shippingOnly);
     expect(result.ok === false && result.issues.map((i) => i.code)).toEqual(["EXTENDS_OWNER_MISSING"]);
   });

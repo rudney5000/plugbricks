@@ -17,14 +17,14 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
       "run": [
         "status"
       ],
-      "stdout": "orders 0.1.0  requires database from postgres (wait healthy, 120s)",
+      "stdout": "orders-api 0.1.0  requires database from postgres (wait healthy, 120s)",
       "unchanged": true
     }
   ]

@@ -6,9 +6,9 @@ const DIGEST = "sha256:" + "a".repeat(64);
 describe("parseImageRef", () => {
   it.each([
     ["postgres:16.4-alpine", { repository: "postgres", tag: "16.4-alpine" }],
-    ["ghcr.io/example/orders-app:0.1.0", { repository: "example/orders-app", tag: "0.1.0" }],
-    ["localhost:5000/orders-app:1.2.3", { repository: "orders-app", tag: "1.2.3" }],
-    ["localhost:5000/orders-app", { repository: "orders-app" }],
+    ["ghcr.io/example/orders-api-app:0.1.0", { repository: "example/orders-api-app", tag: "0.1.0" }],
+    ["localhost:5000/orders-api-app:1.2.3", { repository: "orders-api-app", tag: "1.2.3" }],
+    ["localhost:5000/orders-api-app", { repository: "orders-api-app" }],
     [`nats@${DIGEST}`, { repository: "nats", digest: DIGEST }],
     [`nats:2.10.1@${DIGEST}`, { repository: "nats", tag: "2.10.1", digest: DIGEST }],
   ])("%s", (image, ref) => {

@@ -1,5 +1,5 @@
 {
-  "description": "orders requires database and no installed brick provides it",
+  "description": "orders-api requires database and no installed brick provides it",
   "steps": [
     {
       "run": [
@@ -11,7 +11,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ],
       "exit": 1,
       "codes": [

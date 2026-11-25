@@ -17,7 +17,7 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
@@ -33,11 +33,11 @@
         {
           "match": "up --detach",
           "status": 1,
-          "stderr": "Error response from daemon: pull access denied for ghcr.io/example/orders-app"
+          "stderr": "Error response from daemon: pull access denied for ghcr.io/example/orders-api-app"
         },
         {
           "match": "ps --all",
-          "stdout": "{\"Service\":\"orders-wait-database\",\"ExitCode\":124}\n"
+          "stdout": "{\"Service\":\"orders-api-wait-database\",\"ExitCode\":124}\n"
         }
       ],
       "commands": [

@@ -108,18 +108,22 @@ describe("Docker Compose driver against a real Docker engine", () => {
     `runs the orders API on its own database: data kept across down/up, no access to another consumer's database${why}`,
     () => {
       const repo = fileURLToPath(new URL("../../../", import.meta.url));
-      const build = spawnSync("docker", ["build", "--quiet", "--tag", "plugbricks-example/orders:0.1.0", join(repo, "apis/orders")], {
-        encoding: "utf8",
-      });
+      const build = spawnSync(
+        "docker",
+        ["build", "--quiet", "--tag", "plugbricks-example/orders-api:0.1.0", join(repo, "apis/orders-api")],
+        {
+          encoding: "utf8",
+        },
+      );
       expect(build.status, build.stderr).toBe(0);
 
       const name = "pbtest-orders";
       const work = project(name, ["shop"]);
-      cpSync(join(pkg, "examples/orders"), join(work, "orders"), { recursive: true });
+      cpSync(join(pkg, "examples/orders-api"), join(work, "orders-api"), { recursive: true });
       for (const args of [
         ["init", "--name", name],
         ["add", "postgres"],
-        ["add", "orders"],
+        ["add", "orders-api"],
         ["add", "shop"],
       ])
         expect(cli(work, args).code).toBe(0);
@@ -143,7 +147,7 @@ describe("Docker Compose driver against a real Docker engine", () => {
             "content-type: application/json",
             "--post-data",
             JSON.stringify({ query }),
-            "http://orders-app:4000/graphql",
+            "http://orders-api-app:4000/graphql",
           ],
           { encoding: "utf8" },
         );
@@ -158,9 +162,9 @@ describe("Docker Compose driver against a real Docker engine", () => {
       expect(cli(work, ["up"]).code).toBe(0);
       expect(gql(`{ order(id: "${id}") { id total } }`)).toEqual({ data: { order: { id, total: 42.5 } } });
 
-      // orders' role cannot even connect to shop's database (the provision task revokes PUBLIC).
+      // orders-api's role cannot even connect to shop's database (the provision task revokes PUBLIC).
       const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8");
-      const pw = /^PB_POSTGRES__ORDERS__CONSUMER_PASSWORD=(\w+)$/m.exec(secrets)![1];
+      const pw = /^PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD=(\w+)$/m.exec(secrets)![1];
       const probe = spawnSync(
         "docker",
         [
@@ -171,7 +175,7 @@ describe("Docker Compose driver against a real Docker engine", () => {
           "-T",
           "shop-api",
           "psql",
-          `postgres://orders:${pw}@postgres-db:5432/shop`,
+          `postgres://orders-api:${pw}@postgres-db:5432/shop`,
           "-Atc",
           "select 1",
         ],
@@ -243,7 +247,7 @@ let apisBuilt = false;
 function buildExampleApis(): void {
   if (apisBuilt) return;
   const repo = fileURLToPath(new URL("../../../", import.meta.url));
-  for (const api of ["orders", "shipping", "orders-web"]) {
+  for (const api of ["orders-api", "shipping-api", "orders-web"]) {
     const build = spawnSync("docker", ["build", "--quiet", "--tag", `plugbricks-example/${api}:0.1.0`, join(repo, "apis", api)], {
       encoding: "utf8",
     });
@@ -283,12 +287,12 @@ describe("the router in front of orders and shipping", () => {
     async () => {
       buildExampleApis();
       work = project(name, []);
-      for (const brick of ["orders", "shipping"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const brick of ["orders-api", "shipping-api"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
       for (const args of [
         ["init", "--name", name],
         ["add", "postgres"],
-        ["add", "orders"],
-        ["add", "shipping"],
+        ["add", "orders-api"],
+        ["add", "shipping-api"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
       routerPort(work, port);
@@ -315,12 +319,12 @@ describe("the router in front of orders and shipping", () => {
           encoding: "utf8",
         });
       const databases = psql("SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY 1");
-      expect(databases.stdout.trim().split("\n"), databases.stderr).toEqual(["orders", "postgres", "shipping"]);
+      expect(databases.stdout.trim().split("\n"), databases.stderr).toEqual(["orders-api", "postgres", "shipping-api"]);
       const roles = psql("SELECT rolname FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY 1");
-      expect(roles.stdout.trim().split("\n"), roles.stderr).toEqual(["orders", "postgres", "shipping"]);
+      expect(roles.stdout.trim().split("\n"), roles.stderr).toEqual(["orders-api", "postgres", "shipping-api"]);
       const secrets = readFileSync(join(work, ".secrets/secrets.env"), "utf8");
       const password = (consumer: string) =>
-        new RegExp(`^PB_POSTGRES__${consumer.toUpperCase()}__CONSUMER_PASSWORD=(\\w+)$`, "m").exec(secrets)![1];
+        new RegExp(`^PB_POSTGRES__${consumer.toUpperCase().replace(/-/g, "_")}__CONSUMER_PASSWORD=(\\w+)$`, "m").exec(secrets)![1];
       const connect = (role: string, database: string) =>
         spawnSync(
           "docker",
@@ -337,12 +341,12 @@ describe("the router in front of orders and shipping", () => {
           ],
           { encoding: "utf8" },
         );
-      expect(connect("shipping", "shipping").stdout.trim()).toBe("shipping|shipping");
-      const denied = connect("shipping", "orders");
+      expect(connect("shipping-api", "shipping-api").stdout.trim()).toBe("shipping-api|shipping-api");
+      const denied = connect("shipping-api", "orders-api");
       expect(denied.status).not.toBe(0);
-      expect(denied.stderr).toMatch(/permission denied for database "orders"/);
+      expect(denied.stderr).toMatch(/permission denied for database "orders-api"/);
       console.log(`shipping role on the orders database: ${denied.stderr.trim().split("\n")[0]}`);
-      expect(connect("orders", "shipping").stderr).toMatch(/permission denied for database "shipping"/);
+      expect(connect("orders-api", "shipping-api").stderr).toMatch(/permission denied for database "shipping-api"/);
 
       // 1. An order, created through the router (the orders subgraph), asked for with its shipment before it is shipped.
       const created = await ask("createOrder", "mutation { createOrder(total: 42.5) { id total status } }");
@@ -446,13 +450,13 @@ describe("the router in front of orders and shipping", () => {
     `follows the composition: remove shipping drops the field and recreates the router, add brings it back, remove orders is refused${why}`,
     async () => {
       // remove shipping, then up: the router is recreated with a configuration that has no shipment.
-      expect(cli(work, ["remove", "shipping"]).code).toBe(0);
+      expect(cli(work, ["remove", "shipping-api"]).code).toBe(0);
       const removed = cli(work, ["up"]);
       expect(removed.code, `${removed.out}\n${removed.err}`).toBe(0);
       const withoutShipping = routerContainer(name)!;
       expect(withoutShipping.id).not.toBe(firstRouter.id);
       expect(withoutShipping.hash).not.toBe(firstRouter.hash);
-      expect(containersOf(name, "--format", "{{.Names}}")).not.toContain("shipping-app");
+      expect(containersOf(name, "--format", "{{.Names}}")).not.toContain("shipping-api-app");
       await routerReady(port);
       const gone = await ask("shipment after remove shipping", ORDER, { id: orderId });
       expect(gone.body.data).toBeUndefined();
@@ -462,7 +466,7 @@ describe("the router in front of orders and shipping", () => {
       expect(alone.body).toEqual({ data: { order: { id: orderId, total: 42.5, status: "pending" } } });
 
       // add shipping again, then up: recreated again, not left stale; the same bricks give the same hash as at the start.
-      expect(cli(work, ["add", "shipping"]).code).toBe(0);
+      expect(cli(work, ["add", "shipping-api"]).code).toBe(0);
       const added = cli(work, ["up"]);
       expect(added.code, `${added.out}\n${added.err}`).toBe(0);
       const again = routerContainer(name)!;
@@ -480,9 +484,9 @@ describe("the router in front of orders and shipping", () => {
 
       // orders cannot be removed while shipping extends its Order entity, and nothing changes: no file, no container.
       const snapshot = folderHash(work);
-      const refused = cli(work, ["remove", "orders"]);
+      const refused = cli(work, ["remove", "orders-api"]);
       expect(refused.code).toBe(1);
-      expect(refused.err).toMatch(/^error EXTENDS_IN_USE: cannot remove "orders": its entities are still extended by "shipping"/m);
+      expect(refused.err).toMatch(/^error EXTENDS_IN_USE: cannot remove "orders-api": its entities are still extended by "shipping-api"/m);
       console.log(`remove orders: ${refused.err}`);
       expect(folderHash(work)).toEqual(snapshot);
       expect(routerContainer(name)!.id).toBe(again.id);
@@ -536,13 +540,13 @@ describe("a web brick in front of the router (D17)", () => {
     async () => {
       buildExampleApis();
       const work = project(name, []);
-      for (const brick of ["orders", "shipping", "orders-web"])
+      for (const brick of ["orders-api", "shipping-api", "orders-web"])
         cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
       for (const args of [
         ["init", "--name", name],
         ["add", "postgres"],
-        ["add", "orders"],
-        ["add", "shipping"],
+        ["add", "orders-api"],
+        ["add", "shipping-api"],
         ["add", "orders-web"],
       ])
         expect(cli(work, args).code, args.join(" ")).toBe(0);
@@ -609,7 +613,7 @@ describe("a web brick in front of the router (D17)", () => {
       expect(elsewhere.status).toBe(403);
 
       // Shipping stops: the page still lists the orders and says the shipment is unavailable, as in the mockup.
-      const shipping = containersOf(name, "--filter", "name=shipping-app", "--format", "{{.Names}}").trim();
+      const shipping = containersOf(name, "--filter", "name=shipping-api-app", "--format", "{{.Names}}").trim();
       expect(spawnSync("docker", ["stop", shipping], { encoding: "utf8" }).status).toBe(0);
       let degraded = "";
       await until("the degraded page", async () => {
@@ -679,12 +683,12 @@ describe("status --runtime against a running platform", () => {
     async () => {
       buildExampleApis();
       const work = project(name, []);
-      for (const brick of ["orders", "shipping"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const brick of ["orders-api", "shipping-api"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
       for (const args of [
         ["init", "--name", name],
         ["add", "postgres"],
-        ["add", "orders"],
-        ["add", "shipping"],
+        ["add", "orders-api"],
+        ["add", "shipping-api"],
       ])
         expect(cli(work, args).code).toBe(0);
       routerPort(work, port);
@@ -695,7 +699,7 @@ describe("status --runtime against a running platform", () => {
       const healthy = liveStatus(work, "status --runtime, all up");
       expect(healthy.code).toBe(0);
       expect(healthy.report.state).toBe("healthy");
-      for (const n of ["orders-app", "postgres-db", "shipping-app"]) expect(service(healthy.report, n).state, n).toBe("healthy");
+      for (const n of ["orders-api-app", "postgres-db", "shipping-api-app"]) expect(service(healthy.report, n).state, n).toBe("healthy");
       expect(healthy.report.router).toMatchObject({ state: "unknown", address: `127.0.0.1:${port}`, deployed: true });
       expect(healthy.report.router!.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 
@@ -709,27 +713,28 @@ describe("status --runtime against a running platform", () => {
       for (const forbidden of ["DATABASE_URL", "PB_", "postgres://"]) expect(healthy.text).not.toContain(forbidden);
 
       // 2. Stop one subgraph: exit 3, stopped with its exit code, and visible under the router too.
-      const stop = spawnSync("docker", ["compose", "--project-name", name, "stop", "shipping-app"], { encoding: "utf8" });
+      const stop = spawnSync("docker", ["compose", "--project-name", name, "stop", "shipping-api-app"], { encoding: "utf8" });
       expect(stop.status, stop.stderr).toBe(0);
-      const stopped = liveStatus(work, "status --runtime, shipping-app stopped");
+      const stopped = liveStatus(work, "status --runtime, shipping-api-app stopped");
       expect(stopped.code).toBe(3);
       expect(stopped.report.state).toBe("degraded");
-      expect(service(stopped.report, "shipping-app")).toMatchObject({ state: "stopped", deployed: true, enabled: true });
-      expect(service(stopped.report, "shipping-app").reason).toMatch(/^exited with code \d+$/);
-      expect(stopped.report.router!.subgraphs.find((g) => g.name === "shipping-app")!.state).toBe("stopped");
-      expect(service(stopped.report, "orders-app").state).toBe("healthy");
+      expect(service(stopped.report, "shipping-api-app")).toMatchObject({ state: "stopped", deployed: true, enabled: true });
+      expect(service(stopped.report, "shipping-api-app").reason).toMatch(/^exited with code \d+$/);
+      expect(stopped.report.router!.subgraphs.find((g) => g.name === "shipping-api-app")!.state).toBe("stopped");
+      expect(service(stopped.report, "orders-api-app").state).toBe("healthy");
 
       // 3. Start it again: healthy once its own health check passes.
-      const start = spawnSync("docker", ["compose", "--project-name", name, "start", "shipping-app"], { encoding: "utf8" });
+      const start = spawnSync("docker", ["compose", "--project-name", name, "start", "shipping-api-app"], { encoding: "utf8" });
       expect(start.status, start.stderr).toBe(0);
       await until(
-        "shipping-app healthy again",
-        async () => service(JSON.parse(cli(work, ["status", "--runtime", "compose", "--json"]).out), "shipping-app").state === "healthy",
+        "shipping-api-app healthy again",
+        async () =>
+          service(JSON.parse(cli(work, ["status", "--runtime", "compose", "--json"]).out), "shipping-api-app").state === "healthy",
         120_000,
       );
-      const back = liveStatus(work, "status --runtime, shipping-app started again");
+      const back = liveStatus(work, "status --runtime, shipping-api-app started again");
       expect(back.code).toBe(0);
-      expect(service(back.report, "shipping-app").state).toBe("healthy");
+      expect(service(back.report, "shipping-api-app").state).toBe("healthy");
     },
     900_000,
   );

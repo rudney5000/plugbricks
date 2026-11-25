@@ -1,9 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform.schema.json",
   "bricks": {
-    "orders": {
+    "orders-api": {
       "enabled": false,
-      "source": "examples/orders"
+      "source": "examples/orders-api"
     },
     "postgres": {
       "source": "examples/postgres"

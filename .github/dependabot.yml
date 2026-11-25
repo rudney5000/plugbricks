@@ -10,22 +10,22 @@ updates:
       npm-dependencies:
         patterns: ["*"]
 
-  # apis/orders is a standalone package with its own lock file (not an npm workspace).
+  # apis/orders-api is a standalone package with its own lock file (not an npm workspace).
   - package-ecosystem: npm
-    directory: /apis/orders
+    directory: /apis/orders-api
     schedule:
       interval: weekly
     groups:
-      orders-dependencies:
+      orders-api-dependencies:
         patterns: ["*"]
 
-  # Same for apis/shipping: it is kept on the same versions as apis/orders, so merge both together.
+  # Same for apis/shipping-api: it is kept on the same versions as apis/orders-api, so merge both together.
   - package-ecosystem: npm
-    directory: /apis/shipping
+    directory: /apis/shipping-api
     schedule:
       interval: weekly
     groups:
-      shipping-dependencies:
+      shipping-api-dependencies:
         patterns: ["*"]
 
   # Same for apis/queue-consumer: a standalone package with its own lock file.

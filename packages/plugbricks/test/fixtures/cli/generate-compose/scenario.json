@@ -17,14 +17,14 @@
     {
       "run": [
         "add",
-        "examples/orders"
+        "examples/orders-api"
       ]
     },
     {
       "run": [
         "generate"
       ],
-      "stdout": "Created 2 secret(s) in .secrets/: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD, PB_POSTGRES__SUPERUSER_PASSWORD"
+      "stdout": "Created 2 secret(s) in .secrets/: PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD, PB_POSTGRES__SUPERUSER_PASSWORD"
     },
     {
       "run": [
@@ -39,7 +39,7 @@
     ".generated/.gitignore"
   ],
   "expectRaw": {
-    ".secrets/secrets.env": "PB_POSTGRES__ORDERS__CONSUMER_PASSWORD=secret0001\nPB_POSTGRES__SUPERUSER_PASSWORD=secret0002\n",
+    ".secrets/secrets.env": "PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD=secret0001\nPB_POSTGRES__SUPERUSER_PASSWORD=secret0002\n",
     ".secrets/.gitignore": "*\n"
   }
 }

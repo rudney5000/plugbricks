@@ -68,8 +68,8 @@ describe("our router configuration against wgc router compose", () => {
       for (const args of [
         ["init", "--name", "demo"],
         ["add", "examples/postgres"],
-        ["add", "examples/orders"],
-        ["add", "examples/shipping"],
+        ["add", "examples/orders-api"],
+        ["add", "examples/shipping-api"],
       ]) {
         expect(run(args), args.join(" ")).toBe(0);
       }
@@ -83,7 +83,7 @@ describe("our router configuration against wgc router compose", () => {
         [
           "version: 1",
           "subgraphs:",
-          ...["orders", "shipping"].flatMap((brick) => [
+          ...["orders-api", "shipping-api"].flatMap((brick) => [
             `  - name: ${brick}`,
             `    routing_url: http://${brick}-app:4000/graphql`,
             "    schema:",

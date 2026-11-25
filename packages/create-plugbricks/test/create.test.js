@@ -43,8 +43,8 @@ const STRUCTURE = [
   "platform.json",
   "platform.lock",
   "config/README.md",
-  "services/orders/plugin.json",
-  "services/orders/schema.graphql",
+  "services/orders-api/plugin.json",
+  "services/orders-api/schema.graphql",
   "bricks/postgres/plugin.json",
   "bricks/postgres/provision/create-database.sh",
   "bricks/rabbitmq/plugin.json",
@@ -110,8 +110,8 @@ describe("npm create plugbricks <name>", () => {
     expect(pkg.devDependencies.plugbricks).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it("ships services/orders as a valid brick", () => {
-    const m = JSON.parse(readFileSync(join(project, "services/orders/plugin.json"), "utf8"));
+  it("ships services/orders-api as a valid brick", () => {
+    const m = JSON.parse(readFileSync(join(project, "services/orders-api/plugin.json"), "utf8"));
     expect(validateManifest(m)).toEqual({ ok: true });
   });
 
@@ -146,7 +146,7 @@ describe("npm create plugbricks <name>", () => {
       "platform.json",
       "platform.lock",
       ".platform/bricks/.gitkeep",
-      "services/orders/plugin.json",
+      "services/orders-api/plugin.json",
       "bricks/postgres/plugin.json",
       "config/README.md",
     ]) {
@@ -169,12 +169,12 @@ describe("npm create plugbricks <name>", () => {
     }
   });
 
-  it("lets a beginner follow the README: add the database by name, then services/orders", () => {
-    expect(cli(["add", "services/orders"], project)).toMatchObject({ code: 1 });
+  it("lets a beginner follow the README: add the database by name, then services/orders-api", () => {
+    expect(cli(["add", "services/orders-api"], project)).toMatchObject({ code: 1 });
     const pg = cli(["add", "postgres"], project);
     expect(pg.code, pg.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(project, "platform.json"), "utf8")).bricks.postgres).toEqual({ source: "bricks/postgres" });
-    const r = cli(["add", "services/orders"], project);
+    const r = cli(["add", "services/orders-api"], project);
     expect(r.code, r.stderr).toBe(0);
     expect(JSON.parse(readFileSync(join(project, "platform.lock"), "utf8")).capabilities).toEqual({ database: "postgres" });
   });
@@ -326,7 +326,7 @@ describe("published package", () => {
         "template/gitignore",
         "template/gitattributes",
         "template/README.md",
-        "template/services/orders/plugin.json",
+        "template/services/orders-api/plugin.json",
         ...SHIPPED_BRICKS.map((b) => `template/bricks/${b}/plugin.json`),
         "template/bricks/postgres/provision/create-database.sh",
       ]),

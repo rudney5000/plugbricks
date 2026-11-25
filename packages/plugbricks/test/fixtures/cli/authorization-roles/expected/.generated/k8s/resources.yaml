@@ -59,15 +59,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: orders-app
+  name: orders-api-app
   namespace: demo
   labels:
     app.kubernetes.io/managed-by: plugbricks
     app.kubernetes.io/part-of: demo
-    plugbricks/brick: orders
+    plugbricks/brick: orders-api
 spec:
   selector:
-    plugbricks/service: orders-app
+    plugbricks/service: orders-api-app
   ports:
     - name: main
       port: 4000
@@ -110,15 +110,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: shipping-app
+  name: shipping-api-app
   namespace: demo
   labels:
     app.kubernetes.io/managed-by: plugbricks
     app.kubernetes.io/part-of: demo
-    plugbricks/brick: shipping
+    plugbricks/brick: shipping-api
 spec:
   selector:
-    plugbricks/service: shipping-app
+    plugbricks/service: shipping-api-app
   ports:
     - name: main
       port: 4000
@@ -262,24 +262,24 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: orders-app
+  name: orders-api-app
   namespace: demo
   labels:
     app.kubernetes.io/managed-by: plugbricks
     app.kubernetes.io/part-of: demo
-    plugbricks/brick: orders
+    plugbricks/brick: orders-api
 spec:
   replicas: 1
   selector:
     matchLabels:
-      plugbricks/service: orders-app
+      plugbricks/service: orders-api-app
   template:
     metadata:
       labels:
         app.kubernetes.io/managed-by: plugbricks
         app.kubernetes.io/part-of: demo
-        plugbricks/brick: orders
-        plugbricks/service: orders-app
+        plugbricks/brick: orders-api
+        plugbricks/service: orders-api-app
     spec:
       initContainers:
         - name: wait-database
@@ -300,7 +300,7 @@ spec:
             - "2"
           env:
             - name: PB_WAIT_FOR
-              value: "database from postgres-db (for orders)"
+              value: "database from postgres-db (for orders-api)"
             - name: PB_WAIT_INTERVAL
               value: "2"
             - name: PB_WAIT_TIMEOUT
@@ -311,22 +311,22 @@ spec:
             - /bin/sh
             - /provision/create-database.sh
           env:
-            - name: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD
+            - name: PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD
+                  key: PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD
             - name: PB_POSTGRES__SUPERUSER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
                   key: PB_POSTGRES__SUPERUSER_PASSWORD
             - name: APP_DATABASE
-              value: orders
+              value: orders-api
             - name: APP_PASSWORD
-              value: "$(PB_POSTGRES__ORDERS__CONSUMER_PASSWORD)"
+              value: "$(PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD)"
             - name: APP_ROLE
-              value: orders
+              value: orders-api
             - name: PGHOST
               value: postgres-db
             - name: PGPASSWORD
@@ -350,7 +350,7 @@ spec:
             - "exec 3<>/dev/tcp/keycloak-app/8080 && printf 'GET /realms/plugbricks/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"
           env:
             - name: PB_WAIT_FOR
-              value: "oidc from keycloak-app (for orders)"
+              value: "oidc from keycloak-app (for orders-api)"
             - name: PB_WAIT_INTERVAL
               value: "2"
             - name: PB_WAIT_TIMEOUT
@@ -366,19 +366,19 @@ spec:
                 secretKeyRef:
                   name: plugbricks-secrets
                   key: PB_KEYCLOAK__ADMIN_PASSWORD
-            - name: PB_KEYCLOAK__ORDERS__CLIENT_SECRET
+            - name: PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_KEYCLOAK__ORDERS__CLIENT_SECRET
+                  key: PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET
             - name: ADMIN_PASSWORD
               value: "$(PB_KEYCLOAK__ADMIN_PASSWORD)"
             - name: AUDIENCE
               value: plugbricks-router
             - name: CLIENT_ID
-              value: orders
+              value: orders-api
             - name: CLIENT_SECRET
-              value: "$(PB_KEYCLOAK__ORDERS__CLIENT_SECRET)"
+              value: "$(PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET)"
             - name: GRANTS
               value: ""
             - name: KEYCLOAK_URL
@@ -393,32 +393,32 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: plugbricks-example/orders:0.1.0
+          image: plugbricks-example/orders-api:0.1.0
           ports:
             - containerPort: 4000
           env:
-            - name: PB_KEYCLOAK__ORDERS__CLIENT_SECRET
+            - name: PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_KEYCLOAK__ORDERS__CLIENT_SECRET
-            - name: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD
+                  key: PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET
+            - name: PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_POSTGRES__ORDERS__CONSUMER_PASSWORD
+                  key: PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD
             - name: AUTHORIZATION_MUTATIONS_ROLE
               value: orders:write
             - name: AUTHORIZATION_QUERIES_ROLE
               value: orders:read
             - name: DATABASE_URL
-              value: "postgres://orders:$(PB_POSTGRES__ORDERS__CONSUMER_PASSWORD)@postgres-db:5432/orders"
+              value: "postgres://orders-api:$(PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD)@postgres-db:5432/orders-api"
             - name: OIDC_AUDIENCE
               value: plugbricks-router
             - name: OIDC_CLIENT_ID
-              value: orders
+              value: orders-api
             - name: OIDC_CLIENT_SECRET
-              value: "$(PB_KEYCLOAK__ORDERS__CLIENT_SECRET)"
+              value: "$(PB_KEYCLOAK__ORDERS_API__CLIENT_SECRET)"
             - name: OIDC_ISSUER
               value: http://127.0.0.1:8080/realms/plugbricks
             - name: OIDC_JWKS_URL
@@ -516,7 +516,7 @@ spec:
             - name: CLIENT_SECRET
               value: "$(PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET)"
             - name: GRANTS
-              value: "orders/orders:read shipping/shipping:read"
+              value: "orders-api/orders:read shipping-api/shipping:read"
             - name: KEYCLOAK_URL
               value: http://keycloak-app:8080
             - name: REALM
@@ -633,24 +633,24 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: shipping-app
+  name: shipping-api-app
   namespace: demo
   labels:
     app.kubernetes.io/managed-by: plugbricks
     app.kubernetes.io/part-of: demo
-    plugbricks/brick: shipping
+    plugbricks/brick: shipping-api
 spec:
   replicas: 1
   selector:
     matchLabels:
-      plugbricks/service: shipping-app
+      plugbricks/service: shipping-api-app
   template:
     metadata:
       labels:
         app.kubernetes.io/managed-by: plugbricks
         app.kubernetes.io/part-of: demo
-        plugbricks/brick: shipping
-        plugbricks/service: shipping-app
+        plugbricks/brick: shipping-api
+        plugbricks/service: shipping-api-app
     spec:
       initContainers:
         - name: wait-database
@@ -671,7 +671,7 @@ spec:
             - "2"
           env:
             - name: PB_WAIT_FOR
-              value: "database from postgres-db (for shipping)"
+              value: "database from postgres-db (for shipping-api)"
             - name: PB_WAIT_INTERVAL
               value: "2"
             - name: PB_WAIT_TIMEOUT
@@ -682,22 +682,22 @@ spec:
             - /bin/sh
             - /provision/create-database.sh
           env:
-            - name: PB_POSTGRES__SHIPPING__CONSUMER_PASSWORD
+            - name: PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_POSTGRES__SHIPPING__CONSUMER_PASSWORD
+                  key: PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD
             - name: PB_POSTGRES__SUPERUSER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
                   key: PB_POSTGRES__SUPERUSER_PASSWORD
             - name: APP_DATABASE
-              value: shipping
+              value: shipping-api
             - name: APP_PASSWORD
-              value: "$(PB_POSTGRES__SHIPPING__CONSUMER_PASSWORD)"
+              value: "$(PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD)"
             - name: APP_ROLE
-              value: shipping
+              value: shipping-api
             - name: PGHOST
               value: postgres-db
             - name: PGPASSWORD
@@ -721,7 +721,7 @@ spec:
             - "exec 3<>/dev/tcp/keycloak-app/8080 && printf 'GET /realms/plugbricks/.well-known/openid-configuration HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"
           env:
             - name: PB_WAIT_FOR
-              value: "oidc from keycloak-app (for shipping)"
+              value: "oidc from keycloak-app (for shipping-api)"
             - name: PB_WAIT_INTERVAL
               value: "2"
             - name: PB_WAIT_TIMEOUT
@@ -737,19 +737,19 @@ spec:
                 secretKeyRef:
                   name: plugbricks-secrets
                   key: PB_KEYCLOAK__ADMIN_PASSWORD
-            - name: PB_KEYCLOAK__SHIPPING__CLIENT_SECRET
+            - name: PB_KEYCLOAK__SHIPPING_API__CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_KEYCLOAK__SHIPPING__CLIENT_SECRET
+                  key: PB_KEYCLOAK__SHIPPING_API__CLIENT_SECRET
             - name: ADMIN_PASSWORD
               value: "$(PB_KEYCLOAK__ADMIN_PASSWORD)"
             - name: AUDIENCE
               value: plugbricks-router
             - name: CLIENT_ID
-              value: shipping
+              value: shipping-api
             - name: CLIENT_SECRET
-              value: "$(PB_KEYCLOAK__SHIPPING__CLIENT_SECRET)"
+              value: "$(PB_KEYCLOAK__SHIPPING_API__CLIENT_SECRET)"
             - name: GRANTS
               value: ""
             - name: KEYCLOAK_URL
@@ -764,32 +764,32 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: plugbricks-example/shipping:0.1.0
+          image: plugbricks-example/shipping-api:0.1.0
           ports:
             - containerPort: 4000
           env:
-            - name: PB_KEYCLOAK__SHIPPING__CLIENT_SECRET
+            - name: PB_KEYCLOAK__SHIPPING_API__CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_KEYCLOAK__SHIPPING__CLIENT_SECRET
-            - name: PB_POSTGRES__SHIPPING__CONSUMER_PASSWORD
+                  key: PB_KEYCLOAK__SHIPPING_API__CLIENT_SECRET
+            - name: PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: plugbricks-secrets
-                  key: PB_POSTGRES__SHIPPING__CONSUMER_PASSWORD
+                  key: PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD
             - name: AUTHORIZATION_MUTATIONS_ROLE
               value: shipping:write
             - name: AUTHORIZATION_QUERIES_ROLE
               value: shipping:read
             - name: DATABASE_URL
-              value: "postgres://shipping:$(PB_POSTGRES__SHIPPING__CONSUMER_PASSWORD)@postgres-db:5432/shipping"
+              value: "postgres://shipping-api:$(PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD)@postgres-db:5432/shipping-api"
             - name: OIDC_AUDIENCE
               value: plugbricks-router
             - name: OIDC_CLIENT_ID
-              value: shipping
+              value: shipping-api
             - name: OIDC_CLIENT_SECRET
-              value: "$(PB_KEYCLOAK__SHIPPING__CLIENT_SECRET)"
+              value: "$(PB_KEYCLOAK__SHIPPING_API__CLIENT_SECRET)"
             - name: OIDC_ISSUER
               value: http://127.0.0.1:8080/realms/plugbricks
             - name: OIDC_JWKS_URL
@@ -831,7 +831,7 @@ metadata:
     app.kubernetes.io/part-of: demo
     plugbricks/component: router
 data:
-  router-config.json: "{\"engineConfig\":{\"defaultFlushInterval\":\"500\",\"datasourceConfigurations\":[{\"kind\":\"GRAPHQL\",\"rootNodes\":[{\"typeName\":\"Order\",\"fieldNames\":[\"id\",\"total\",\"status\",\"createdBy\"]},{\"typeName\":\"Query\",\"fieldNames\":[\"orders\",\"order\"]},{\"typeName\":\"Mutation\",\"fieldNames\":[\"createOrder\"]}],\"overrideFieldPathFromAlias\":true,\"customGraphql\":{\"fetch\":{\"url\":{\"staticVariableContent\":\"http://orders-app:4000/graphql\"},\"method\":\"POST\",\"body\":{},\"baseUrl\":{},\"path\":{}},\"subscription\":{\"enabled\":true,\"url\":{\"staticVariableContent\":\"http://orders-app:4000/graphql\"},\"protocol\":\"GRAPHQL_SUBSCRIPTION_PROTOCOL_WS\",\"websocketSubprotocol\":\"GRAPHQL_WEBSOCKET_SUBPROTOCOL_AUTO\"},\"federation\":{\"enabled\":true,\"serviceSdl\":\"extend schema\\n  @link(url: \\\"https://specs.apollo.dev/federation/v2.5\\\", import: [\\\"@key\\\"])\\n\\ntype Order @key(fields: \\\"id\\\") {\\n  id: ID!\\n  total: Float!\\n  status: String!\\n  \\\"Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20).\\\"\\n  createdBy: String\\n}\\n\\ntype Query {\\n  \\\"Newest first. limit is between 1 and 500.\\\"\\n  orders(limit: Int! = 100): [Order!]!\\n  order(id: ID!): Order\\n}\\n\\ntype Mutation {\\n  \\\"Creates an order with status pending. total must be between 0 and 9999999999.99.\\\"\\n  createOrder(total: Float!): Order!\\n}\\n\"},\"upstreamSchema\":{\"key\":\"8ac0929ca947b5577f4a839fa6aa140617c66fbf\"}},\"requestTimeoutSeconds\":\"10\",\"id\":\"0\",\"keys\":[{\"typeName\":\"Order\",\"selectionSet\":\"id\"}]},{\"kind\":\"GRAPHQL\",\"rootNodes\":[{\"typeName\":\"Order\",\"fieldNames\":[\"id\",\"shipment\"]},{\"typeName\":\"Query\",\"fieldNames\":[\"shipment\"]},{\"typeName\":\"Mutation\",\"fieldNames\":[\"shipOrder\"]}],\"childNodes\":[{\"typeName\":\"Shipment\",\"fieldNames\":[\"carrier\",\"trackingNumber\",\"status\"]}],\"overrideFieldPathFromAlias\":true,\"customGraphql\":{\"fetch\":{\"url\":{\"staticVariableContent\":\"http://shipping-app:4000/graphql\"},\"method\":\"POST\",\"body\":{},\"baseUrl\":{},\"path\":{}},\"subscription\":{\"enabled\":true,\"url\":{\"staticVariableContent\":\"http://shipping-app:4000/graphql\"},\"protocol\":\"GRAPHQL_SUBSCRIPTION_PROTOCOL_WS\",\"websocketSubprotocol\":\"GRAPHQL_WEBSOCKET_SUBPROTOCOL_AUTO\"},\"federation\":{\"enabled\":true,\"serviceSdl\":\"extend schema\\n  @link(url: \\\"https://specs.apollo.dev/federation/v2.5\\\", import: [\\\"@key\\\"])\\n\\n\\\"An order, owned by the orders subgraph. This subgraph adds the shipment to it.\\\"\\ntype Order @key(fields: \\\"id\\\") {\\n  id: ID!\\n  \\\"Null until the order was shipped.\\\"\\n  shipment: Shipment\\n}\\n\\ntype Shipment {\\n  carrier: String!\\n  trackingNumber: String\\n  status: ShipmentStatus!\\n}\\n\\nenum ShipmentStatus {\\n  PENDING\\n  SHIPPED\\n  DELIVERED\\n}\\n\\ntype Query {\\n  \\\"The shipment of an order, or null when it was not shipped.\\\"\\n  shipment(orderId: ID!): Shipment\\n}\\n\\ntype Mutation {\\n  \\\"Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once.\\\"\\n  shipOrder(orderId: ID!, carrier: String!): Shipment!\\n}\\n\"},\"upstreamSchema\":{\"key\":\"68d81cc2478e8160abc820200acba2fbaceff5df\"}},\"requestTimeoutSeconds\":\"10\",\"id\":\"1\",\"keys\":[{\"typeName\":\"Order\",\"selectionSet\":\"id\"}]}],\"fieldConfigurations\":[{\"typeName\":\"Query\",\"fieldName\":\"orders\",\"argumentsConfiguration\":[{\"name\":\"limit\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Query\",\"fieldName\":\"order\",\"argumentsConfiguration\":[{\"name\":\"id\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Query\",\"fieldName\":\"shipment\",\"argumentsConfiguration\":[{\"name\":\"orderId\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Mutation\",\"fieldName\":\"createOrder\",\"argumentsConfiguration\":[{\"name\":\"total\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Mutation\",\"fieldName\":\"shipOrder\",\"argumentsConfiguration\":[{\"name\":\"orderId\",\"sourceType\":\"FIELD_ARGUMENT\"},{\"name\":\"carrier\",\"sourceType\":\"FIELD_ARGUMENT\"}]}],\"graphqlSchema\":\"schema {\\n  query: Query\\n  mutation: Mutation\\n}\\n\\n\\\"\\\"\\\"\\nAn order, owned by the orders subgraph. This subgraph adds the shipment to it.\\n\\\"\\\"\\\"\\ntype Order {\\n  id: ID!\\n  total: Float!\\n  status: String!\\n  \\\"\\\"\\\"\\n  Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20).\\n  \\\"\\\"\\\"\\n  createdBy: String\\n  \\\"\\\"\\\"Null until the order was shipped.\\\"\\\"\\\"\\n  shipment: Shipment\\n}\\n\\ntype Query {\\n  \\\"\\\"\\\"Newest first. limit is between 1 and 500.\\\"\\\"\\\"\\n  orders(limit: Int! = 100): [Order!]!\\n  order(id: ID!): Order\\n  \\\"\\\"\\\"The shipment of an order, or null when it was not shipped.\\\"\\\"\\\"\\n  shipment(orderId: ID!): Shipment\\n}\\n\\ntype Mutation {\\n  \\\"\\\"\\\"\\n  Creates an order with status pending. total must be between 0 and 9999999999.99.\\n  \\\"\\\"\\\"\\n  createOrder(total: Float!): Order!\\n  \\\"\\\"\\\"\\n  Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once.\\n  \\\"\\\"\\\"\\n  shipOrder(orderId: ID!, carrier: String!): Shipment!\\n}\\n\\ntype Shipment {\\n  carrier: String!\\n  trackingNumber: String\\n  status: ShipmentStatus!\\n}\\n\\nenum ShipmentStatus {\\n  PENDING\\n  SHIPPED\\n  DELIVERED\\n}\",\"stringStorage\":{\"8ac0929ca947b5577f4a839fa6aa140617c66fbf\":\"schema {\\n  query: Query\\n  mutation: Mutation\\n}\\n\\ndirective @key(fields: openfed__FieldSet!, resolvable: Boolean = true) repeatable on INTERFACE | OBJECT\\n\\ndirective @link(as: String, for: link__Purpose, import: [link__Import], url: String!) repeatable on SCHEMA\\n\\ntype Mutation {\\n  \\\"\\\"\\\"\\n  Creates an order with status pending. total must be between 0 and 9999999999.99.\\n  \\\"\\\"\\\"\\n  createOrder(total: Float!): Order!\\n}\\n\\ntype Order @key(fields: \\\"id\\\") {\\n  \\\"\\\"\\\"\\n  Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20).\\n  \\\"\\\"\\\"\\n  createdBy: String\\n  id: ID!\\n  status: String!\\n  total: Float!\\n}\\n\\ntype Query {\\n  order(id: ID!): Order\\n  \\\"\\\"\\\"Newest first. limit is between 1 and 500.\\\"\\\"\\\"\\n  orders(limit: Int! = 100): [Order!]!\\n}\\n\\nscalar link__Import\\n\\nenum link__Purpose {\\n  EXECUTION\\n  SECURITY\\n}\\n\\nscalar openfed__FieldSet\",\"68d81cc2478e8160abc820200acba2fbaceff5df\":\"schema {\\n  query: Query\\n  mutation: Mutation\\n}\\n\\ndirective @key(fields: openfed__FieldSet!, resolvable: Boolean = true) repeatable on INTERFACE | OBJECT\\n\\ndirective @link(as: String, for: link__Purpose, import: [link__Import], url: String!) repeatable on SCHEMA\\n\\ntype Mutation {\\n  \\\"\\\"\\\"\\n  Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once.\\n  \\\"\\\"\\\"\\n  shipOrder(carrier: String!, orderId: ID!): Shipment!\\n}\\n\\n\\\"\\\"\\\"\\nAn order, owned by the orders subgraph. This subgraph adds the shipment to it.\\n\\\"\\\"\\\"\\ntype Order @key(fields: \\\"id\\\") {\\n  id: ID!\\n  \\\"\\\"\\\"Null until the order was shipped.\\\"\\\"\\\"\\n  shipment: Shipment\\n}\\n\\ntype Query {\\n  \\\"\\\"\\\"The shipment of an order, or null when it was not shipped.\\\"\\\"\\\"\\n  shipment(orderId: ID!): Shipment\\n}\\n\\ntype Shipment {\\n  carrier: String!\\n  status: ShipmentStatus!\\n  trackingNumber: String\\n}\\n\\nenum ShipmentStatus {\\n  DELIVERED\\n  PENDING\\n  SHIPPED\\n}\\n\\nscalar link__Import\\n\\nenum link__Purpose {\\n  EXECUTION\\n  SECURITY\\n}\\n\\nscalar openfed__FieldSet\"}},\"version\":\"00000000-0000-0000-0000-000000000000\",\"subgraphs\":[{\"id\":\"0\",\"name\":\"orders\",\"routingUrl\":\"http://orders-app:4000/graphql\"},{\"id\":\"1\",\"name\":\"shipping\",\"routingUrl\":\"http://shipping-app:4000/graphql\"}],\"compatibilityVersion\":\"1:0.68.2\"}"
+  router-config.json: "{\"engineConfig\":{\"defaultFlushInterval\":\"500\",\"datasourceConfigurations\":[{\"kind\":\"GRAPHQL\",\"rootNodes\":[{\"typeName\":\"Order\",\"fieldNames\":[\"id\",\"total\",\"status\",\"createdBy\"]},{\"typeName\":\"Query\",\"fieldNames\":[\"orders\",\"order\"]},{\"typeName\":\"Mutation\",\"fieldNames\":[\"createOrder\"]}],\"overrideFieldPathFromAlias\":true,\"customGraphql\":{\"fetch\":{\"url\":{\"staticVariableContent\":\"http://orders-api-app:4000/graphql\"},\"method\":\"POST\",\"body\":{},\"baseUrl\":{},\"path\":{}},\"subscription\":{\"enabled\":true,\"url\":{\"staticVariableContent\":\"http://orders-api-app:4000/graphql\"},\"protocol\":\"GRAPHQL_SUBSCRIPTION_PROTOCOL_WS\",\"websocketSubprotocol\":\"GRAPHQL_WEBSOCKET_SUBPROTOCOL_AUTO\"},\"federation\":{\"enabled\":true,\"serviceSdl\":\"extend schema\\n  @link(url: \\\"https://specs.apollo.dev/federation/v2.5\\\", import: [\\\"@key\\\"])\\n\\ntype Order @key(fields: \\\"id\\\") {\\n  id: ID!\\n  total: Float!\\n  status: String!\\n  \\\"Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20).\\\"\\n  createdBy: String\\n}\\n\\ntype Query {\\n  \\\"Newest first. limit is between 1 and 500.\\\"\\n  orders(limit: Int! = 100): [Order!]!\\n  order(id: ID!): Order\\n}\\n\\ntype Mutation {\\n  \\\"Creates an order with status pending. total must be between 0 and 9999999999.99.\\\"\\n  createOrder(total: Float!): Order!\\n}\\n\"},\"upstreamSchema\":{\"key\":\"8ac0929ca947b5577f4a839fa6aa140617c66fbf\"}},\"requestTimeoutSeconds\":\"10\",\"id\":\"0\",\"keys\":[{\"typeName\":\"Order\",\"selectionSet\":\"id\"}]},{\"kind\":\"GRAPHQL\",\"rootNodes\":[{\"typeName\":\"Order\",\"fieldNames\":[\"id\",\"shipment\"]},{\"typeName\":\"Query\",\"fieldNames\":[\"shipment\"]},{\"typeName\":\"Mutation\",\"fieldNames\":[\"shipOrder\"]}],\"childNodes\":[{\"typeName\":\"Shipment\",\"fieldNames\":[\"carrier\",\"trackingNumber\",\"status\"]}],\"overrideFieldPathFromAlias\":true,\"customGraphql\":{\"fetch\":{\"url\":{\"staticVariableContent\":\"http://shipping-api-app:4000/graphql\"},\"method\":\"POST\",\"body\":{},\"baseUrl\":{},\"path\":{}},\"subscription\":{\"enabled\":true,\"url\":{\"staticVariableContent\":\"http://shipping-api-app:4000/graphql\"},\"protocol\":\"GRAPHQL_SUBSCRIPTION_PROTOCOL_WS\",\"websocketSubprotocol\":\"GRAPHQL_WEBSOCKET_SUBPROTOCOL_AUTO\"},\"federation\":{\"enabled\":true,\"serviceSdl\":\"extend schema\\n  @link(url: \\\"https://specs.apollo.dev/federation/v2.5\\\", import: [\\\"@key\\\"])\\n\\n\\\"An order, owned by the orders subgraph. This subgraph adds the shipment to it.\\\"\\ntype Order @key(fields: \\\"id\\\") {\\n  id: ID!\\n  \\\"Null until the order was shipped.\\\"\\n  shipment: Shipment\\n}\\n\\ntype Shipment {\\n  carrier: String!\\n  trackingNumber: String\\n  status: ShipmentStatus!\\n}\\n\\nenum ShipmentStatus {\\n  PENDING\\n  SHIPPED\\n  DELIVERED\\n}\\n\\ntype Query {\\n  \\\"The shipment of an order, or null when it was not shipped.\\\"\\n  shipment(orderId: ID!): Shipment\\n}\\n\\ntype Mutation {\\n  \\\"Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once.\\\"\\n  shipOrder(orderId: ID!, carrier: String!): Shipment!\\n}\\n\"},\"upstreamSchema\":{\"key\":\"68d81cc2478e8160abc820200acba2fbaceff5df\"}},\"requestTimeoutSeconds\":\"10\",\"id\":\"1\",\"keys\":[{\"typeName\":\"Order\",\"selectionSet\":\"id\"}]}],\"fieldConfigurations\":[{\"typeName\":\"Query\",\"fieldName\":\"orders\",\"argumentsConfiguration\":[{\"name\":\"limit\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Query\",\"fieldName\":\"order\",\"argumentsConfiguration\":[{\"name\":\"id\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Query\",\"fieldName\":\"shipment\",\"argumentsConfiguration\":[{\"name\":\"orderId\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Mutation\",\"fieldName\":\"createOrder\",\"argumentsConfiguration\":[{\"name\":\"total\",\"sourceType\":\"FIELD_ARGUMENT\"}]},{\"typeName\":\"Mutation\",\"fieldName\":\"shipOrder\",\"argumentsConfiguration\":[{\"name\":\"orderId\",\"sourceType\":\"FIELD_ARGUMENT\"},{\"name\":\"carrier\",\"sourceType\":\"FIELD_ARGUMENT\"}]}],\"graphqlSchema\":\"schema {\\n  query: Query\\n  mutation: Mutation\\n}\\n\\n\\\"\\\"\\\"\\nAn order, owned by the orders subgraph. This subgraph adds the shipment to it.\\n\\\"\\\"\\\"\\ntype Order {\\n  id: ID!\\n  total: Float!\\n  status: String!\\n  \\\"\\\"\\\"\\n  Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20).\\n  \\\"\\\"\\\"\\n  createdBy: String\\n  \\\"\\\"\\\"Null until the order was shipped.\\\"\\\"\\\"\\n  shipment: Shipment\\n}\\n\\ntype Query {\\n  \\\"\\\"\\\"Newest first. limit is between 1 and 500.\\\"\\\"\\\"\\n  orders(limit: Int! = 100): [Order!]!\\n  order(id: ID!): Order\\n  \\\"\\\"\\\"The shipment of an order, or null when it was not shipped.\\\"\\\"\\\"\\n  shipment(orderId: ID!): Shipment\\n}\\n\\ntype Mutation {\\n  \\\"\\\"\\\"\\n  Creates an order with status pending. total must be between 0 and 9999999999.99.\\n  \\\"\\\"\\\"\\n  createOrder(total: Float!): Order!\\n  \\\"\\\"\\\"\\n  Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once.\\n  \\\"\\\"\\\"\\n  shipOrder(orderId: ID!, carrier: String!): Shipment!\\n}\\n\\ntype Shipment {\\n  carrier: String!\\n  trackingNumber: String\\n  status: ShipmentStatus!\\n}\\n\\nenum ShipmentStatus {\\n  PENDING\\n  SHIPPED\\n  DELIVERED\\n}\",\"stringStorage\":{\"8ac0929ca947b5577f4a839fa6aa140617c66fbf\":\"schema {\\n  query: Query\\n  mutation: Mutation\\n}\\n\\ndirective @key(fields: openfed__FieldSet!, resolvable: Boolean = true) repeatable on INTERFACE | OBJECT\\n\\ndirective @link(as: String, for: link__Purpose, import: [link__Import], url: String!) repeatable on SCHEMA\\n\\ntype Mutation {\\n  \\\"\\\"\\\"\\n  Creates an order with status pending. total must be between 0 and 9999999999.99.\\n  \\\"\\\"\\\"\\n  createOrder(total: Float!): Order!\\n}\\n\\ntype Order @key(fields: \\\"id\\\") {\\n  \\\"\\\"\\\"\\n  Who created it: the verified token's preferred_username, else its sub. Null when the API checks no token (D20).\\n  \\\"\\\"\\\"\\n  createdBy: String\\n  id: ID!\\n  status: String!\\n  total: Float!\\n}\\n\\ntype Query {\\n  order(id: ID!): Order\\n  \\\"\\\"\\\"Newest first. limit is between 1 and 500.\\\"\\\"\\\"\\n  orders(limit: Int! = 100): [Order!]!\\n}\\n\\nscalar link__Import\\n\\nenum link__Purpose {\\n  EXECUTION\\n  SECURITY\\n}\\n\\nscalar openfed__FieldSet\",\"68d81cc2478e8160abc820200acba2fbaceff5df\":\"schema {\\n  query: Query\\n  mutation: Mutation\\n}\\n\\ndirective @key(fields: openfed__FieldSet!, resolvable: Boolean = true) repeatable on INTERFACE | OBJECT\\n\\ndirective @link(as: String, for: link__Purpose, import: [link__Import], url: String!) repeatable on SCHEMA\\n\\ntype Mutation {\\n  \\\"\\\"\\\"\\n  Ships an order with a carrier: status SHIPPED and a generated tracking number. An order is shipped once.\\n  \\\"\\\"\\\"\\n  shipOrder(carrier: String!, orderId: ID!): Shipment!\\n}\\n\\n\\\"\\\"\\\"\\nAn order, owned by the orders subgraph. This subgraph adds the shipment to it.\\n\\\"\\\"\\\"\\ntype Order @key(fields: \\\"id\\\") {\\n  id: ID!\\n  \\\"\\\"\\\"Null until the order was shipped.\\\"\\\"\\\"\\n  shipment: Shipment\\n}\\n\\ntype Query {\\n  \\\"\\\"\\\"The shipment of an order, or null when it was not shipped.\\\"\\\"\\\"\\n  shipment(orderId: ID!): Shipment\\n}\\n\\ntype Shipment {\\n  carrier: String!\\n  status: ShipmentStatus!\\n  trackingNumber: String\\n}\\n\\nenum ShipmentStatus {\\n  DELIVERED\\n  PENDING\\n  SHIPPED\\n}\\n\\nscalar link__Import\\n\\nenum link__Purpose {\\n  EXECUTION\\n  SECURITY\\n}\\n\\nscalar openfed__FieldSet\"}},\"version\":\"00000000-0000-0000-0000-000000000000\",\"subgraphs\":[{\"id\":\"0\",\"name\":\"orders-api\",\"routingUrl\":\"http://orders-api-app:4000/graphql\"},{\"id\":\"1\",\"name\":\"shipping-api\",\"routingUrl\":\"http://shipping-api-app:4000/graphql\"}],\"compatibilityVersion\":\"1:0.68.2\"}"
   router.yaml: "version: \"1\"\nauthentication:\n  jwt:\n    jwks:\n      - url: http://keycloak-app:8080/realms/plugbricks/protocol/openid-connect/certs\n        issuers:\n          - http://127.0.0.1:8080/realms/plugbricks\n        audiences:\n          - plugbricks-router\n        algorithms:\n          - RS256\nauthorization:\n  require_authentication: true\nheaders:\n  all:\n    request:\n      - op: propagate\n        named: Authorization\n"
 ---
 apiVersion: v1
@@ -874,7 +874,7 @@ spec:
         plugbricks/component: router
         plugbricks/service: router
       annotations:
-        plugbricks/router-config-sha256: "2c20a01feacfa958d4efe6479a4e6fe780b3bc8a3016239f328f709d74bf88c2"
+        plugbricks/router-config-sha256: "3a7de73b264a059b32be0773a042471397a156c918969f3ec4dbb511e8511ff4"
         plugbricks/router-auth-sha256: "47f3346e09b0d3ee12329a86ccd52bada15df44e8b357d14b3931be13bd57039"
     spec:
       securityContext:

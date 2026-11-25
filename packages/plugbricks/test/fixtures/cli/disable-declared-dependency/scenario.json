@@ -1,18 +1,18 @@
 {
-  "description": "orders-web declares that it needs orders (D21), so disabling orders is refused while orders-web is enabled; disabling orders-web first allows it",
+  "description": "orders-web declares that it needs orders-api (D21), so disabling orders-api is refused while orders-web is enabled; disabling orders-web first allows it",
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
-    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/orders-api"] },
     { "run": ["add", "examples/orders-web"] },
     {
-      "run": ["disable", "orders"],
+      "run": ["disable", "orders-api"],
       "exit": 1,
       "codes": ["DEPENDENCY_IN_USE"],
       "unchanged": true,
       "stderr": "cannot disable"
     },
     { "run": ["disable", "orders-web"] },
-    { "run": ["disable", "orders"] }
+    { "run": ["disable", "orders-api"] }
   ]
 }

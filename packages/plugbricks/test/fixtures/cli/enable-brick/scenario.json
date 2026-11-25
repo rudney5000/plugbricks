@@ -3,9 +3,9 @@
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
-    { "run": ["add", "examples/orders"] },
-    { "run": ["disable", "orders"] },
-    { "run": ["enable", "orders"], "stdout": "Enabled orders" },
+    { "run": ["add", "examples/orders-api"] },
+    { "run": ["disable", "orders-api"] },
+    { "run": ["enable", "orders-api"], "stdout": "Enabled orders-api" },
     { "run": ["generate"] }
   ],
   "exists": [".generated/compose/compose.yaml"]

@@ -1,12 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
-  "name": "orders",
+  "name": "orders-api",
   "version": "0.1.0",
   "description": "Your first service: a GraphQL subgraph that stores orders in a database. Replace the image with your own.",
   "services": [
     {
       "name": "app",
-      "image": "ghcr.io/example/orders-app:0.1.0",
+      "image": "ghcr.io/example/orders-api-app:0.1.0",
       "port": 4000,
       "healthcheck": {
         "exec": [

@@ -4,11 +4,11 @@
     { "run": ["init", "--name", "demo"] },
     { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
     {
-      "run": ["add", "examples/orders"],
+      "run": ["add", "examples/orders-api"],
       "exit": 1,
       "codes": ["ADD_NEEDS_CONFIRMATION"],
-      "stdout": "orders needs:\n  postgres (bricks/postgres): provides \"database\" to orders",
-      "stderr": "orders cannot be added without postgres, which add would take from bricks/; nothing was added. To add them too: plugbricks add examples/orders --yes",
+      "stdout": "orders-api needs:\n  postgres (bricks/postgres): provides \"database\" to orders-api",
+      "stderr": "orders-api cannot be added without postgres, which add would take from bricks/; nothing was added. To add them too: plugbricks add examples/orders-api --yes",
       "unchanged": true
     },
     {

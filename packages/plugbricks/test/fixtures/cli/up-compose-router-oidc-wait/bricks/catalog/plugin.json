@@ -5,7 +5,7 @@
   "services": [
     {
       "name": "app",
-      "image": "plugbricks-example/orders:0.1.0",
+      "image": "plugbricks-example/orders-api:0.1.0",
       "port": 4000,
       "healthcheck": {
         "exec": ["wget", "-qO-", "http://localhost:4000/health"]

@@ -1,13 +1,13 @@
 # Fixtures of `plugbricks status --runtime`
 
-Read by `test/live.test.ts`. The platform is `demo`: postgres, orders, shipping and the router.
+Read by `test/live.test.ts`. The platform is `demo`: postgres, orders-api, shipping-api and the router.
 
 ## `compose/`, `inspect/`: recorded
 
 Recorded on 2026-11-18 with Docker Compose 5.5.1 (Docker Engine 29.8.0, Linux), from
 `docker compose --project-name <p> ps --all --format json` and
 `docker inspect --format '{"id":…,"restartCount":…,"oomKilled":…}'` on a platform made with
-plugbricks (postgres, orders, shipping, router), and on a small Compose project whose containers
+plugbricks (postgres, orders-api, shipping-api, router), and on a small Compose project whose containers
 had a failing health check, a crash loop (`exit 3`, `restart: always`) and a created container.
 
 Then trimmed: only the fields plugbricks reads (plus a few for realism) are kept, the project is
@@ -18,12 +18,12 @@ rows of the small project are renamed onto the services of `demo`.
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | `healthy.ndjson`                                             | Everything up. One JSON object per line: the format of Compose 2.21 and later.                                              |
 | `healthy-array.json`                                         | The same rows as one JSON array, the format of Compose up to 2.20. **Not recorded** with an old Compose: built from the above. |
-| `stopped.ndjson`                                             | `docker compose stop shipping-app`; the router was restarting (exit 255).                                                    |
+| `stopped.ndjson`                                             | `docker compose stop shipping-api-app`; the router was restarting (exit 255).                                                    |
 | `starting.ndjson`                                            | postgres-db just started, health check not passed yet.                                                                      |
-| `unhealthy-restarting.ndjson`                                | orders-app with a failing health check, shipping-app crash-looping (exit 3).                                                |
-| `created.ndjson`                                             | shipping-app created, never started.                                                                                        |
-| `partial.ndjson`, `pull-failure.ndjson`                      | shipping has no container at all (removed, or its image could not be pulled, so Compose never created it).                  |
-| `wait-timeout.ndjson`                                        | The wait task of shipping exited 124, so shipping-app was created and never started. Exit code set by hand.                 |
+| `unhealthy-restarting.ndjson`                                | orders-api-app with a failing health check, shipping-api-app crash-looping (exit 3).                                                |
+| `created.ndjson`                                             | shipping-api-app created, never started.                                                                                        |
+| `partial.ndjson`, `pull-failure.ndjson`                      | shipping-api has no container at all (removed, or its image could not be pulled, so Compose never created it).                  |
+| `wait-timeout.ndjson`                                        | The wait task of shipping-api exited 124, so shipping-api-app was created and never started. Exit code set by hand.                 |
 | `undeclared.ndjson`                                          | One more container, `cache-redis`, of a brick that platform.json no longer lists. Added by hand from a recorded row.        |
 | `nothing.ndjson`                                             | No container: Compose prints nothing (recorded).                                                                            |
 | `inspect/healthy.ndjson`, `inspect/unhealthy-restarting.ndjson` | Restart counts of the containers above, matched by id.                                                                   |
@@ -41,11 +41,11 @@ Every pod spec has an environment variable whose value is `NEVER-PRINTED-env-val
 | File                     | What it is                                                                     |
 | ------------------------ | ------------------------------------------------------------------------------ |
 | `healthy.json`           | Every pod Running and Ready, the router Service with its cluster IP.            |
-| `crashloop.json`         | orders-app in CrashLoopBackOff, last exit code 1, 4 restarts.                   |
-| `pending.json`           | shipping-app Pending, not schedulable.                                          |
-| `image-pull.json`        | shipping-app in ImagePullBackOff.                                               |
-| `wait-timeout.json`      | The init container wait-database of shipping-app exited 124, in CrashLoopBackOff. |
-| `starting.json`          | orders-app running, not ready yet, during a rollout.                            |
-| `readiness-failing.json` | orders-app running, not ready, rollout finished: its readiness probe fails.     |
-| `partial.json`           | No shipping-app Deployment; a Deployment `cache-redis` of a removed brick.      |
+| `crashloop.json`         | orders-api-app in CrashLoopBackOff, last exit code 1, 4 restarts.                   |
+| `pending.json`           | shipping-api-app Pending, not schedulable.                                          |
+| `image-pull.json`        | shipping-api-app in ImagePullBackOff.                                               |
+| `wait-timeout.json`      | The init container wait-database of shipping-api-app exited 124, in CrashLoopBackOff. |
+| `starting.json`          | orders-api-app running, not ready yet, during a rollout.                            |
+| `readiness-failing.json` | orders-api-app running, not ready, rollout finished: its readiness probe fails.     |
+| `partial.json`           | No shipping-api-app Deployment; a Deployment `cache-redis` of a removed brick.      |
 | `nothing.json`           | An empty namespace.                                                             |

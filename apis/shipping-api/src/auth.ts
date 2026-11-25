@@ -1,7 +1,7 @@
 // The token check of this API (D20). Behind the router, every request carries the caller's token (the router passes it
 // on); this API checks it again itself, so that a service of the platform calling it directly, past the router, gets
 // nothing without a valid token. Authorization (D22) is here too: which roles that token must carry for a query and for
-// a mutation. The same file is in apis/orders and apis/shipping.
+// a mutation. The same file is in apis/orders-api and apis/shipping-api.
 import { getOperationAST, GraphQLError, type OperationTypeNode } from "graphql";
 import type { Plugin } from "graphql-yoga";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";

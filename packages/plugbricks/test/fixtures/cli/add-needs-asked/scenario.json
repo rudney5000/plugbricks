@@ -4,9 +4,9 @@
     { "run": ["init", "--name", "demo"] },
     { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
     {
-      "run": ["add", "examples/orders"],
+      "run": ["add", "examples/orders-api"],
       "answers": ["y"],
-      "stdout": ["Add postgres too? [y/N] y", "Added postgres 1.0.0 (provides \"database\" to orders)\nAdded orders 0.1.0"]
+      "stdout": ["Add postgres too? [y/N] y", "Added postgres 1.0.0 (provides \"database\" to orders-api)\nAdded orders-api 0.1.0"]
     }
   ]
 }

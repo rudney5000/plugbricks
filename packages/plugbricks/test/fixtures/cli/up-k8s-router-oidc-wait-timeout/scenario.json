@@ -4,7 +4,7 @@
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
     { "run": ["add", "examples/keycloak"] },
-    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/orders-api"] },
     {
       "run": ["up", "--runtime", "k8s", "--context", "test-cluster"],
       "exit": 1,

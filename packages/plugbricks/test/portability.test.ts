@@ -30,7 +30,7 @@ beforeAll(() => {
 });
 
 describe("brick integrity ignores line endings", () => {
-  it.each(["postgres", "orders"])("%s: CRLF copy has the same hash as the LF original and as the golden lock", (name) => {
+  it.each(["postgres", "orders-api"])("%s: CRLF copy has the same hash as the LF original and as the golden lock", (name) => {
     const lf = join(pkg, "examples", name);
     const crlf = join(work, `${name}-crlf`);
     copyAsCrlf(lf, crlf);
@@ -81,7 +81,7 @@ describe("paths are stored with /", () => {
   it.each([
     ["C:\\proj", "C:\\proj\\bricks\\postgres", "bricks/postgres"],
     ["C:\\proj", "C:\\shared\\bricks\\postgres", "../shared/bricks/postgres"],
-    ["C:\\proj", "C:\\proj\\services\\orders\\plugin.json", "services/orders/plugin.json"],
+    ["C:\\proj", "C:\\proj\\services\\orders-api\\plugin.json", "services/orders-api/plugin.json"],
   ])("Windows (path.win32): %s -> %s gives %s", (from, to, expected) => {
     expect(portableRelative(from, to, path.win32)).toBe(expected);
   });

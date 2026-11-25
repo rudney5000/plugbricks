@@ -3,7 +3,7 @@
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
-    { "run": ["add", "examples/orders"] },
+    { "run": ["add", "examples/orders-api"] },
     {
       "run": ["up"],
       "exit": 1,

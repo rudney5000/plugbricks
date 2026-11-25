@@ -6,7 +6,7 @@
   "services": [
     {
       "name": "app",
-      "image": "localhost:5000/orders-app",
+      "image": "localhost:5000/orders-api-app",
       "port": 4000,
       "healthcheck": {
         "exec": [

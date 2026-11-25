@@ -3,9 +3,9 @@
   "steps": [
     { "run": ["init", "--name", "demo"] },
     { "mutate": { "copyDir": { "from": "examples/postgres", "to": "bricks/postgres" } } },
-    { "mutate": { "copyDir": { "from": "examples/orders", "to": "bricks/orders" } } },
+    { "mutate": { "copyDir": { "from": "examples/orders-api", "to": "bricks/orders-api" } } },
     { "run": ["add", "postgres"], "stdout": "Added postgres 1.0.0" },
-    { "run": ["add", "orders"], "stdout": "Added orders" },
+    { "run": ["add", "orders-api"], "stdout": "Added orders-api" },
     { "run": ["add", "postgres"], "unchanged": true, "stdout": "already installed" }
   ]
 }
