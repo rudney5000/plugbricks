@@ -19,7 +19,7 @@ when the one before it that it depends on is merged.
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
 | 7   | ~~External subgraph~~ (D33, with `schema check`)                                       | 4, item 1      | nothing                                       | decision, then code               |
 | 8   | ~~`create --kind`~~ (D28), ~~a starter~~ (D30), ~~public images of the examples~~ (D29) | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
-| 9   | ~~`logs` and `exec`~~ (D32), ~~a development loop~~ (D37), service templates in other languages | 5              | step 8 for the templates                      | code                              |
+| 9   | ~~`logs` and `exec`~~ (D32), ~~a development loop~~ (D37), ~~a Python template~~ (D38), a Go template | 5              | step 8 for the templates                      | code                              |
 | 10  | ~~`export`: leave plugbricks with plain Compose or Kubernetes files~~ (done, D34)     | 8, item 1      | nothing                                       | code                              |
 | 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
 | 12  | More ready-made bricks (Redis, MySQL or MariaDB, object storage, a test mail server)  | 7              | step 3                                        | code                              |
@@ -160,7 +160,7 @@ Aim: the daily gesture of someone who creates `order-api`, once the first minute
    `remove` then `add`.
 3. **Service templates in other languages** (Go, Python) for `create`. The README says plugbricks does not care what is
    inside the image; only Node bricks exist today, so that claim is **not tested** with another language. A template
-   would test it.
+   would test it. **Python done (D38):** `create --kind api --lang python`, and the claim holds with it. Go is not done.
 
 ## 6. Confidence for production
 
