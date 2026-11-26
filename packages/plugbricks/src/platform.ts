@@ -287,6 +287,10 @@ function checkReferencedFiles(dir: string, m: Manifest): void {
     if (!existsSync(join(dir, file))) missing.push(issue("BRICK_FILE_MISSING", path, { brick: m.name, file }));
   };
   if (m.subgraph) need(m.subgraph.schema, "/subgraph/schema");
+  if (m.subgraph?.grpc) {
+    need(m.subgraph.grpc.proto, "/subgraph/grpc/proto");
+    need(m.subgraph.grpc.mapping, "/subgraph/grpc/mapping");
+  }
   for (const [cap, p] of Object.entries(m.provides ?? {})) {
     const scripts = p.provision.scripts;
     if (scripts !== undefined) need(scripts, `/provides/${cap}/provision/scripts`);

@@ -1,5 +1,5 @@
 {
-  "description": "a gRPC brick whose mapping is not a mapping file, or whose proto does not declare the service its mapping names, is refused when it is added (D35), and nothing changes",
+  "description": "a gRPC brick whose mapping is not a mapping file, whose proto does not declare the service its mapping names, or whose proto is not there, is refused when it is added (D35), and nothing changes",
   "steps": [
     {
       "run": [
@@ -28,6 +28,18 @@
       "codes": [
         "GRPC_PROTO_SERVICE_MISSING"
       ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "add",
+        "no-proto"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_FILE_MISSING"
+      ],
+      "stderr": "service.proto",
       "unchanged": true
     }
   ]
