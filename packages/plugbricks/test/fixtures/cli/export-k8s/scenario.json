@@ -1,0 +1,74 @@
+{
+  "description": "export --runtime k8s writes the namespace, the resources and an example Secret whose values are to be replaced; with --with-secrets, the Secret holds the values of .secrets/ (D34)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "exported",
+        "--runtime",
+        "k8s"
+      ],
+      "stdout": [
+        "Exported k8s files for demo",
+        "namespace.yaml",
+        "resources.yaml",
+        "secret.example.yaml"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--runtime",
+        "k8s"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "with-secrets",
+        "--runtime",
+        "k8s",
+        "--with-secrets"
+      ],
+      "stdout": "The secret values are in this folder"
+    }
+  ],
+  "exists": [
+    "exported/namespace.yaml",
+    "exported/resources.yaml",
+    "exported/secret.example.yaml",
+    "exported/README.md",
+    "with-secrets/secret.yaml",
+    "with-secrets/.gitignore"
+  ],
+  "absent": [
+    "exported/secret.yaml",
+    "with-secrets/secret.example.yaml",
+    "exported/router-config.json"
+  ],
+  "expectRaw": {
+    "exported/secret.example.yaml": "CHANGE-ME",
+    "exported/resources.yaml": "# Exported by plugbricks (D34)",
+    "with-secrets/secret.yaml": "PB_POSTGRES__SUPERUSER_PASSWORD: secret0002",
+    "with-secrets/.gitignore": "secret.yaml\n"
+  }
+}

@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
+import { exportPlatform } from "./export.js";
 import {
   addBrick,
   brickByName,
@@ -70,6 +71,9 @@ Commands:
                          Run a command inside a brick's service, a shell (sh) when none is given
   schema check <brick> [--url <address>]
                          Compare the schema file of an external subgraph with what its service serves (exit 1 if not)
+  export <dir> [--with-secrets]
+                         Write the Compose file or the Kubernetes manifests into <dir>, to run without plugbricks;
+                         no secret value unless --with-secrets; <dir> must not exist yet
   doctor                 Check what up needs (Node, Docker or kubectl, ports, images) and say what to fix; read-only
   status --runtime <name> [--json]
                          Also read what the runtime really runs (read-only): state, reason, restarts
@@ -87,6 +91,7 @@ Options:
   --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
   -y, --yes              With add: also add what the brick needs from bricks/, without asking
+  --with-secrets         With export: also write the secret values (.env or secret.yaml), ignored by a .gitignore
   --kind api|web         With create: a GraphQL subgraph or a web brick
   --image <ref>          With create: the image its manifest names (default <platform>/<name>:0.1.0), pinned
   --dir <path>           Run in <path> instead of the current directory
@@ -174,6 +179,7 @@ export function main(argv: string[], io: Io): number {
           tail: { type: "string" },
           url: { type: "string" },
           image: { type: "string" },
+          "with-secrets": { type: "boolean" },
           port: { type: "string" },
           dev: { type: "boolean" },
           issuer: { type: "string" },
@@ -209,7 +215,7 @@ export function main(argv: string[], io: Io): number {
     };
     if (values.name !== undefined) optionFor("name", "init");
     if (values.json !== undefined) optionFor("json", "status");
-    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin", "doctor", "logs", "exec");
+    if (values.runtime !== undefined) optionFor("runtime", "generate", "up", "down", "status", "admin", "doctor", "logs", "exec", "export");
     for (const opt of ["port", "dev", "issuer", "client-id", "ui-dir"] as const) {
       if (values[opt] !== undefined) optionFor(opt, "admin");
     }
@@ -221,6 +227,7 @@ export function main(argv: string[], io: Io): number {
     if (values.tail !== undefined) optionFor("tail", "logs");
     if (values.url !== undefined) optionFor("url", "schema");
     if (values.image !== undefined) optionFor("image", "create");
+    if (values["with-secrets"] !== undefined) optionFor("with-secrets", "export");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
       throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
@@ -408,6 +415,21 @@ export function main(argv: string[], io: Io): number {
             `To follow the service: update bricks/${r.brick}/${r.file.split("/").pop()}, then "plugbricks remove ${r.brick}" and "plugbricks add ${r.brick}".`,
           );
           return 1;
+        }
+        case "export": {
+          only(1, "a folder");
+          // Changes nothing of the platform (D34): no lock, no secret created. The folder is relative to where the
+          // command was typed, like a brick path.
+          const r = exportPlatform(root, runtime, resolve(io.cwd, args[0]), { withSecrets: values["with-secrets"] });
+          io.stdout(`Exported ${runtime} files for ${r.plan.platform} to ${r.dir}:`);
+          for (const f of r.files) io.stdout(`  ${f}`);
+          if (r.withSecrets) io.stdout("The secret values are in this folder: a .gitignore keeps them out of git; do not share it.");
+          else if (r.plan.secrets.length)
+            io.stdout(
+              `No secret value was written: give the ${r.plan.secrets.length} secret(s) of ${runtime === "k8s" ? "secret.example.yaml" : ".env.example"} a value before you run it.`,
+            );
+          io.stdout("README.md there says how to run it; the images it names must be reachable by your runtime.");
+          return 0;
         }
         case "doctor": {
           only(0, "");

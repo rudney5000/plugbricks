@@ -27,6 +27,7 @@ npx plugbricks status --runtime compose   # also what the runtime really runs (r
 npx plugbricks doctor               # what up needs, and what to fix first (read-only, D31)
 npx plugbricks logs orders-api --follow    # the logs of a brick's service (logs router: the router's), D32
 npx plugbricks exec postgres -- psql -U postgres   # a command inside it; a shell when none is given
+npx plugbricks export ./deploy       # the Compose file in a folder of its own, to run without plugbricks (--runtime k8s, --with-secrets), D34
 npx plugbricks up                    # Docker Compose
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
 npx plugbricks down                  # stops everything; volumes and secrets are kept

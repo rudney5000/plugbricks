@@ -142,6 +142,10 @@ export const MESSAGES = {
   SERVICE_NOT_RUNNING:
     '"{name}" of platform "{platform}" is not running; start the platform with "plugbricks up", or see "plugbricks status --runtime"',
   SERVICE_HAS_NO_CONTAINER: '"{name}" of platform "{platform}" has no container yet; start the platform with "plugbricks up"',
+  EXPORT_DIR_NOT_EMPTY: '"{dir}" exists and is not empty: an export never overwrites; name a folder that does not exist yet',
+  EXPORT_DIR_IN_PLATFORM: '"{dir}" is inside "{folder}", which plugbricks rewrites or keeps private; name a folder outside it',
+  EXPORT_SECRETS_MISSING:
+    'cannot copy the secrets: {names} are not in .secrets/secrets.env; run "plugbricks generate" first, or export without --with-secrets',
   CAPABILITY_IN_USE: 'cannot remove "{brick}": capability "{capability}" is still required by {consumers}',
 
   // status

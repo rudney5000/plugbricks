@@ -20,7 +20,7 @@ when the one before it that it depends on is merged.
 | 7   | ~~External subgraph~~ (D33, with `schema check`)                                       | 4, item 1      | nothing                                       | decision, then code               |
 | 8   | ~~`create --kind`~~ (D28), ~~a starter~~ (D30), ~~public images of the examples~~ (D29) | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
 | 9   | ~~`logs` and `exec`~~ (D32), a development loop, service templates in other languages | 5              | step 8 for the templates                      | code                              |
-| 10  | `export`: leave plugbricks with plain Compose or Kubernetes files                     | 8, item 1      | nothing                                       | code                              |
+| 10  | ~~`export`: leave plugbricks with plain Compose or Kubernetes files~~ (done, D34)     | 8, item 1      | nothing                                       | code                              |
 | 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
 | 12  | More ready-made bricks (Redis, MySQL or MariaDB, object storage, a test mail server)  | 7              | step 3                                        | code                              |
 | 13  | gRPC through Cosmo Connect (a study), a REST adapter example                          | 4, items 2 and 3 | step 7                                      | study, then docs                  |
@@ -181,9 +181,10 @@ object store (MinIO), a test mail server (Mailpit). Kafka stays deferred (sectio
 
 ## 8. Trust, and the way out
 
-1. **`plugbricks export`** (or `generate --out`): write the Compose file or the Kubernetes manifests into a folder to
-   keep, usable without plugbricks. It answers the first objection of a team (what if we want to leave?) and is almost
-   free: `generate` already writes them into `.generated/`, which ignores itself and is never committed.
+1. **`plugbricks export`**: write the Compose file or the Kubernetes manifests into a folder to keep, usable without
+   plugbricks. It answers the first objection of a team (what if we want to leave?). **Done (D34):** `export <dir>
+   [--runtime] [--with-secrets]`, no secret value unless asked, nothing of the platform changed; run with plain
+   `docker compose` by hand. Not run: the Kubernetes files on a cluster.
 2. **Signed images and an SBOM** (a list of the components of each image), next to the provenance npm already gets
    (D24). After the images are public.
 3. **A demo of about 60 seconds**: `npm create plugbricks` to the admin. It needs the public images (section 2,

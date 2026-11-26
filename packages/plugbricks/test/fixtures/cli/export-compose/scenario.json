@@ -1,0 +1,93 @@
+{
+  "description": "export writes the Compose file, the router configuration and the provision scripts into a new folder, with no secret value (D34); a second export into it is refused; --with-secrets copies the values of .secrets/ once generate made them, and ignores them in git",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "exported"
+      ],
+      "stdout": [
+        "Exported compose files for demo",
+        "compose.yaml",
+        "scripts/postgres-database-scripts/create-database.sh",
+        "No secret value was written"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "exported"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXPORT_DIR_NOT_EMPTY"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "with-secrets",
+        "--with-secrets"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXPORT_SECRETS_MISSING"
+      ],
+      "stderr": "PB_POSTGRES__SUPERUSER_PASSWORD"
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "with-secrets",
+        "--with-secrets"
+      ],
+      "stdout": [
+        "The secret values are in this folder"
+      ]
+    }
+  ],
+  "exists": [
+    "exported/compose.yaml",
+    "exported/router-config.json",
+    "exported/.env.example",
+    "exported/README.md",
+    "exported/scripts/postgres-database-scripts/create-database.sh",
+    "with-secrets/.env",
+    "with-secrets/.gitignore"
+  ],
+  "absent": [
+    "exported/.env",
+    "exported/.gitignore",
+    "with-secrets/.env.example"
+  ],
+  "expectRaw": {
+    "exported/compose.yaml": "# Exported by plugbricks (D34)",
+    "exported/.env.example": "PB_POSTGRES__SUPERUSER_PASSWORD=\n",
+    "with-secrets/.env": "PB_POSTGRES__SUPERUSER_PASSWORD=secret0002\n",
+    "with-secrets/.gitignore": ".env\n"
+  }
+}

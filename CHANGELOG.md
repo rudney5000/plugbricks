@@ -55,6 +55,13 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 - `logs <brick>` and `exec <brick> -- <command>` reach a brick's service, or the router, on both runtimes, without
   looking for its Docker or Kubernetes name (D32).
 
+### Leaving
+
+- `export <dir>` writes the Compose file (or, with `--runtime k8s`, the Kubernetes manifests) into a new folder, with
+  the router's configuration, the provision scripts, a README and the list of the images, to run with `docker compose
+  up -d` or `kubectl apply` and no plugbricks. No secret value unless `--with-secrets`; it changes nothing of the
+  platform (D34).
+
 ### The admin
 
 - `plugbricks admin`: a local web UI with OIDC sign-in, the bricks, their dependencies, the router and an audit log,
