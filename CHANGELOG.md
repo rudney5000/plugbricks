@@ -51,6 +51,12 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 - `status`, and `status --runtime` for what the runtime really runs, read-only (D10). One changing command at a
   time per platform (D16).
 
+### Writing a service
+
+- `dev <brick>` rebuilds the image of a brick from `services/<brick>`, takes its new schema (and proto), restarts that
+  service alone, and the router when the schema changed, in a running platform, then follows its logs. Docker Compose
+  only; a change of manifest still needs `remove` and `add` (D37).
+
 ### When something goes wrong
 
 - `doctor` checks what `up` needs and says what to fix, without changing anything: Node, Docker and Compose or
