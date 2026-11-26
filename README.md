@@ -260,7 +260,9 @@ subgraph. Composition, `extends` and the router are the same as for any subgraph
 }
 ```
 
-The router does not pass the caller's token on to it unless the subgraph says `"forwardAuthorization": true`. A service
+`plugbricks schema check catalog` compares the schema file with what the service serves, and exits 1 with the
+differences when the service changed. The router does not pass the caller's token on to it unless the subgraph says
+`"forwardAuthorization": true`. A service
 of this machine is `http://host.docker.internal:<port>/...` (never `localhost`, which would be the router's own
 container); on a Linux Docker engine it must listen on the address of Docker's bridge, not on 127.0.0.1 only.
 

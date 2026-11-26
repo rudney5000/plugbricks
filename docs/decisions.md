@@ -2036,8 +2036,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 ## D33. An external subgraph: a brick without a container, for a GraphQL service that runs elsewhere
 
 - **Status:** accepted (2026-11-26), with the four recommendations put to the owner: the address in the manifest, no
-  token unless the brick asks for it, `http` accepted with a warning, and the core first. Step 1 is implemented; the
-  comparison of the declared schema with the service's (step 2) is not. Item 1 of section 4 of `docs/roadmap.md`.
+  token unless the brick asks for it, `http` accepted with a warning, and the core first. Steps 1 and 2 are implemented
+  (step 2, the comparison of the schema file with the service's, on 2026-11-26). Item 1 of section 4 of `docs/roadmap.md`.
 - **Context:** plugbricks federates GraphQL services it starts itself. A team that already runs one (a catalogue, a
   legacy API) wants it behind the same router, composed and checked with the others, without plugbricks running it.
 - **Decision.**
@@ -2083,8 +2083,23 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   that runs elsewhere"): a service built from the template of `create`, run outside the platform, answered through a
   router that runs alone, and the router still answering, with its error for that subgraph, once the service is
   stopped. Kubernetes is covered by the same plan and generated files, not run.
-- **Step 2, not done:** a command that compares the schema file with what the service serves (`_service { sdl }`),
-  since composition reads the file and the service can drift from it.
+- **Step 2, `plugbricks schema check <brick> [--url <address>]`.** Composition reads the file and the service can drift
+  from it: the command asks the service for `{ _service { sdl } }` (every federation subgraph answers it) and compares
+  it with the installed copy, the one the router composes. Exit 0 when they say the same thing, 1 with the list of
+  differences (a type, a field, an argument, an enum value or a directive such as `@key`, on one side only or
+  different), so that a CI can run it; read-only. What does not change composition is not a drift: the order of
+  definitions and members, the descriptions, an extension against its type, and what a federation library adds to the
+  SDL it serves (the definitions of the federation and link directives, `_Service`, `_Any`, `_Entity`, the fields
+  `_entities` and `_service`; found on a real service, see below). `host.docker.internal` is asked at the gateway of
+  Docker's bridge on Linux and at 127.0.0.1 elsewhere, as the router's container reaches it; `--url` gives another
+  address, and is the only way for a subgraph served inside the platform, which this machine does not reach (D9:
+  `SCHEMA_CHECK_EXTERNAL_ONLY` otherwise). A service that does not answer, or answers no SDL, is
+  `SCHEMA_CHECK_UNREACHABLE`, with the reason (`ECONNREFUSED`, the HTTP status and the GraphQL error).
+  - **Tested.** `test/schemacheck.test.ts`, on an SDL recorded from a real subgraph (the template of `create`,
+    `@apollo/subgraph` 2.17.0, `test/fixtures/schema/`): nothing found against its file, order and descriptions
+    ignored, each kind of difference named; the CLI scenario `schema-check-refusals`; end to end on Docker Compose, in
+    "a subgraph that runs elsewhere", against the running service. By hand: a field added and a type changed in the
+    file are both reported, a description alone is not, a stopped service is `ECONNREFUSED`.
 
 ---
 
