@@ -16,7 +16,7 @@ when the one before it that it depends on is merged.
 | 3   | ~~`add` by name from `bricks/`; the bricks copied into a new project~~ (done, D25)     | 2, step 1      | nothing                                       | code                              |
 | 4   | ~~The dependencies a brick needs, with confirmation~~ (done, D26)                     | 2, step 2      | step 3                                        | code                              |
 | 5   | ~~`plugbricks doctor`~~ (done, D31)                                                   | 2, step 6      | nothing                                       | code                              |
-| 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
+| 6   | ~~Documentation site on GitHub Pages~~ (D40; to publish: the owner enables Pages)     | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
 | 7   | ~~External subgraph~~ (D33, with `schema check`)                                       | 4, item 1      | nothing                                       | decision, then code               |
 | 8   | ~~`create --kind`~~ (D28), ~~a starter~~ (D30), ~~public images of the examples~~ (D29) | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
 | 9   | ~~`logs` and `exec` (D32), a development loop (D37), Python (D38) and Go (D39) templates~~ (done)  | 5              | step 8 for the templates                      | code                              |
@@ -112,6 +112,9 @@ the people who build it, with no path for a newcomer.
   manifest, the limits) can be written first if the owner wants.
 
 Not verified: that the repository's workflow token may deploy to Pages (a repository setting).
+
+**Done (D40):** the site in `docs/` (VitePress), its guide checked by a test, and the workflow. Left to the owner:
+enabling Pages and setting `PAGES_ENABLED`; verified neither.
 
 ## 4. Bringing existing services in
 

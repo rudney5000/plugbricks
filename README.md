@@ -9,323 +9,39 @@ plugbricks is a command-line tool that assembles a federated GraphQL platform fr
 - **It does set conventions.** The project layout (`platform.json`, `platform.lock`, the bricks), the manifest, and the variables injected into a brick are the contract between a brick and the platform. This contract is what a brick author depends on, more than the command line. While the version is 0.x it can change in a minor version.
 - **A small programmatic API exists** (the `plugbricks` package exports its manifest validation, composition and planning), used by the admin and by `create-plugbricks`. It is not the way to use the tool.
 
-Status: **milestone 4 done, milestone 5 done for RabbitMQ and NATS core (Kafka deferred), step 6 done (the admin)** — the `orders-api` API and the `shipping-api` API that extends it (GraphQL subgraphs, each with its own database), composition checked when a brick is added, on top of the drivers (`generate`, `up`, `down`), the CLI core (`init`, `add`, `remove`, `status`) and the manifest contract. Both drivers have run end to end: Compose against Docker, and Kubernetes on a throwaway k3d cluster in CI (job "kubernetes (k3d)", first green on 2026-11-17; the router and shipping scenario runs there since 2026-11-18). The Cosmo router is rendered for both runtimes (its configuration, its pinned image, loopback-only on Compose, a ClusterIP Service on Kubernetes). On Docker Compose and on Kubernetes, real requests through it reach the real `orders-api` and `shipping-api` APIs and their databases (end-to-end tests). `plugbricks status --runtime` reports what the runtime really runs, read-only, with a versioned JSON report (D10).
+Status: not published yet (see [the checklist](docs/pre-publication-checklist.md)). Docker Compose and Kubernetes both run
+end to end in the tests; what is built and what is planned is in the [roadmap](#roadmap) below.
 
-## Use
-
-```bash
-npm create plugbricks mon-saas      # a new project; its README explains every folder
-# or a project that runs at once: the example shop, added without a question (D30)
-#   npm create plugbricks mon-saas -- --starter demo && cd mon-saas && npm install && npx plugbricks up
-cd mon-saas
-npx plugbricks add postgres         # bricks/postgres, shipped in a new project: provides "database"
-npx plugbricks create inventory --kind api   # bricks/inventory-api and its code in services/inventory-api (D28)
-docker build -t mon-saas/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .   # the command create prints
-npx plugbricks add rabbitmq         # bricks/rabbitmq: provides "queue" (D11)
-npx plugbricks status               # add --json for machine-readable output
-npx plugbricks status --runtime compose   # also what the runtime really runs (read-only)
-npx plugbricks doctor               # what up needs, and what to fix first (read-only, D31)
-npx plugbricks dev inventory-api    # after a change: rebuild it, restart it alone, take its new schema, follow its logs (D37)
-npx plugbricks logs orders-api --follow    # the logs of a brick's service (logs router: the router's), D32
-npx plugbricks exec postgres -- psql -U postgres   # a command inside it; a shell when none is given
-npx plugbricks export ./deploy       # the Compose file in a folder of its own, to run without plugbricks (--runtime k8s, --with-secrets), D34
-npx plugbricks up                    # Docker Compose
-npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes: you always name the cluster
-npx plugbricks down                  # stops everything; volumes and secrets are kept
-npx plugbricks remove orders-api
-npx plugbricks disable shipping-api      # installed but no longer deployed; volumes and secrets are kept
-npx plugbricks enable shipping-api       # deploy it again
-npx plugbricks up --prune-volumes    # deletes only the volumes listed in pendingDeletion
-```
-
-A name (`postgres`) adds the brick of the project's `bricks/` folder; a new project has `postgres`, `rabbitmq` and
-`nats` there, the bricks whose images are public. Without such a brick, a name still adds the folder of that name
-where you typed the command; when both exist, `add` refuses and asks for a path (`./postgres` or `bricks/postgres`).
-Anything with a `/` is a path (D25).
-
-`create <name> --kind api` writes a new API from a template and adds it: the brick (`plugin.json`, `schema.graphql`)
-in `bricks/<name>-api`, and its code (TypeScript, GraphQL Yoga, `@apollo/subgraph`), its lock file and its `Dockerfile`
-in `services/<name>-api`, outside the brick, which `add` copies whole. `--kind web` writes a web brick and a Node server
-with no dependency. The image is yours to build, from the project folder, with the command `create` prints; the
-manifest names it `<platform>/<name>-api:0.1.0` (D28).
-
-`--lang python` writes the API in Python instead (Ariadne, from the same schema, with pinned and hashed requirements),
-`--lang go` in Go (gqlgen, which generates the code of the schema when the image is built: a new field without a resolver
-stops the build and names the method to write): the brick is the same, only the service differs (D38, D39).
-
-`add` also proposes what the brick needs from `bricks/`: the providers of what it requires and the bricks it declares
-in `dependencies`, and what those need in turn (`add orders-web` proposes `postgres` and `orders-api`). In a terminal it
-asks; `--yes` adds them without asking; in a CI or a script without `--yes` it refuses a brick that cannot work without
-them, and says what it would add and the command to run again. When several bricks of `bricks/` provide the same
-capability, it asks which one, and `--yes` refuses (D26).
-
-`plugbricks` manages three things in a project:
-
-- `platform.json` — what you want: installed bricks and where each came from, and `router.port` (default 4000, 1024 to 65535): the port the router is published on, on `127.0.0.1` only, with Docker Compose, and the port of its ClusterIP Service on Kubernetes.
-- `platform.lock` — what was resolved: versions, an integrity hash per brick, which brick provides each capability, wait settings with their defaults made explicit, the volumes kept after a removal (`retainedVolumes`) and the volumes marked for deletion (`pendingDeletion`). A driver deletes only the volumes in `pendingDeletion`, and only with `up --prune-volumes` (milestone 3); see `docs/decisions.md`. Deterministic: the same `add` twice leaves identical files.
-- `.platform/bricks/<name>/` — a copy of each installed brick; `status` reports a copy that was edited.
-- `.generated/<runtime>/` — what `generate` (and `up`) writes from the lock and the copies: `compose/compose.yaml`, or `k8s/namespace.yaml` and `k8s/resources.yaml`, and `router-config.json` beside them when an installed brick serves a subgraph. Never edited, never committed (the folder ignores itself).
-- `.secrets/` — generated passwords (`secrets.env`, and `k8s-secret.yaml` for Kubernetes). Restricted to your user and checked before every write; never committed. Removing a brick keeps its secrets.
-
-`up` returns once every service runs and passes its healthcheck (Compose `--wait`, Kubernetes `rollout status`). It starts, for each consumer and capability, a wait step (the provider's `ready` command, up to `timeoutSeconds`), then the provider's provision task, then the consumer. A wait that gives up is reported as `WAIT_TIMEOUT`. When at least one brick serves a subgraph, plugbricks also starts the Cosmo router in front of them (`generate` builds its configuration from the subgraphs; it is not a brick, see D9). It is the only thing published on the host: with Compose on `127.0.0.1:<router.port>`, with Kubernetes as a ClusterIP Service (no Ingress, no NodePort). `status` shows its port and its image, pinned by digest. See `docs/decisions.md` (D5, D6).
-
-Every refusal prints `error <CODE>: <message>` with a stable code from `src/messages.ts`. Exit codes: 0 success, 1 refused or inconsistent, 2 usage error.
-
-### `status --runtime`: what really runs
-
-`plugbricks status` shows the declared state: the installed bricks, the composition, the router. `plugbricks status --runtime <compose|k8s>` also asks the runtime what it really runs, and puts the two side by side. It only reads (D10): one `docker compose ps --all --format json` and one `docker inspect` restricted to the restart counts, or one `kubectl get deployments,pods,services --output json`. It never execs into a container, never reads logs, Secrets or environment variables, and never sends a request to a service: the health it reports is the runtime's own. Every call has a 15 s timeout (kubectl also gets `--request-timeout=10s`).
+## Quick start
 
 ```bash
-npx plugbricks status --runtime compose            # a table
-npx plugbricks status --runtime compose --json     # the versioned JSON report
-npx plugbricks status --runtime k8s --context my-cluster [--kubeconfig file] [--json]
+npm create plugbricks mon-saas -- --starter demo   # the example shop (D30); without --starter, an empty project
+cd mon-saas && npm install
+npx plugbricks up                                  # Docker Compose; the router answers at http://127.0.0.1:4000/graphql
+npx plugbricks down                                # stops everything; volumes and secrets are kept
 ```
 
-There is no runtime field in `platform.json`: name the runtime, as for `up` and `down`. Kubernetes needs the same explicit `--context` (and optional `--kubeconfig`) as `up`, with the same refusals (`K8S_CONTEXT_REQUIRED`, `K8S_CONTEXT_REFUSED`, `K8S_KUBECONFIG_NOT_FOUND`).
+Until the first publication, run these from a clone: see [Getting started](docs/guide/getting-started.md).
 
-For each installed brick and each of its services, and for the router: `enabled` (installed and not disabled in `platform.json`, see `enabled` and `tags` below), `deployed` (the runtime has a container or a Deployment for it), `state`, a short `reason`, the restart count and the container or pod names. A difference between the two is flagged: `mismatch` is `not-deployed` (enabled, nothing running) or `not-declared` (running under the platform's name, not in `platform.json`, listed under `undeclared`). The router also gives its published address (Compose: `127.0.0.1:<port>`; Kubernetes: `<cluster IP>:<port>` of its Service), the digest of the image the runtime reports, and the state of each subgraph service it calls.
+## Documentation
 
-| `state`        | Meaning                                                                                                     |
-| -------------- | ----------------------------------------------------------------------------------------------------------- |
-| `healthy`      | Running, and its health check (Compose healthcheck, Kubernetes readiness probe) passes.                    |
-| `starting`     | Not ready yet: health check not passed yet, init containers running, rollout in progress.                  |
-| `unhealthy`    | Running but failing: failing health check, restart loop, CrashLoopBackOff, image pull error, unschedulable. |
-| `stopped`      | Exited (with its exit code), created but never started, or scaled to 0.                                    |
-| `not deployed` | The runtime has nothing for it.                                                                             |
-| `unknown`      | Running with no health check to tell (the router on Compose: its image has no shell), or a state plugbricks does not know. Never counted as a problem. |
+The guide is in [`docs/guide/`](docs/guide/getting-started.md), and the same files make the documentation site (D40).
 
-Exit codes of `status --runtime`: **0** every enabled service and the router are `healthy` or `unknown`; **1** the declared state is inconsistent (the same problems as `status`) or the cluster is refused; **2** usage error; **3** an enabled service or the router is `starting`, `unhealthy`, `stopped` or `not deployed`; **4** the runtime cannot be read (`RUNTIME_UNAVAILABLE`: not installed, not answering, or slower than the timeout). Something running but not declared is reported and does not change the exit code.
+| Page                                                          | For                                                                 |
+| ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [Getting started](docs/guide/getting-started.md)              | a first API behind the router, step by step                         |
+| [A project and its bricks](docs/guide/project.md)             | `add`, `remove`, `disable`, the files of a project, refusals        |
+| [Writing a service](docs/guide/services.md)                   | `create` (TypeScript, Python, Go), `dev`, `logs`, `exec`            |
+| [Writing a brick](docs/guide/bricks.md)                       | the manifest, field by field; web pages                             |
+| [Databases, queues and tokens](docs/guide/capabilities.md)    | `postgres`, `rabbitmq`, `nats`, `keycloak`, roles                   |
+| [Existing services](docs/guide/existing-services.md)          | a subgraph that runs elsewhere, gRPC, REST                          |
+| [Running a platform](docs/guide/running.md)                   | `up`, `status --runtime`, `doctor`, Kubernetes, `export`            |
+| [The admin](docs/guide/admin.md)                              | the local web interface                                             |
+| [Known limits](docs/guide/limits.md)                          | what it does not do                                                 |
 
-`--json` prints one document, `"version": 1`, described by [`packages/plugbricks/schemas/status-runtime.schema.json`](packages/plugbricks/schemas/status-runtime.schema.json). Key names are stable within a version; no field holds a time, so two reads of the same runtime state give the same bytes. Shortened example (Compose, the shipping service stopped):
+How it is built: [architecture](docs/architecture.md), [decisions](docs/decisions.md).
 
-```json
-{
-  "version": 1,
-  "platform": "demo",
-  "runtime": "compose",
-  "context": null,
-  "state": "degraded",
-  "bricks": [
-    {
-      "name": "shipping",
-      "enabled": true,
-      "tags": ["api", "graphql"],
-      "services": [
-        {
-          "name": "shipping-api-app",
-          "service": "app",
-          "enabled": true,
-          "deployed": true,
-          "state": "stopped",
-          "reason": "exited with code 0",
-          "restarts": 0,
-          "instances": ["demo-shipping-app-1"],
-          "subgraph": true,
-          "mismatch": null
-        }
-      ]
-    }
-  ],
-  "router": {
-    "name": "router",
-    "enabled": true,
-    "deployed": true,
-    "state": "unknown",
-    "reason": "running; no health check",
-    "restarts": 0,
-    "instances": ["demo-router-1"],
-    "mismatch": null,
-    "address": "127.0.0.1:4000",
-    "image": "ghcr.io/wundergraph/cosmo/router:0.372.0@sha256:bfe6d89a…0205",
-    "digest": "sha256:bfe6d89a…0205",
-    "subgraphs": [
-      { "brick": "orders", "name": "orders-api-app", "state": "healthy" },
-      { "brick": "shipping", "name": "shipping-api-app", "state": "stopped" }
-    ]
-  },
-  "undeclared": [],
-  "problems": []
-}
-```
-
-This report feeds the **admin** (D15): `plugbricks admin --dev` serves the UI on
-`http://127.0.0.1:4100` (Bricks, Router, Audit). Without `--dev`, pass `--issuer` and `--client-id`
-and set `PLUGBRICKS_OIDC_CLIENT_SECRET` only for a confidential client (a public client uses PKCE
-alone); the account needs `plugbricks-viewer` (read) or `plugbricks-admin` (read and act). A real
-Keycloak walkthrough is in [`docs/keycloak.md`](docs/keycloak.md). From the Bricks page an administrator can add a brick (a path
-relative to the platform), enable or disable it, remove it, or deploy (`up`); each action runs the
-CLI as a child process, one at a time, and is written twice to `.admin/audit.log` (accepted, then its
-outcome). There is no `--prune-volumes` in the admin: deleting data stays a terminal decision. A
-viewer sees the same pages and cannot change anything. The Router page shows the configuration hash,
-size, source, composition and composed schema. The published package carries the built UI
-(`prepack` copies it to `dist/admin/ui`), and the `dist` test checks it.
-
-The screenshots below were taken on a real platform (`postgres`, `orders-api`, `shipping-api`, `orders-web` and
-the router on Docker Compose, admin in `--dev`). On Compose the router has no healthcheck (its image has no shell,
-D9), so its state is shown as `Unknown` while it runs.
-
-**Bricks**: what `platform.json` asks for next to what the runtime reports; a subgraph brick is reached
-through the router, a web brick's page on its own loopback port.
-
-![The Bricks page: four healthy bricks, their tags, ports, subgraphs and router endpoint](docs/screenshots/admin-bricks.png)
-
-**What a brick needs**: a click on a brick opens a panel under the table. *Dependencies* draws everything the brick
-needs, transitively: the capabilities it requires, the entities it extends, and the plugins its manifest lists in
-`dependencies` (D21). Here `orders-web` needs `orders-api`, which needs `postgres`; the arrow says why. Below it, the
-bricks needed first, in order, and who requires this one. A brick that is needed but not installed is flagged. *Details*
-gathers status, restarts, port, `provides`, `requires`, `extends` and what would refuse its removal. A declared
-dependency protects its target from `remove` (`DEPENDENCY_IN_USE`), here `orders-api` while `orders-web` is installed,
-and from `disable` while the declaring brick is enabled; `add` warns when the declared brick is not installed, and `enable` when it is disabled;
-`up` waits only for the capabilities a brick requires. A dependency marked `optional` (here `shipping-api`, which
-`orders-web` can run without) is shown as optional and protects nothing.
-
-![The Dependencies panel of orders-web: orders-web needs orders, which needs postgres](docs/screenshots/admin-dependencies.png)
-
-**Removing a brick**: the dialog shows the CLI's refusal before anything runs, here `orders-api`, whose
-`Order` entity `shipping-api` extends.
-
-![The removal dialog for orders, blocked with EXTENDS_IN_USE](docs/screenshots/admin-remove-blocked.png)
-
-**Router**: the configuration, the subgraphs it calls and the composed schema, read-only.
-
-![The Router page: state, configuration hash, subgraphs and composed schema](docs/screenshots/admin-router.png)
-
-**Audit log**: two lines per action, accepted then its outcome, refusals included.
-
-![The Audit log page with accepted, successful and refused actions](docs/screenshots/admin-audit.png)
-
-### `enabled` and `tags`
-
-A brick can be **disabled without being removed**: `plugbricks disable <name>` writes `enabled: false` in `platform.json`; its services stop (the next `up` removes them), while its volumes and secrets stay. `enable` brings it back, and the federated schema is recomposed either way (D14). `status` marks it `disabled`, and `status --runtime` reports it `stopped` with `enabled: false`, without making the platform degraded.
-
-Commands that change the platform (`add`, `remove`, `enable`, `disable`, `generate`, `up`, `down`) run **one at a time**: each holds `.platform/lock` while it runs, and another one meanwhile is refused with `PLATFORM_BUSY`, whether it comes from a terminal or from the admin. A lock left by a process that died is taken over (D16).
-
-A brick may also declare `tags` (`api`, `graphql`, `database`, `queue`, …) in its `plugin.json`; they are kept in `platform.lock` and shown in the JSON reports, for filtering in the admin.
-
-### `web`: a brick that serves pages
-
-A brick may declare the service that serves its pages: `"web": { "service": "app", "path": "/orders" }`.
-`add` gives it a `webPort` in `platform.json`, the first port from 8080 that neither the router nor
-another web brick uses (change it there if you like; a port already taken is refused with
-`WEB_PORT_CONFLICT`). On Docker Compose the service is published on `127.0.0.1:<webPort>` only; on
-Kubernetes it stays a ClusterIP Service, reached with `kubectl port-forward` on the same local port. When
-the platform has a router, the service is given `GRAPHQL_URL` (the router inside the platform, for its
-server) and `PUBLIC_GRAPHQL_URL` (`http://127.0.0.1:<router.port>/graphql`, for code that runs in the
-browser), and the router accepts browser calls from `http://127.0.0.1:<webPort>` and
-`http://localhost:<webPort>` only: any other origin gets 403 and its request does not run (D17). With
-no web brick, the router accepts only its own origin.
-
-`examples/orders-web` (source `apis/orders-web`) is the shop's orders page: its server reads the orders
-and their shipment through the router, and when shipping does not answer it still lists the orders with
-the shipment marked unavailable.
-
-![The orders page of orders-web on 127.0.0.1:8080, refreshed by the browser through the router](docs/screenshots/web-orders-page.png)
-
-With the shipping container stopped, the same page:
-
-![The orders page with shipping stopped: the orders are listed, the shipment is unavailable](docs/screenshots/web-orders-shipping-down.png)
-
-### `keycloak`: the platform's own identity provider
-
-`examples/keycloak` is a web brick that requires `database`: Keycloak with the realm `plugbricks` (roles
-`plugbricks-admin` and `plugbricks-viewer`, the admin's public client) and **no user**. Its image is published
-(`ghcr.io/rudney5000/plugbricks/keycloak:0.1.0`, D29), like those of the other application examples; to build it
-yourself instead: `docker build -t ghcr.io/rudney5000/plugbricks/keycloak:0.1.0 apis/keycloak`. Then:
-
-```bash
-npx plugbricks add postgres
-npx plugbricks add path/to/keycloak    # its console: http://127.0.0.1:<webPort>/admin/
-npx plugbricks up                      # returns once the realm answers (about 2 minutes the first time)
-```
-
-Sign into the console as `admin` with the password `PB_KEYCLOAK__ADMIN_PASSWORD` from
-`.secrets/secrets.env`, create the users and give them `plugbricks-admin` or `plugbricks-viewer`, then:
-
-```bash
-npx plugbricks admin --client-id plugbricks-admin   # the issuer is the keycloak brick's, found in the platform
-```
-
-`--issuer` still overrides it (an external issuer, `docs/keycloak.md`).
-
-The brick uses `${web.origin}`, the address the browser uses (`http://127.0.0.1:<webPort>`), a template
-allowed only in the env of a web brick's own service. The realm is imported on the first start only, and
-the admin must run on port 4100, the redirect URI of the realm's client (D18).
-
-### A subgraph that runs elsewhere
-
-A brick can federate a GraphQL service that plugbricks does not run (D33): no services, and the address in its
-subgraph. Composition, `extends` and the router are the same as for any subgraph; `up` starts nothing for it, and
-`status` says it is not supervised.
-
-```json
-{
-  "name": "catalog",
-  "version": "0.1.0",
-  "services": [],
-  "subgraph": { "url": "https://catalog.example.com/graphql", "schema": "schema.graphql" }
-}
-```
-
-`plugbricks schema check catalog` compares the schema file with what the service serves, and exits 1 with the
-differences when the service changed. The router does not pass the caller's token on to it unless the subgraph says
-`"forwardAuthorization": true`. A service
-of this machine is `http://host.docker.internal:<port>/...` (never `localhost`, which would be the router's own
-container); on a Linux Docker engine it must listen on the address of Docker's bridge, not on 127.0.0.1 only.
-
-### A gRPC service as a subgraph
-
-The router can call a gRPC service as a subgraph, through Cosmo Connect (D35). You write the GraphQL contract, `wgc`
-generates the Protocol Buffers from it, the service implements them, and the brick says where the three files are:
-
-```bash
-wgc grpc-service generate catalog -i schema.graphql -o .   # writes service.proto, mapping.json and service.proto.lock.json
-```
-
-```json
-{
-  "name": "catalog-grpc",
-  "version": "0.1.0",
-  "services": [{ "name": "app", "image": "ghcr.io/example/catalog-grpc:0.1.0", "port": 50051 }],
-  "subgraph": { "service": "app", "schema": "schema.graphql", "grpc": { "proto": "service.proto", "mapping": "mapping.json" } }
-}
-```
-
-Composition, `extends` and the router are the same as for any subgraph, and a gRPC subgraph joins an HTTP one through
-`@key`. The router checks the token and passes it on to the service as gRPC metadata; the service decides what to do
-with it. The call is in plain text on the platform's network. `examples/catalog-grpc` is a working service (source in
-`apis/catalog-grpc`). Not supported over gRPC, per the documentation of Cosmo: subscriptions and nested keys.
-
-### A REST service behind an adapter
-
-The router calls GraphQL and gRPC subgraphs, not REST: a REST service joins the platform through a small adapter, a
-GraphQL subgraph written from its OpenAPI contract (D36). `examples/stock-api` is a worked one, in front of
-`examples/stock-rest`, which stands for the service you already run:
-
-```bash
-npx plugbricks add path/to/stock-rest
-npx plugbricks add path/to/stock-api     # needs stock-rest (D21)
-npx plugbricks up
-```
-
-Its source (`apis/stock-api`) shows what such an adapter has to get right: ids checked before they enter a URL, the
-REST errors turned into GraphQL ones without leaking the upstream's details, a timeout, no redirect followed. It passes
-no credential to the REST API: that is a decision to make for each service. For your own API, change `STOCK_API_URL` in
-the brick's manifest to its address, drop the dependency, and write your operations.
-
-### `queue`: one message broker for every service that needs it
-
-`examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:
-
-```bash
-npx plugbricks add rabbitmq           # provides "queue"
-npx plugbricks add services/orders-api    # requires "queue": receives AMQP_URL
-```
-
-Each consumer gets its **own vhost, user and password**: `AMQP_URL=amqp://<brick>:<its secret>@rabbitmq-broker:5672/<brick>` and `QUEUE_NAME=<its brick name>` (D11, D12). A service declares and uses its own queue on the shared broker; the broker's administrator password is only used by the provision task, never injected into a consumer. The broker is never published, its data volume is kept by `down` and by `remove`, and its management port 15672 is an extra port of its Service (ClusterIP, never on the host).
-
-The example `examples/queue-consumer` shows the whole path: it declares its queue, publishes one message, consumes it, and its `/health` answers 200 only once that round-trip succeeded. The end-to-end tests use it, on Docker Compose and on k3d.
-
-`examples/nats` is a **second `queue` provider** (D13): core NATS only, with `NATS_URL` and `SUBJECT` per consumer, no accounts and no JetStream. Like RabbitMQ, it is an alternative — a platform has one queue provider at a time.
+![The Bricks page of the admin: four healthy bricks, their tags, ports, subgraphs and router endpoint](docs/screenshots/admin-bricks.png)
 
 ## Layout
 
@@ -355,10 +71,11 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `test/fixtures/invalid/` — one invalid manifest per file, each with exactly one fault; `expected.json` gives the code and path it must produce.
   - `test/fixtures/cli/` — one folder per CLI scenario: `scenario.json` (steps, expected exit code, error codes, output, and the exact `docker`/`kubectl` commands, run by a fake executor), optional `bricks/` and golden `expected/` files (including `.generated/` output). Regenerate the golden files with `PLUGBRICKS_UPDATE_GOLDEN=1 npm test -w plugbricks`, then review the diff.
   - `test/` — Vitest suite, including `dist.test.ts`, which packs the package with `npm pack` and runs the built CLI, and `e2e-compose.test.ts`, which runs `up`/`down` against a real Docker engine (skipped, with the reason, where no Linux engine answers).
-- `apis/orders-api/` — the source of the `orders-api` example API (Node 22, GraphQL Yoga, `@apollo/subgraph`, `pg`): a federation v2 subgraph with its own migrations and `/health`. Built as the image `ghcr.io/rudney5000/plugbricks/orders-api:0.1.0` (`docker build -t ghcr.io/rudney5000/plugbricks/orders-api:0.1.0 apis/orders-api`), which `examples/orders-api/plugin.json` runs. A standalone package with its own lockfile: the brick folder holds only the manifest and the SDL, so `add` never copies `node_modules`. Its tests check that its SDL is the brick's. The image is built locally and is not published to a registry yet: build it before `up`, and load it into a Kubernetes cluster (for example `k3d image import`) before `up --runtime k8s`.
+- `apis/orders-api/` — the source of the `orders-api` example API (Node 22, GraphQL Yoga, `@apollo/subgraph`, `pg`): a federation v2 subgraph with its own migrations and `/health`. Built as the image `ghcr.io/rudney5000/plugbricks/orders-api:0.1.0` (`docker build -t ghcr.io/rudney5000/plugbricks/orders-api:0.1.0 apis/orders-api`), which `examples/orders-api/plugin.json` runs. A standalone package with its own lockfile: the brick folder holds only the manifest and the SDL, so `add` never copies `node_modules`. Its tests check that its SDL is the brick's. The images workflow publishes it (D29); a Kubernetes cluster pulls it itself.
 - `apis/shipping-api/` — the source of the `shipping-api` example API, same shape as `apis/orders-api` (its own lockfile, migrations, `/health`, image `ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0`, built with `docker build -t ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0 apis/shipping-api`). Its subgraph extends the `Order` entity of the orders API with a `shipment` field (`examples/shipping-api/plugin.json` declares `extends: [{ plugin: "orders", entities: ["Order"] }]`) and keeps its data in its own database, which the orders API cannot reach. Its tests check that its SDL is the brick's, and a test composes all the example bricks together.
 - `apis/queue-consumer/` — the source of the queue consumer example (Node 22, `amqplib`, `/health`), same shape as `apis/orders-api`: a standalone package with its own lockfile, image `ghcr.io/rudney5000/plugbricks/queue-consumer:0.1.0`, built with `docker build -t ghcr.io/rudney5000/plugbricks/queue-consumer:0.1.0 apis/queue-consumer`. It connects with its own `AMQP_URL`, declares `QUEUE_NAME`, publishes one message and consumes it; `/health` answers 200 only after that round-trip. Its tests check the health state machine.
 - `packages/create-plugbricks/` — `npm create plugbricks <name>`: copies `template/`, writes `package.json`, and calls `initPlatform` from `plugbricks`.
+- `docs/` — the documentation site (D40): the guide (`docs/guide/`), the architecture, the decisions; `npm ci && npm run dev` in that folder serves it.
 - `docs/decisions.md` — design decisions taken ahead of their implementation, with their evidence.
 - `docs/architecture.md` — how the pieces fit together, from the manifest to the running containers, with what is built and what is planned.
 

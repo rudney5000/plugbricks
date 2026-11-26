@@ -10,6 +10,8 @@ While the version is 0.x, a minor version may change the manifest, the CLI or th
 
 The first version. It will be published under the `next` dist-tag: `npm create plugbricks@next <name>`.
 
+The documentation is the guide in [`docs/guide/`](docs/guide/getting-started.md), also built as a site (D40).
+
 ### A project
 
 - `npm create plugbricks <name>` creates a project: `platform.json`, `platform.lock`, the bricks `postgres`,

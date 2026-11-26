@@ -2374,6 +2374,40 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   end-to-end test builds one awkward name, and the list in `src/create.ts` says which version it comes from.
 - **Not done.** A Go web brick; token checks; Kubernetes for a Go service.
 
+## D40. A documentation site from the files of `docs/`, with its guide held to the code
+
+- **Status:** implemented (2026-11-26); not published: enabling GitHub Pages is the owner's step
+  (`docs/pre-publication-checklist.md`). Section 3 of `docs/roadmap.md`.
+- **Context:** the documentation was `README.md`, 460 lines written along the milestones, and the decision log: nothing led a
+  newcomer from nothing to a running platform.
+- **Decision.**
+  - **VitePress** 1.6.4 in `docs/`, a standalone package with its lock file (not a workspace: its dependencies are not those of
+    the packages). The pages are the Markdown files of `docs/`, read in place. Vite is overridden to 6.4.6: VitePress 1 asks
+    for Vite 5, whose development server has open advisories (`npm audit`: 3, then 0). Diagrams (`mermaid` 12.3.0) are drawn by
+    a component of the theme, without a third-party plugin; links that leave `docs/` go to GitHub; raw HTML is off, so that
+    `<name>` in a sentence stays text.
+  - **The pages.** Home, a guide (`docs/guide/`: getting started, a project and its bricks, writing a service, writing a
+    brick, databases queues and tokens, existing services, running, the admin, known limits), and "How it is built"
+    (architecture, Keycloak, decisions, roadmap). The owner's checklist is left out.
+  - **One place per fact.** The reference sections of `README.md` moved into the guide; the README keeps what plugbricks is,
+    a quick start, the table of the pages, and what a contributor needs (from 463 lines to about 180).
+  - **Held to the code** (`packages/create-plugbricks/test/docs.test.js`, in `npm test`): the commands of "Getting started"
+    run in order against a project the generator writes, with Docker faked, and its queries are checked against the composed
+    schema; every command and option the guide names is in `--help`; every manifest and fragment it shows is valid; every field
+    of the manifest and every variable a provider gives is named.
+  - **Publication.** The workflow `docs.yml` builds the site on a pull request that touches `docs/`, and on `main` deploys it
+    only when the repository variable `PAGES_ENABLED` is `true`: until the owner enables Pages, `main` stays green and nothing
+    is public. The actions are pinned by commit SHA.
+- **Tested.** The site builds (a dead link between pages fails it); screenshots in headless Chrome of the home page, the guide
+  and the architecture, whose six diagrams are drawn. The guide's test found two admin options missing from `--help`
+  (`--issuer`, `--client-id`), now there. Three mutations, each caught: a query on a field that does not exist, an option that
+  does not exist, an invalid manifest. By hand with Docker, "Getting started" from a clone: the API created, built, queried,
+  changed with `dev` and queried again, `postgres` added, `down`; and the example shop (its web port changed, 8080 being taken
+  on that machine): queried, its page answered 200.
+- **Not tested.** The deployment itself, and whether the repository's token may deploy to Pages (a setting). The pages read on
+  a phone. The commands of the other pages are checked for their names, not run.
+- **Limit.** The screenshot of the admin's dependencies is from an earlier version, and the page says so.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
