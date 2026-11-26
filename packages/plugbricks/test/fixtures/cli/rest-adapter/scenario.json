@@ -1,0 +1,16 @@
+{
+  "description": "the REST adapter example (D36): stock-api needs stock-rest (D21), which it calls by the name plugbricks gives that service, the same on Docker Compose and on Kubernetes; stock-rest cannot be removed while it is needed",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/stock-rest"], "stdout": "Added stock-rest 0.1.0" },
+    { "run": ["add", "examples/stock-api"], "stdout": "Added stock-api 0.1.0", "notStdout": "is not installed" },
+    { "run": ["status"], "stdout": ["Federation: stock-api"] },
+    { "run": ["remove", "stock-rest"], "exit": 1, "codes": ["DEPENDENCY_IN_USE"], "unchanged": true },
+    { "run": ["generate"] },
+    { "run": ["generate", "--runtime", "k8s"] }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "STOCK_API_URL: http://stock-rest-app:8080",
+    ".generated/k8s/resources.yaml": "name: stock-rest-app\n"
+  }
+}

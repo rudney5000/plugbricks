@@ -1,0 +1,39 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "stock-api",
+  "version": "0.1.0",
+  "description": "Example adapter: a GraphQL subgraph in front of a REST API, written from its OpenAPI contract. It calls the address in STOCK_API_URL, here the stock-rest brick; for your own service, change that address and the adapter's code. The router checks the token (D19); this example neither checks it again nor passes it to the REST API. Its source is apis/stock-api; build the image with: docker build -t ghcr.io/rudney5000/plugbricks/stock-api:0.1.0 apis/stock-api",
+  "services": [
+    {
+      "name": "app",
+      "image": "ghcr.io/rudney5000/plugbricks/stock-api:0.1.0",
+      "port": 4000,
+      "env": {
+        "STOCK_API_URL": "http://stock-rest-app:8080"
+      },
+      "healthcheck": {
+        "exec": [
+          "wget",
+          "-qO-",
+          "http://localhost:4000/health"
+        ]
+      }
+    }
+  ],
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "path": "/graphql"
+  },
+  "dependencies": [
+    {
+      "plugin": "stock-rest",
+      "description": "the REST API the adapter calls; point STOCK_API_URL at your own service and drop this dependency"
+    }
+  ],
+  "tags": [
+    "api",
+    "graphql",
+    "rest"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Stock",
+    "version": "0.1.0",
+    "description": "The REST API of the example: it stands for a service you already run. The adapter (apis/stock-api) is written from this contract."
+  },
+  "paths": {
+    "/items": {
+      "get": {
+        "operationId": "listItems",
+        "responses": {
+          "200": {
+            "description": "Every item of the stock",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Item" } } } }
+          }
+        }
+      }
+    },
+    "/items/{sku}": {
+      "get": {
+        "operationId": "getItem",
+        "parameters": [{ "$ref": "#/components/parameters/Sku" }],
+        "responses": {
+          "200": { "description": "The item", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } } },
+          "404": {
+            "description": "No such item",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/items/{sku}/restock": {
+      "post": {
+        "operationId": "restockItem",
+        "parameters": [{ "$ref": "#/components/parameters/Sku" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["quantity"],
+                "properties": { "quantity": { "type": "integer", "minimum": 1, "maximum": 1000 } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The item after the delivery",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Item" } } }
+          },
+          "400": {
+            "description": "The quantity is refused",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "No such item",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Sku": { "name": "sku", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,32}$" } }
+    },
+    "schemas": {
+      "Item": {
+        "type": "object",
+        "required": ["sku", "name", "quantity"],
+        "properties": { "sku": { "type": "string" }, "name": { "type": "string" }, "quantity": { "type": "integer", "minimum": 0 } }
+      },
+      "Error": { "type": "object", "required": ["message"], "properties": { "message": { "type": "string" } } }
+    }
+  }
+}

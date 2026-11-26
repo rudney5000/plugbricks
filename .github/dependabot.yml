@@ -44,6 +44,15 @@ updates:
       catalog-grpc-dependencies:
         patterns: ["*"]
 
+  # The REST adapter example (D36). apis/stock-rest has no dependency, so nothing to update there.
+  - package-ecosystem: npm
+    directory: /apis/stock-api
+    schedule:
+      interval: weekly
+    groups:
+      stock-api-dependencies:
+        patterns: ["*"]
+
   # Same for apis/queue-consumer: a standalone package with its own lock file.
   - package-ecosystem: npm
     directory: /apis/queue-consumer

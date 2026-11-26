@@ -40,13 +40,13 @@ function exampleSubgraphs(): SubgraphInput[] {
 }
 
 describe("the example bricks, composed together", () => {
-  it("orders, shipping and the gRPC catalog compose, and shipping extends the Order entity of orders", () => {
+  it("orders, shipping, the gRPC catalog and the REST adapter compose, and shipping extends the Order entity of orders", () => {
     const inputs = exampleSubgraphs();
-    expect(inputs.map((i) => i.brick)).toEqual(["catalog-grpc", "orders-api", "shipping-api"]);
+    expect(inputs.map((i) => i.brick)).toEqual(["catalog-grpc", "orders-api", "shipping-api", "stock-api"]);
     expect(inputs.find((i) => i.brick === "shipping-api")?.extends).toEqual([{ plugin: "orders-api", entities: ["Order"] }]);
     const result = composeSubgraphs(inputs);
     expect(result.ok, result.ok ? "" : result.issues.map((i) => i.message).join("\n")).toBe(true);
-    if (result.ok) expect(result.federation?.subgraphs).toEqual(["catalog-grpc", "orders-api", "shipping-api"]);
+    if (result.ok) expect(result.federation?.subgraphs).toEqual(["catalog-grpc", "orders-api", "shipping-api", "stock-api"]);
   });
 
   it("shipping alone is refused: its owner is missing", () => {
