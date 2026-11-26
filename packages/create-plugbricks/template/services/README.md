@@ -22,5 +22,5 @@ On Kubernetes the cluster pulls the image itself. For a local cluster, import it
 the cluster reads, and name it that way from the start:
 `npx plugbricks create inventory --kind api --image ghcr.io/<you>/inventory-api:0.1.0`.
 
-An API in Python instead of TypeScript: `npx plugbricks create inventory --kind api --lang python`. After a change to a
-service or to its schema, in a running platform: `npx plugbricks dev inventory-api`.
+An API in Python or in Go instead of TypeScript: `npx plugbricks create inventory --kind api --lang python` (or
+`--lang go`). After a change to a service or to its schema, in a running platform: `npx plugbricks dev inventory-api`.

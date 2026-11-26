@@ -1,0 +1,40 @@
+// Your code: one method for each field of bricks/{{name}}/schema.graphql that gqlgen asks a resolver for. The rest of
+// this package is generated when the image is built. To have it on your machine too (for your editor), in this folder's
+// parent: cp ../../bricks/{{name}}/schema.graphql . && go tool gqlgen generate
+package graph
+
+import (
+	"context"
+	"slices"
+
+	"service/graph/model"
+)
+
+// Replace these items with your own data.
+var items = []*model.{{GoType}}{
+	{ID: "1", Name: "first"},
+	{ID: "2", Name: "second"},
+}
+
+// Resolver holds what the resolvers share (a database pool, a client).
+type Resolver struct{}
+
+func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
+
+func (r *Resolver) Entity() EntityResolver { return &entityResolver{r} }
+
+type queryResolver struct{ *Resolver }
+
+type entityResolver struct{ *Resolver }
+
+func (r *queryResolver) {{GoField}}(_ context.Context) ([]*model.{{GoType}}, error) {
+	return items, nil
+}
+
+// Called by the router when another subgraph refers to an item by its key.
+func (r *entityResolver) Find{{GoType}}ByID(_ context.Context, id string) (*model.{{GoType}}, error) {
+	if i := slices.IndexFunc(items, func(item *model.{{GoType}}) bool { return item.ID == id }); i >= 0 {
+		return items[i], nil
+	}
+	return nil, nil
+}

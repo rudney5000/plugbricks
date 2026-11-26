@@ -1002,9 +1002,9 @@ describe("the queue capability with NATS", () => {
   );
 });
 
-// "plugbricks create" (D28): what it writes builds and runs as it is. An API, a Python API (D38) and a web brick are
-// created, their images built from the project folder with the command create prints, and the platform answers through the
-// router. Then "plugbricks dev" (D37) gives the Python API a new field.
+// "plugbricks create" (D28): what it writes builds and runs as it is. An API, a Python API (D38), a Go API (D39) and a web
+// brick are created, their images built from the project folder with the command create prints, and the platform answers
+// through the router. Then "plugbricks dev" (D37) gives the Python API a new field.
 describe("bricks written by create", () => {
   const name = "pbtest-create";
   const routerAt = 14107;
@@ -1019,6 +1019,8 @@ describe("bricks written by create", () => {
       for (const args of [
         ["inventory", "--kind", "api"],
         ["stock", "--kind", "api", "--lang", "python"],
+        // A name whose Go method and type names differ (XIDItems, XIdItem): the template must follow gqlgen.
+        ["x-id", "--kind", "api", "--lang", "go"],
         ["shop", "--kind", "web"],
       ]) {
         const r = cli(work, ["create", ...args]);
@@ -1052,6 +1054,9 @@ describe("bricks written by create", () => {
       const stock = await through(routerAt, "stockItems", "{ stockItems { name } }");
       expect(stock.body).toEqual({ data: { stockItems: [{ name: "first" }, { name: "second" }] } });
 
+      const go = await through(routerAt, "xIdItems", "{ xIdItems { name } }");
+      expect(go.body).toEqual({ data: { xIdItems: [{ name: "first" }, { name: "second" }] } });
+
       // A new field in the schema and its resolver: dev rebuilds that service alone and restarts the router with it.
       const schema = join(work, "bricks/stock-api/schema.graphql");
       writeFileSync(schema, `${readFileSync(schema, "utf8")}\nextend type Query {\n  added: String\n}\n`);
@@ -1075,7 +1080,9 @@ describe("bricks written by create", () => {
       const html = await (await fetch(`http://127.0.0.1:${pageAt}/`)).text();
       expect(html).toContain("<title>shop-web</title>");
       expect(html).toContain("the router answered 200");
-      console.log(`created bricks: Node and Python APIs through the router, a field added with dev, the page of shop-web read the router`);
+      console.log(
+        `created bricks: Node, Python and Go APIs through the router, a field added with dev, the page of shop-web read the router`,
+      );
 
       expect(cli(work, ["down"]).code).toBe(0);
     },

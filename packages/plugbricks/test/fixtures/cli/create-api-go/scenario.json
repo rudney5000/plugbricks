@@ -1,0 +1,67 @@
+{
+  "description": "create <name> --kind api --lang go (D39) writes the same brick as a Node API and a Go service in services/<name>, naming the generated types and methods as gqlgen does (UserURLItem)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "create",
+        "user-url",
+        "--kind",
+        "api",
+        "--lang",
+        "go"
+      ],
+      "stdout": [
+        "Created user-url-api: bricks/user-url-api (the brick) and services/user-url-api (its code and image recipe)\nAdded user-url-api 0.1.0",
+        "  docker build -t demo/user-url-api:0.1.0 -f services/user-url-api/Dockerfile .\n  plugbricks up"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: user-url-api"
+    },
+    {
+      "run": [
+        "create",
+        "x-id",
+        "--kind",
+        "api",
+        "--lang",
+        "go"
+      ]
+    }
+  ],
+  "exists": [
+    "bricks/user-url-api/plugin.json",
+    "services/user-url-api/Dockerfile",
+    "services/user-url-api/Dockerfile.dockerignore",
+    "services/user-url-api/go.mod",
+    "services/user-url-api/go.sum",
+    "services/user-url-api/gqlgen.yml",
+    "services/user-url-api/main.go",
+    "services/user-url-api/graph/resolver.go",
+    "services/user-url-api/graph/errors.go"
+  ],
+  "absent": [
+    "services/user-url-api/main.go.tmpl",
+    "services/user-url-api/graph/resolver.go.tmpl",
+    "services/user-url-api/package.json",
+    "services/user-url-api/main.py"
+  ],
+  "expectRaw": {
+    "bricks/user-url-api/schema.graphql": "type UserUrlItem @key(fields: \"id\") {",
+    "services/user-url-api/graph/resolver.go": "func (r *entityResolver) FindUserURLItemByID(",
+    "services/user-url-api/main.go": "log.Printf(\"user-url-api: listening on :%s (/graphql, /health)\", port)",
+    "services/user-url-api/go.mod": "module service\n",
+    "services/user-url-api/Dockerfile": "COPY bricks/user-url-api/schema.graphql ./",
+    "services/x-id-api/graph/resolver.go": "func (r *queryResolver) XIDItems(_ context.Context) ([]*model.XIdItem, error) {"
+  }
+}

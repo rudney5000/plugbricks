@@ -14,7 +14,7 @@ export const BRICK_KINDS = ["api", "web"] as const;
 export type BrickKind = (typeof BRICK_KINDS)[number];
 
 /** The languages of an API's service (D38); a web brick has one template. */
-export const API_LANGUAGES = ["node", "python"] as const;
+export const API_LANGUAGES = ["node", "python", "go"] as const;
 export type ApiLanguage = (typeof API_LANGUAGES)[number];
 
 /** Where the code of the services created by "create" goes, next to bricks/ (D28). */
@@ -38,6 +38,24 @@ const pascal = (s: string) =>
   s
     .split("-")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+
+/**
+ * The words gqlgen writes in capitals in Go names (`CommonInitialisms`, codegen/templates of gqlgen 0.17.98). The Go
+ * template names the types and methods gqlgen generates, so it has to name them as gqlgen does (D39).
+ */
+const GO_INITIALISMS = new Set(
+  "ACL API ASCII CPU CSS CSV DNS EOF GUID HTML HTTP HTTPS ICMP ID IP JSON KVK LHS PDF PGP QPS QR RAM RHS RPC SLA SMTP SQL SSH SVG TCP TLS TTL UDP UI UID URI URL UTF8 UUID VM XML XMPP XSRF XSS AWS GCP".split(
+    " ",
+  ),
+);
+
+/** `UserUrlItem` -> `UserURLItem`, `xIdItems` -> `XIDItems`: gqlgen's Go name of a type or field as "create" writes them. */
+export const goName = (name: string) =>
+  name
+    // A word ends where a lower case letter is followed by anything else.
+    .split(/(?<=[a-z])(?=[^a-z])/)
+    .map((w) => (GO_INITIALISMS.has(w.toUpperCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
     .join("");
 
 /** Every file of a folder, relative, sorted. */
@@ -111,14 +129,19 @@ export function createBrick(
     throw new PlugbricksError([issue(pinned.code, "", params)]);
   }
   const stem = name.slice(0, -`-${kind}`.length) || name;
+  // A type and a field named after the brick: two created APIs compose together (a Query field defined by two
+  // subgraphs would need @shareable).
+  const Type = `${pascal(stem)}Item`;
+  const field = `${pascal(stem).charAt(0).toLowerCase()}${pascal(stem).slice(1)}Items`;
   const values = {
     name,
     image,
     schema: MANIFEST_SCHEMA_ID,
-    // A type and a field named after the brick: two created APIs compose together (a Query field defined by two
-    // subgraphs would need @shareable).
-    Type: `${pascal(stem)}Item`,
-    field: `${pascal(stem).charAt(0).toLowerCase()}${pascal(stem).slice(1)}Items`,
+    Type,
+    field,
+    // The same two names as gqlgen writes them in Go (the Go template only): each from the name the schema holds.
+    GoType: goName(Type),
+    GoField: goName(field),
   };
   // The parent folders this call creates go too when the add is refused: nothing is left of a refused create.
   const created = [dirname(brickDir), dirname(serviceDir)].filter((d) => !existsSync(d));

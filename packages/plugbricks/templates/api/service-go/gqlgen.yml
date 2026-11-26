@@ -1,0 +1,12 @@
+schema:
+  - schema.graphql
+exec:
+  filename: graph/generated.go
+  package: graph
+federation:
+  filename: graph/federation.go
+  package: graph
+  version: 2
+model:
+  filename: graph/model/models.go
+  package: model

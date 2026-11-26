@@ -12,6 +12,11 @@ services/*/dist/
 # The virtual environment and caches of a Python service, when run outside its image.
 services/*/.venv/
 __pycache__/
+# What gqlgen generates from the schema of a Go service, and the copy of that schema it reads, outside its image.
+services/*/graph/generated.go
+services/*/graph/federation.go
+services/*/graph/model/
+services/*/schema.graphql
 
 node_modules/
 *.log

@@ -60,7 +60,7 @@ Commands:
   add <name>             Install the brick bricks/<name> of this project (or the folder <name> here)
   add <path>             Install the brick at <path> (a directory with a plugin.json)
                          Either way, what it needs from bricks/ is proposed first (--yes: add it without asking)
-  create <name> --kind api|web [--lang node|python] [--image <ref>]
+  create <name> --kind api|web [--lang node|python|go] [--image <ref>]
                          Write a new brick <name>-api or <name>-web in bricks/ and its code in services/, and add it
   remove <name>          Uninstall a brick
   enable <name>          Deploy an installed brick again (it was disabled)
@@ -97,7 +97,7 @@ Options:
   -y, --yes              With add: also add what the brick needs from bricks/, without asking
   --with-secrets         With export: also write the secret values (.env or secret.yaml), ignored by a .gitignore
   --kind api|web         With create: a GraphQL subgraph or a web brick
-  --lang node|python     With create --kind api: the language of its service (default node)
+  --lang node|python|go  With create --kind api: the language of its service (default node)
   --image <ref>          With create: the image its manifest names (default <platform>/<name>:0.1.0), pinned
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
@@ -372,8 +372,7 @@ export function main(argv: string[], io: Io): number {
           const lang = values.lang as ApiLanguage | undefined;
           if (lang !== undefined && (kind !== "api" || !API_LANGUAGES.includes(lang))) {
             throw usage("USAGE_INVALID_OPTION", "", {
-              detail:
-                kind === "api" ? `--lang must be ${API_LANGUAGES.join(" or ")} (got "${lang}")` : "--lang only applies with --kind api",
+              detail: kind === "api" ? `--lang must be node, python or go (got "${lang}")` : "--lang only applies with --kind api",
             });
           }
           const r = createBrick(root, args[0], kind, { image: values.image, lang });
