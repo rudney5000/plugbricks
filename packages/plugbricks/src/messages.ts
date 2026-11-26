@@ -130,6 +130,10 @@ export const MESSAGES = {
   EXTERNAL_URL_CREDENTIALS:
     "the address of an external subgraph cannot hold a user or a password: it would sit in the manifest and the lock",
   EXTERNAL_URL_LOOPBACK: '"{host}" names the router\'s own container; a service of this machine is reached at host.docker.internal',
+  SCHEMA_CHECK_NO_SUBGRAPH: 'brick "{brick}" serves no subgraph: it has no schema to check',
+  SCHEMA_CHECK_EXTERNAL_ONLY:
+    'brick "{brick}" serves its subgraph from a service of the platform, which this machine does not reach (D9); schema check compares an external subgraph, or give the address with --url',
+  SCHEMA_CHECK_UNREACHABLE: 'could not read the schema of "{brick}" at {url}: {detail}',
   EXTERNAL_NOT_RUN: 'brick "{brick}" is an external subgraph ({url}): plugbricks does not run it',
   BRICK_DISABLED_NOT_RUNNING: 'brick "{brick}" is disabled, so nothing of it runs; "plugbricks enable {brick}", then up',
   ROUTER_NOT_IN_PLATFORM: "this platform has no router: no installed brick serves a subgraph",
