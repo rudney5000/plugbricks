@@ -1,0 +1,64 @@
+// {{name}}: a GraphQL subgraph in Go, created by "plugbricks create".
+//
+// Its schema is bricks/{{name}}/schema.graphql, the one the platform composes. The image build generates the Go code of
+// that schema with gqlgen (see the Dockerfile); your code is graph/resolver.go. A field added to the schema without a
+// resolver stops the build and names the missing method.
+package main
+
+import (
+	"context"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+
+	"service/graph"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "4000"
+	}
+
+	api := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	api.AddTransport(transport.POST{})
+	api.Use(extension.Introspection{})
+	api.SetErrorPresenter(graph.MaskErrors)
+
+	// GraphQL on /graphql, and /health, which the brick's health check calls. Nothing else is served.
+	mux := http.NewServeMux()
+	mux.Handle("/graphql", api)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "text/plain")
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	server := &http.Server{Addr: ":" + port, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+
+	// docker stop and Kubernetes send SIGTERM: finish the requests in flight.
+	stop, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		<-stop.Done()
+		wait, release := context.WithTimeout(context.Background(), 10*time.Second)
+		defer release()
+		if err := server.Shutdown(wait); err != nil {
+			log.Printf("{{name}}: closing the server: %v", err)
+		}
+	}()
+
+	log.Printf("{{name}}: listening on :%s (/graphql, /health)", port)
+	if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("{{name}}: %v", err)
+	}
+	<-done
+}

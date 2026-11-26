@@ -17,7 +17,7 @@
       "unchanged": true
     },
     { "run": ["create", "shop", "--kind", "web", "--lang", "python"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "stderr": "--lang only applies with --kind api", "unchanged": true },
-    { "run": ["create", "stock", "--kind", "api", "--lang", "rust"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "stderr": "--lang must be node or python (got \"rust\")", "unchanged": true },
+    { "run": ["create", "stock", "--kind", "api", "--lang", "rust"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "stderr": "--lang must be node, python or go (got \"rust\")", "unchanged": true },
     { "run": ["add", "postgres", "--lang", "python"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"], "unchanged": true }
   ],
   "absent": ["bricks/catalog-api"],

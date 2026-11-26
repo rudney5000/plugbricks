@@ -49,8 +49,9 @@ in `services/<name>-api`, outside the brick, which `add` copies whole. `--kind w
 with no dependency. The image is yours to build, from the project folder, with the command `create` prints; the
 manifest names it `<platform>/<name>-api:0.1.0` (D28).
 
-`--lang python` writes the API in Python instead (Ariadne, from the same schema, with pinned and hashed requirements):
-the brick is the same, only the service differs (D38).
+`--lang python` writes the API in Python instead (Ariadne, from the same schema, with pinned and hashed requirements),
+`--lang go` in Go (gqlgen, which generates the code of the schema when the image is built: a new field without a resolver
+stops the build and names the method to write): the brick is the same, only the service differs (D38, D39).
 
 `add` also proposes what the brick needs from `bricks/`: the providers of what it requires and the bricks it declares
 in `dependencies`, and what those need in turn (`add orders-web` proposes `postgres` and `orders-api`). In a terminal it

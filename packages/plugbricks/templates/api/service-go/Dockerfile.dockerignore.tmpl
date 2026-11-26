@@ -1,0 +1,8 @@
+# Read by Docker for services/{{name}}/Dockerfile only: the build context is the project folder, and the image needs
+# only these files (no binary built here, no secrets, no other service).
+*
+!services/{{name}}/go.mod
+!services/{{name}}/go.sum
+!services/{{name}}/gqlgen.yml
+!services/{{name}}/**/*.go
+!bricks/{{name}}/schema.graphql

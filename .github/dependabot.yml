@@ -81,6 +81,15 @@ updates:
       create-api-python-template:
         patterns: ["*"]
 
+  # The Go service template of "plugbricks create --kind api --lang go" (D39): its go.mod and go.sum.
+  - package-ecosystem: gomod
+    directory: /packages/plugbricks/templates/api/service-go
+    schedule:
+      interval: weekly
+    groups:
+      create-api-go-template:
+        patterns: ["*"]
+
   # tools/wgc-crosscheck holds only the official Cosmo CLI for a test; a new version is a new reference to compare with.
   - package-ecosystem: npm
     directory: /tools/wgc-crosscheck

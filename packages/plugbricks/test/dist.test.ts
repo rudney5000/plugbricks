@@ -59,6 +59,10 @@ describe("published package", () => {
         "templates/api/brick/plugin.json.tmpl",
         "templates/api/service/package-lock.json",
         "templates/api/service/src/main.ts.tmpl",
+        "templates/api/service-python/main.py.tmpl",
+        "templates/api/service-python/requirements.txt",
+        "templates/api/service-go/go.sum",
+        "templates/api/service-go/graph/resolver.go.tmpl",
         "templates/web/service/server.mjs.tmpl",
       ]),
     );
