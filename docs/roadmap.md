@@ -17,7 +17,7 @@ when the one before it that it depends on is merged.
 | 4   | ~~The dependencies a brick needs, with confirmation~~ (done, D26)                     | 2, step 2      | step 3                                        | code                              |
 | 5   | ~~`plugbricks doctor`~~ (done, D31)                                                   | 2, step 6      | nothing                                       | code                              |
 | 6   | Documentation site on GitHub Pages                                                    | 3              | steps 3 and 4, for its "Getting started" page | code, and the owner enables Pages |
-| 7   | ~~External subgraph~~ (D33, step 1; step 2, the schema check, to do)                  | 4, item 1      | nothing                                       | decision, then code               |
+| 7   | ~~External subgraph~~ (D33, with `schema check`)                                       | 4, item 1      | nothing                                       | decision, then code               |
 | 8   | ~~`create --kind`~~ (D28), ~~a starter~~ (D30), ~~public images of the examples~~ (D29) | 2, steps 3 to 5 | steps 3 and 4                                | code                              |
 | 9   | ~~`logs` and `exec`~~ (D32), a development loop, service templates in other languages | 5              | step 8 for the templates                      | code                              |
 | 10  | `export`: leave plugbricks with plain Compose or Kubernetes files                     | 8, item 1      | nothing                                       | code                              |
@@ -130,7 +130,7 @@ themselves). What it federates today is a **GraphQL service in Federation v2 tha
    - `up`, `down`, volumes and dependencies assume a brick has services: what a brick without one means.
 
    **Decided and built (D33, step 1):** `subgraph.url` and `services: []`, the token only when the brick asks for it,
-   `http` with a warning. Step 2, the comparison of the schema file with the service's, is still to do.
+   `http` with a warning; `plugbricks schema check <brick>` compares the schema file with the service's (step 2).
 2. **gRPC services, through Cosmo Connect** (the router can call a gRPC service as a subgraph: a GraphQL schema is
    written, `wgc grpc-service generate` produces the Protocol Buffers, the service implements them). A study first:
    does the router pinned in `tools.json` support it, does the configuration reach `router-config.json`

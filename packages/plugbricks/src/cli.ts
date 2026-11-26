@@ -24,6 +24,7 @@ import { needsOf, type Choice } from "./needs.js";
 import { BRICK_KINDS, createBrick, type BrickKind } from "./create.js";
 import { doctor } from "./doctor.js";
 import { execIn, logs } from "./attach.js";
+import { schemaCheck } from "./schemacheck.js";
 import {
   down,
   generate,
@@ -67,6 +68,8 @@ Commands:
                          Show the logs of a brick's service (or of the router: logs router)
   exec <brick> [--service <name>] [-- <command>...]
                          Run a command inside a brick's service, a shell (sh) when none is given
+  schema check <brick> [--url <address>]
+                         Compare the schema file of an external subgraph with what its service serves (exit 1 if not)
   doctor                 Check what up needs (Node, Docker or kubectl, ports, images) and say what to fix; read-only
   status --runtime <name> [--json]
                          Also read what the runtime really runs (read-only): state, reason, restarts
@@ -169,6 +172,7 @@ export function main(argv: string[], io: Io): number {
           service: { type: "string" },
           follow: { type: "boolean", short: "f" },
           tail: { type: "string" },
+          url: { type: "string" },
           image: { type: "string" },
           port: { type: "string" },
           dev: { type: "boolean" },
@@ -215,6 +219,7 @@ export function main(argv: string[], io: Io): number {
     if (values.service !== undefined) optionFor("service", "logs", "exec");
     if (values.follow !== undefined) optionFor("follow", "logs");
     if (values.tail !== undefined) optionFor("tail", "logs");
+    if (values.url !== undefined) optionFor("url", "schema");
     if (values.image !== undefined) optionFor("image", "create");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
@@ -385,6 +390,24 @@ export function main(argv: string[], io: Io): number {
             { service: values.service, command: args.slice(1), tty: io.ask !== undefined },
             { ...io.runtime, k8s },
           );
+        }
+        case "schema": {
+          // One subcommand today: check (D33, step 2).
+          if (args[0] !== "check")
+            throw usage("USAGE_INVALID_OPTION", "", { detail: 'the schema command has one subcommand: "plugbricks schema check <brick>"' });
+          if (args.length < 2) throw usage("USAGE_MISSING_ARGUMENT", "", { command: "schema check", argument: "a brick name" });
+          if (args.length > 2) throw usage("USAGE_UNEXPECTED_ARGUMENT", "", { command: "schema check", argument: args[2] });
+          const r = schemaCheck(root, args[1], { url: values.url, exec: io.runtime?.exec });
+          if (r.differences.length === 0) {
+            io.stdout(`${r.brick}: the schema served at ${r.url} says what ${r.file} says`);
+            return 0;
+          }
+          io.stdout(`${r.brick}: the schema served at ${r.url} differs from ${r.file}, which the router composes:`);
+          for (const d of r.differences) io.stdout(`  ${d}`);
+          io.stdout(
+            `To follow the service: update bricks/${r.brick}/${r.file.split("/").pop()}, then "plugbricks remove ${r.brick}" and "plugbricks add ${r.brick}".`,
+          );
+          return 1;
         }
         case "doctor": {
           only(0, "");

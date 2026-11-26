@@ -1127,6 +1127,11 @@ describe("a subgraph that runs elsewhere (D33)", () => {
         },
       });
 
+      // Its schema file says what the service serves (D33, step 2), asked from this machine.
+      const checked = cli(work, ["schema", "check", "inventory"]);
+      expect(checked.code, `${checked.out}\n${checked.err}`).toBe(0);
+      expect(checked.out).toContain("says what .platform/bricks/inventory/schema.graphql says");
+
       // Not supervised: stopped by hand, the router still answers, with its error for that subgraph.
       expect(spawnSync("docker", ["stop", service], { encoding: "utf8" }).status).toBe(0);
       const down = await through(routerAt, "inventoryItems while down", "{ inventoryItems { id } }");

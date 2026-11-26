@@ -1,0 +1,27 @@
+{
+  "description": "schema check (D33, step 2) refuses a brick it cannot read the schema of, and says why: not installed, no subgraph, a subgraph served inside the platform (which this machine does not reach) without --url, an address that does not answer; and the usage errors",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "examples/postgres"] },
+    { "run": ["add", "examples/orders-api"] },
+    { "run": ["schema", "check", "nope"], "exit": 1, "codes": ["BRICK_NOT_INSTALLED"], "unchanged": true },
+    { "run": ["schema", "check", "postgres"], "exit": 1, "codes": ["SCHEMA_CHECK_NO_SUBGRAPH"], "unchanged": true },
+    {
+      "run": ["schema", "check", "orders-api"],
+      "exit": 1,
+      "codes": ["SCHEMA_CHECK_EXTERNAL_ONLY"],
+      "stderr": "which this machine does not reach (D9)",
+      "unchanged": true
+    },
+    {
+      "run": ["schema", "check", "orders-api", "--url", "http://127.0.0.1:59998/graphql"],
+      "exit": 1,
+      "codes": ["SCHEMA_CHECK_UNREACHABLE"],
+      "stderr": "could not read the schema of \"orders-api\" at http://127.0.0.1:59998/graphql: ECONNREFUSED",
+      "unchanged": true
+    },
+    { "run": ["schema"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"] },
+    { "run": ["schema", "check"], "exit": 2, "codes": ["USAGE_MISSING_ARGUMENT"] },
+    { "run": ["status", "--url", "http://x"], "exit": 2, "codes": ["USAGE_INVALID_OPTION"] }
+  ]
+}
