@@ -267,6 +267,29 @@ differences when the service changed. The router does not pass the caller's toke
 of this machine is `http://host.docker.internal:<port>/...` (never `localhost`, which would be the router's own
 container); on a Linux Docker engine it must listen on the address of Docker's bridge, not on 127.0.0.1 only.
 
+### A gRPC service as a subgraph
+
+The router can call a gRPC service as a subgraph, through Cosmo Connect (D35). You write the GraphQL contract, `wgc`
+generates the Protocol Buffers from it, the service implements them, and the brick says where the three files are:
+
+```bash
+wgc grpc-service generate catalog -i schema.graphql -o .   # writes service.proto, mapping.json and service.proto.lock.json
+```
+
+```json
+{
+  "name": "catalog-grpc",
+  "version": "0.1.0",
+  "services": [{ "name": "app", "image": "ghcr.io/example/catalog-grpc:0.1.0", "port": 50051 }],
+  "subgraph": { "service": "app", "schema": "schema.graphql", "grpc": { "proto": "service.proto", "mapping": "mapping.json" } }
+}
+```
+
+Composition, `extends` and the router are the same as for any subgraph, and a gRPC subgraph joins an HTTP one through
+`@key`. The router checks the token and passes it on to the service as gRPC metadata; the service decides what to do
+with it. The call is in plain text on the platform's network. `examples/catalog-grpc` is a working service (source in
+`apis/catalog-grpc`). Not supported over gRPC, per the documentation of Cosmo: subscriptions and nested keys.
+
 ### `queue`: one message broker for every service that needs it
 
 `examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:

@@ -49,8 +49,15 @@ export interface BrickManifest {
     healthcheck?: Partial<Healthcheck> & { exec: string[] };
     env?: Record<string, string>;
   }[];
-  /** One of the brick's services (service, path), or a service that runs elsewhere (url, D33). */
-  subgraph?: { service?: string; url?: string; schema: string; path?: string; forwardAuthorization?: boolean };
+  /** One of the brick's services (service, path), one of its gRPC services (service, grpc, D35), or a service that runs elsewhere (url, D33). */
+  subgraph?: {
+    service?: string;
+    url?: string;
+    schema: string;
+    path?: string;
+    forwardAuthorization?: boolean;
+    grpc?: { proto: string; mapping: string };
+  };
   /** The service that serves web pages (D17). */
   web?: { service: string; path?: string };
   /** On a web brick that provides oidc: what the router needs to check its tokens (D19). */
@@ -607,12 +614,24 @@ function buildRouter(
       continue;
     }
     const service = services.find((s) => s.brick === brick && s.service === m.subgraph!.service)!;
+    const g = m.subgraph.grpc;
     inputs.push({
       brick,
       file: `${BRICKS_DIR}/${brick}/${m.subgraph.schema}`,
       sdl: router.readSchema(brick, m.subgraph.schema),
-      url: `http://${service.name}:${service.port}${m.subgraph.path ?? "/graphql"}`,
+      // A gRPC service is reached at a target, host:port, with no scheme and no path (D35).
+      url: g ? `${service.name}:${service.port}` : `http://${service.name}:${service.port}${m.subgraph.path ?? "/graphql"}`,
       extends: m.extends ?? [],
+      ...(g
+        ? {
+            grpc: {
+              protoFile: `${BRICKS_DIR}/${brick}/${g.proto}`,
+              proto: router.readSchema(brick, g.proto),
+              mappingFile: `${BRICKS_DIR}/${brick}/${g.mapping}`,
+              mapping: router.readSchema(brick, g.mapping),
+            },
+          }
+        : {}),
     });
     subgraphs.push({ service: service.name, brick, healthy: service.healthcheck !== undefined });
   }

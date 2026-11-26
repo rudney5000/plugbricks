@@ -1,0 +1,76 @@
+syntax = "proto3";
+package service.v1;
+
+// Service definition for Catalog
+service Catalog {
+  // Lookup Product entity by id
+  rpc LookupProductById(LookupProductByIdRequest) returns (LookupProductByIdResponse) {}
+  rpc MutationRename(MutationRenameRequest) returns (MutationRenameResponse) {}
+  rpc QueryProduct(QueryProductRequest) returns (QueryProductResponse) {}
+  rpc QueryProducts(QueryProductsRequest) returns (QueryProductsResponse) {}
+}
+
+// Key message for Product entity lookup
+message LookupProductByIdRequestKey {
+  // Key field for Product entity lookup.
+  string id = 1;
+}
+
+// Request message for Product entity lookup.
+message LookupProductByIdRequest {
+  /*
+   * List of keys to look up Product entities.
+   * Order matters - each key maps to one entity in LookupProductByIdResponse.
+   */
+  repeated LookupProductByIdRequestKey keys = 1;
+}
+
+// Response message for Product entity lookup.
+message LookupProductByIdResponse {
+  /*
+   * List of Product entities in the same order as the keys in LookupProductByIdRequest.
+   * Always return the same number of entities as keys. Use null for entities that cannot be found.
+   *
+   * Example:
+   *   LookupUserByIdRequest:
+   *     keys:
+   *       - id: 1
+   *       - id: 2
+   *   LookupUserByIdResponse:
+   *     result:
+   *       - id: 1 # User with id 1 found
+   *       - null  # User with id 2 not found
+   */
+  repeated Product result = 1;
+}
+
+// Request message for product operation.
+message QueryProductRequest {
+  string id = 1;
+}
+// Response message for product operation.
+message QueryProductResponse {
+  Product product = 1;
+}
+// Request message for products operation.
+message QueryProductsRequest {
+}
+// Response message for products operation.
+message QueryProductsResponse {
+  repeated Product products = 1;
+}
+// Request message for rename operation.
+message MutationRenameRequest {
+  string id = 1;
+  string name = 2;
+}
+// Response message for rename operation.
+message MutationRenameResponse {
+  Product rename = 1;
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  double price = 3;
+}

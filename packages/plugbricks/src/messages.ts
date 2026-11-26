@@ -126,6 +126,13 @@ export const MESSAGES = {
   EXTERNAL_SUBGRAPH_PATH: "an external subgraph has no path: write it in the url",
   EXTERNAL_WITH_SERVICES: "a brick whose subgraph runs elsewhere (subgraph.url) has no services of its own",
   EXTERNAL_FIELD_NOT_ALLOWED: 'a brick whose subgraph runs elsewhere cannot have "{field}": plugbricks runs nothing of it',
+  GRPC_NEEDS_SERVICE:
+    'a "grpc" subgraph is served by a service of the brick ("service"): plugbricks does not call a gRPC service that runs elsewhere',
+  GRPC_SUBGRAPH_PATH: 'a gRPC service has no path: remove "path" from a subgraph that has "grpc"',
+  GRPC_MAPPING_INVALID: 'the mapping file {file} of brick "{brick}" is not what `wgc grpc-service generate` writes: {detail}',
+  GRPC_PROTO_SERVICE_MISSING: 'the proto file {file} of brick "{brick}" does not declare the service "{service}" its mapping names',
+  SCHEMA_CHECK_GRPC:
+    'brick "{brick}" is a gRPC service: it serves no SDL to compare; keep its proto and mapping with `wgc grpc-service generate` (its proto lock file keeps the field numbers)',
   EXTERNAL_URL_INVALID: '"{url}" is not a valid address',
   EXTERNAL_URL_CREDENTIALS:
     "the address of an external subgraph cannot hold a user or a password: it would sit in the manifest and the lock",

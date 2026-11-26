@@ -4,6 +4,10 @@
 # Test inputs and golden files: scenario bricks, expected platform.json / platform.lock, generated output.
 **/test/fixtures/**
 
+# The proto, the mapping and the lock that `wgc grpc-service generate` wrote for the gRPC example (D35): kept as it wrote them,
+# the brick ships copies and a test compares them byte for byte.
+apis/catalog-grpc/proto/**
+
 # Bricks shipped as examples: their integrity hash is recorded in golden lock files.
 packages/plugbricks/examples/**
 

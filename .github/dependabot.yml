@@ -35,6 +35,15 @@ updates:
       shipping-api-dependencies:
         patterns: ["*"]
 
+  # The gRPC example (D35): a standalone package with its own lock file.
+  - package-ecosystem: npm
+    directory: /apis/catalog-grpc
+    schedule:
+      interval: weekly
+    groups:
+      catalog-grpc-dependencies:
+        patterns: ["*"]
+
   # Same for apis/queue-consumer: a standalone package with its own lock file.
   - package-ecosystem: npm
     directory: /apis/queue-consumer

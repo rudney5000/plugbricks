@@ -224,8 +224,9 @@ export function schemaCheck(
   const project = readProject(root);
   if (!Object.hasOwn(project.lock.bricks, brick)) throw new PlugbricksError([issue("BRICK_NOT_INSTALLED", "", { name: brick })]);
   const copy = join(project.root, BRICKS_DIR, brick);
-  const m = JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8")) as { subgraph?: { url?: string; schema: string } };
+  const m = JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8")) as { subgraph?: { url?: string; schema: string; grpc?: unknown } };
   if (!m.subgraph) throw new PlugbricksError([issue("SCHEMA_CHECK_NO_SUBGRAPH", "", { brick })]);
+  if (m.subgraph.grpc !== undefined) throw new PlugbricksError([issue("SCHEMA_CHECK_GRPC", "", { brick })]);
   if (m.subgraph.url === undefined && opts.url === undefined)
     throw new PlugbricksError([issue("SCHEMA_CHECK_EXTERNAL_ONLY", "", { brick })]);
   let url = opts.url ?? m.subgraph.url!;

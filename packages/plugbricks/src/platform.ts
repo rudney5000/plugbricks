@@ -265,7 +265,14 @@ interface Manifest {
   services: { name: string; port: number; volumes?: { name: string; retention?: "retain" | "delete" }[] }[];
   provides?: Record<string, { provision: { command: string[]; scripts?: string } }>;
   requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number; optional?: boolean }>;
-  subgraph?: { service?: string; url?: string; schema: string; path?: string; forwardAuthorization?: boolean };
+  subgraph?: {
+    service?: string;
+    url?: string;
+    schema: string;
+    path?: string;
+    forwardAuthorization?: boolean;
+    grpc?: { proto: string; mapping: string };
+  };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
   dependencies?: { plugin: string; description?: string; optional?: boolean; operations?: ("queries" | "mutations")[] }[];
@@ -457,6 +464,8 @@ function subgraphUrl(brick: string, m: Manifest): string {
   // A subgraph that runs elsewhere is called at its own address (D33).
   if (m.subgraph!.url !== undefined) return m.subgraph!.url;
   const service = m.services.find((s) => s.name === m.subgraph!.service);
+  // A gRPC service is reached at a target, host:port (D35).
+  if (m.subgraph!.grpc) return `${brick}-${m.subgraph!.service}:${service?.port ?? 80}`;
   return `http://${brick}-${m.subgraph!.service}:${service?.port ?? 80}${m.subgraph!.path ?? "/graphql"}`;
 }
 
@@ -469,6 +478,16 @@ function subgraphOf(brick: string, m: Manifest, dir: string, shown: (rel: string
     sdl: readFileSync(join(dir, m.subgraph.schema), "utf8"),
     url: subgraphUrl(brick, m),
     extends: m.extends ?? [],
+    ...(m.subgraph.grpc
+      ? {
+          grpc: {
+            protoFile: shown(m.subgraph.grpc.proto),
+            proto: readFileSync(join(dir, m.subgraph.grpc.proto), "utf8"),
+            mappingFile: shown(m.subgraph.grpc.mapping),
+            mapping: readFileSync(join(dir, m.subgraph.grpc.mapping), "utf8"),
+          },
+        }
+      : {}),
   };
 }
 

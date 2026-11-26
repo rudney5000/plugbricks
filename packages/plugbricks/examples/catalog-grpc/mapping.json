@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "service": "Catalog",
+  "operationMappings": [
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "product",
+      "mapped": "QueryProduct",
+      "request": "QueryProductRequest",
+      "response": "QueryProductResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_QUERY",
+      "original": "products",
+      "mapped": "QueryProducts",
+      "request": "QueryProductsRequest",
+      "response": "QueryProductsResponse"
+    },
+    {
+      "type": "OPERATION_TYPE_MUTATION",
+      "original": "rename",
+      "mapped": "MutationRename",
+      "request": "MutationRenameRequest",
+      "response": "MutationRenameResponse"
+    }
+  ],
+  "entityMappings": [
+    {
+      "typeName": "Product",
+      "kind": "entity",
+      "key": "id",
+      "rpc": "LookupProductById",
+      "request": "LookupProductByIdRequest",
+      "response": "LookupProductByIdResponse"
+    }
+  ],
+  "typeFieldMappings": [
+    {
+      "type": "Query",
+      "fieldMappings": [
+        {
+          "original": "product",
+          "mapped": "product",
+          "argumentMappings": [
+            {
+              "original": "id",
+              "mapped": "id"
+            }
+          ]
+        },
+        {
+          "original": "products",
+          "mapped": "products"
+        }
+      ]
+    },
+    {
+      "type": "Mutation",
+      "fieldMappings": [
+        {
+          "original": "rename",
+          "mapped": "rename",
+          "argumentMappings": [
+            {
+              "original": "id",
+              "mapped": "id"
+            },
+            {
+              "original": "name",
+              "mapped": "name"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Product",
+      "fieldMappings": [
+        {
+          "original": "id",
+          "mapped": "id"
+        },
+        {
+          "original": "name",
+          "mapped": "name"
+        },
+        {
+          "original": "price",
+          "mapped": "price"
+        }
+      ]
+    }
+  ]
+}

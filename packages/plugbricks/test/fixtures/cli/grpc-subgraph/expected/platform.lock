@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "catalog-grpc": {
+      "integrity": "sha256-e4febdb864c8ded2d1c38e5493ce1743f92f38710054eaed8ac4f204b3e863fe",
+      "provides": [],
+      "requires": {},
+      "source": "examples/catalog-grpc",
+      "tags": [
+        "api",
+        "grpc"
+      ],
+      "version": "0.1.0",
+      "volumes": []
+    }
+  },
+  "capabilities": {},
+  "federation": {
+    "composer": {
+      "name": "@wundergraph/composition",
+      "version": "0.68.2"
+    },
+    "routerCompatibilityVersion": "1",
+    "schemaSha256": "b3d402b0561bc37a2aacc6bfa35a3043cddde1a96572c7b771a48bcc8d5ef3b6",
+    "subgraphs": [
+      "catalog-grpc"
+    ]
+  },
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

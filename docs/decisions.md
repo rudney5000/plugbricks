@@ -2149,10 +2149,10 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done.** `export --out` for `generate`; a `kustomization.yaml` or a Helm chart; the volume size (1Gi, as `up`
   writes it) is the reader's to change; an image built locally is listed, not pushed.
 
-## D35. gRPC services through Cosmo Connect: what was checked, and what plugbricks would have to do
+## D35. gRPC services through Cosmo Connect: what was checked, and what plugbricks does
 
-- **Status:** study (2026-11-26). Nothing is implemented in plugbricks; the decision on what to build is open (last
-  paragraph). Item 2 of section 4 of `docs/roadmap.md`.
+- **Status:** studied, then implemented (2026-11-26), steps 1 to 3 and the example. Steps 4 and 5 are not decided or built
+  (last paragraph). Item 2 of section 4 of `docs/roadmap.md`.
 - **Context:** a team with a gRPC service wants it behind the same router as its GraphQL subgraphs. Cosmo Connect lets the
   router call a gRPC service as a subgraph: a GraphQL schema is written, `wgc grpc-service generate` produces the Protocol
   Buffers, the service implements them. The roadmap said "not verified at all in plugbricks". This is what was verified.
@@ -2192,21 +2192,50 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not verified.** TLS and mTLS to the service; `headers.subgraphs.<name>` (a rule for one gRPC subgraph only); Kubernetes
   (the same files, and a Service name as the target: `<brick>-<service>:<port>`); a federation of several gRPC services;
   what `wgc grpc-service generate --with-operations` produces; the tutorial of the documentation.
-- **What plugbricks would have to do (not decided).**
-  1. A manifest form for the subgraph: `subgraph: { service, grpc: { schema, proto, mapping } }`, the three files in the
-     brick like `schema.graphql` is, and the subgraph's address built as `<brick>-<service>:<port>` with no scheme and no
-     path (the HTTP form is `http://...<path>`).
-  2. `federation.ts`: pass `kind: GRPC`, `protoSchema` and `mapping` for such a brick; composition and the `extends` checks
-     are unchanged.
-  3. D19/D22: when the router checks tokens, add the `propagate` rule for the gRPC subgraphs (the HTTP ones get the header
-     by default); the roles of D22 are the service's business, as for an external subgraph (D33).
-  4. The proto is the contract: who generates it. Either the author runs `wgc grpc-service generate` and gives the files
-     (nothing new to ship: `wgc` stays a tool of the author), or plugbricks does it (a new dependency, `@wundergraph/protographic`,
-     which `wgc` uses). The first is the smaller step. Drift between the proto and the schema is then the author's: `schema check`
-     cannot ask a gRPC service for its SDL; `wgc` keeps a `service.proto.lock.json` for the field numbers.
-  5. `create <name> --kind grpc`: a service from a template that implements the generated proto. Not before the rest.
-- **Open.** Whether to build 1 to 3 (one step, with a scenario and a service of this study as the example), and the answer
-  to 4. This study does not decide them.
+- **What plugbricks does.**
+  1. **The manifest.** `subgraph: { service, schema, grpc: { proto, mapping } }`: the three files are in the brick, like
+     `schema.graphql` is, and the two new ones are what `wgc grpc-service generate` writes (`service.proto` and
+     `mapping.json`). The router calls the service at `<service>:<port>`, a gRPC target with no scheme and no path, which
+     is what the study found it needs. `grpc` goes with a service of the brick (`GRPC_NEEDS_SERVICE`: a gRPC service that
+     runs elsewhere is not supported) and not with `path` (`GRPC_SUBGRAPH_PATH`); the proto and the mapping go together
+     (the schema).
+  2. **The composition.** `federation.ts` gives `buildRouterConfig` a `SubgraphKind.GRPC` subgraph with its proto and its
+     mapping, as `wgc router compose` does; the SDL composes like any other, so a gRPC subgraph and an HTTP one join through
+     `@key` and `extends`. Two checks at `add`, which composition cannot make and the router would only report at the first
+     call: the mapping must be what `wgc` writes (`GRPC_MAPPING_INVALID`, with the reason) and the proto must declare the
+     service the mapping names, outside comments (`GRPC_PROTO_SERVICE_MISSING`).
+  3. **The token.** Nothing to add: when the router checks tokens, plugbricks already writes `headers.all.request:
+     propagate Authorization` (D20), which is the rule the study found a gRPC service needs; it reaches the service as
+     gRPC metadata. (The study's first text said the rule had to be added; it was already there, for every subgraph.) What
+     the service does with the token is its business, as for an external subgraph (D33): the example does not check it
+     again, the router did. The roles of D22 need `requires.oidc`, which the example does not declare.
+  4. **`schema check`** refuses a gRPC brick (`SCHEMA_CHECK_GRPC`): it asks a service for its SDL, and a gRPC service has
+     none. The drift to watch is the proto against the schema, which `wgc grpc-service generate` keeps with its
+     `service.proto.lock.json` (the field numbers); that stays the author's.
+  5. **The example.** `examples/catalog-grpc` and its service `apis/catalog-grpc` (Node, `@grpc/grpc-js`, the products and
+     the entity lookup of the study), an image `ghcr.io/rudney5000/plugbricks/catalog-grpc:0.1.0` that the images workflow
+     builds and publishes like the others (D29), a health check that calls the service (`node dist/health.js`: the image
+     has node and no `grpc_health_probe`). A key that is not in the catalog gets an empty Product, because a repeated field
+     cannot hold a null; the example says so. The proto is what `wgc` wrote, but for one space at the end of a comment line,
+     which the repository's pre-commit check refuses: running `wgc` again brings it back, and nothing depends on it.
+- **Tested.** Manifests: three invalid fixtures, one issue each. Composition: `examples-federation` composes the gRPC example
+  with orders and shipping; **`router-crosscheck`: our `router-config.json` with a gRPC service next to the HTTP ones is the
+  same as `wgc router compose`'s, field for field** (only the order of the subgraphs is set aside: ours are sorted by brick
+  name, wgc keeps the input's). CLI scenarios `grpc-subgraph` (golden lock, the target in the router config, `schema check`
+  refused), `grpc-subgraph-token` (the `headers.all` rule with Keycloak; the proto in the router config) and
+  `grpc-subgraph-refusals` (a bad mapping, a proto whose service is only in a comment). The service: five tests with a
+  gRPC client built from the proto, and one that keeps the brick's copies of the proto, the mapping and the schema byte
+  for byte equal to the service's. Three mutations, each caught: the gRPC kind turned off, the proto check inverted, the
+  target written as an http URL. By hand, with plugbricks itself: `up` on Docker Compose with `examples/catalog-grpc`
+  (image built locally): the health check passed, the router answered a list, a field with an argument and a mutation, and
+  `status --runtime` showed the service healthy.
+- **Not tested.** The token through plugbricks' own `router.yaml` with a real Keycloak token to a gRPC service (the study
+  proved the rule with the router and a service; the scenario proves plugbricks writes it). Kubernetes: the same target
+  with the name of the Service, rendered but not applied. TLS to the service. Several gRPC services in one platform. The
+  limits of the documentation (subscriptions, nested keys, nullable list items, custom scalars) were not tried.
+- **Open.** Whether plugbricks generates the proto itself (a new dependency, `@wundergraph/protographic`, which `wgc` uses;
+  today the author runs `wgc grpc-service generate` and gives the files, the smaller step), and `create <name> --kind grpc`,
+  a service template that implements a generated proto. Not before someone writes a second gRPC service.
 
 ## Already applied (milestone 2)
 

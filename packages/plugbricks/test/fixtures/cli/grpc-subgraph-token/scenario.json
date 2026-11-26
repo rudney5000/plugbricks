@@ -1,0 +1,39 @@
+{
+  "description": "with a token check (D19), the router passes the token on to a gRPC service too, as metadata (D35): the one rule for all subgraphs (D20)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/keycloak"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/catalog-grpc"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/router.yaml": "headers:\n  all:\n    request:\n      - op: propagate\n        named: Authorization\n",
+    ".generated/compose/router-config.json": "\"protoSchema\":\"syntax = \\\"proto3\\\";"
+  }
+}

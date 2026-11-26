@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../schemas/plugin-manifest.schema.json",
+  "name": "catalog-grpc",
+  "version": "0.1.0",
+  "description": "A gRPC subgraph (D35).",
+  "services": [],
+  "subgraph": {
+    "url": "https://catalog.example.com",
+    "schema": "schema.graphql",
+    "grpc": {
+      "proto": "service.proto",
+      "mapping": "mapping.json"
+    }
+  }
+}

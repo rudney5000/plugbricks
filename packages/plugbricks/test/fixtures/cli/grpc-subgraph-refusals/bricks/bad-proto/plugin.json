@@ -1,0 +1,31 @@
+{
+  "$schema": "../../../../../../../schemas/plugin-manifest.schema.json",
+  "name": "bad-proto",
+  "version": "0.1.0",
+  "description": "A gRPC brick whose proto file is wrong (D35).",
+  "services": [
+    {
+      "name": "app",
+      "image": "ghcr.io/rudney5000/plugbricks/catalog-grpc:0.1.0",
+      "port": 50051,
+      "healthcheck": {
+        "exec": [
+          "node",
+          "dist/health.js"
+        ]
+      }
+    }
+  ],
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "grpc": {
+      "proto": "service.proto",
+      "mapping": "mapping.json"
+    }
+  },
+  "tags": [
+    "api",
+    "grpc"
+  ]
+}
