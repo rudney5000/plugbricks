@@ -156,7 +156,8 @@ describe("export, Kubernetes", () => {
       .find((l) => l.startsWith("PB_"))!
       .split("=");
     expect(cli(["export", "out", "--runtime", "k8s", "--with-secrets"]).code).toBe(0);
-    expect(read("out/secret.yaml")).toContain(`${first[0]}: ${first[1]}`);
+    // The YAML writer quotes a value that starts with a digit (the secrets are random): both forms are the same text.
+    expect(read("out/secret.yaml")).toMatch(new RegExp(`^ +${first[0]}: "?${first[1]}"?$`, "m"));
     expect(read("out/.gitignore")).toContain("secret.yaml");
     if (posix) expect(statSync(join(root, "out/secret.yaml")).mode & 0o777).toBe(0o600);
   });
