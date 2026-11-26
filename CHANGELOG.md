@@ -38,6 +38,9 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 - The Cosmo router in front of the subgraphs, whose composition is checked when a brick is added (D8, D9); on Docker
   Compose it is published on the loopback address only, and it accepts browser calls only from the platform's own
   pages (D17).
+- A gRPC service as a subgraph, through Cosmo Connect: `subgraph.grpc` names the proto and the mapping that
+  `wgc grpc-service generate` writes; the router calls the service at `<service>:<port>`, composed with the other
+  subgraphs and given the token as gRPC metadata. The proto and the mapping are checked when the brick is added (D35).
 - An external subgraph: a brick without services whose subgraph is a GraphQL service that runs elsewhere
   (`subgraph.url`), composed and routed like the others; the token goes to it only when its manifest asks, and
   `schema check <brick>` says when its service no longer serves what the file says (D33).
@@ -69,7 +72,7 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 
 ### Example bricks
 
-- `postgres`, `rabbitmq`, `nats`, `keycloak`, `orders-api`, `shipping-api`, `orders-web`, `queue-consumer`; the images
+- `postgres`, `rabbitmq`, `nats`, `keycloak`, `orders-api`, `shipping-api`, `orders-web`, `queue-consumer`, `catalog-grpc` (a gRPC service, D35); the images
   of the application examples are published as `ghcr.io/rudney5000/plugbricks/<name>:0.1.0` (amd64, D29).
 
 ### Licence
