@@ -72,8 +72,9 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 
 ### Example bricks
 
-- `postgres`, `rabbitmq`, `nats`, `keycloak`, `orders-api`, `shipping-api`, `orders-web`, `queue-consumer`, `catalog-grpc` (a gRPC service, D35); the images
-  of the application examples are published as `ghcr.io/rudney5000/plugbricks/<name>:0.1.0` (amd64, D29).
+- `postgres`, `rabbitmq`, `nats`, `keycloak`, `orders-api`, `shipping-api`, `orders-web`, `queue-consumer`,
+  `catalog-grpc` (a gRPC service, D35), `stock-rest` and `stock-api` (a REST service and its GraphQL adapter, D36); the
+  images of the application examples are published as `ghcr.io/rudney5000/plugbricks/<name>:0.1.0` (amd64, D29).
 
 ### Licence
 

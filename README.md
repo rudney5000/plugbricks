@@ -290,6 +290,23 @@ Composition, `extends` and the router are the same as for any subgraph, and a gR
 with it. The call is in plain text on the platform's network. `examples/catalog-grpc` is a working service (source in
 `apis/catalog-grpc`). Not supported over gRPC, per the documentation of Cosmo: subscriptions and nested keys.
 
+### A REST service behind an adapter
+
+The router calls GraphQL and gRPC subgraphs, not REST: a REST service joins the platform through a small adapter, a
+GraphQL subgraph written from its OpenAPI contract (D36). `examples/stock-api` is a worked one, in front of
+`examples/stock-rest`, which stands for the service you already run:
+
+```bash
+npx plugbricks add path/to/stock-rest
+npx plugbricks add path/to/stock-api     # needs stock-rest (D21)
+npx plugbricks up
+```
+
+Its source (`apis/stock-api`) shows what such an adapter has to get right: ids checked before they enter a URL, the
+REST errors turned into GraphQL ones without leaking the upstream's details, a timeout, no redirect followed. It passes
+no credential to the REST API: that is a decision to make for each service. For your own API, change `STOCK_API_URL` in
+the brick's manifest to its address, drop the dependency, and write your operations.
+
 ### `queue`: one message broker for every service that needs it
 
 `examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:
