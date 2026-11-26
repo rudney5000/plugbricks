@@ -1,0 +1,162 @@
+{
+  "description": "dev (D37) rebuilds the image of one brick and restarts that service alone; with a new schema it takes it into the installed copy and restarts the router too; a failed build changes nothing, and a service that does not start shows its logs",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "create",
+        "inventory",
+        "--kind",
+        "api"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api",
+        "--no-follow"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --no-deps --force-recreate --wait --wait-timeout 120 inventory-api-app",
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker logs --tail 20 abc123"
+      ],
+      "stdout": "inventory-api-app runs the new demo/inventory-api:0.1.0",
+      "notStdout": "Took ",
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "append": {
+          "file": "bricks/inventory-api/schema.graphql",
+          "text": "\ntype Extra {\n  id: ID!\n}\n\nextend type Query {\n  extra: Extra\n}\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api",
+        "--no-follow"
+      ],
+      "exit": 1,
+      "codes": [
+        "DEV_BUILD_FAILED"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        },
+        {
+          "match": "docker build",
+          "status": 1
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile ."
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --no-deps --force-recreate --wait --wait-timeout 120 inventory-api-app router",
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker logs --follow --tail 20 abc123"
+      ],
+      "stdout": [
+        "Took schema.graphql from the brick; the router restarted with it",
+        "Its logs follow"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ]
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api",
+        "--no-follow"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --no-deps --force-recreate --wait --wait-timeout 120 inventory-api-app",
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker logs --tail 20 abc123"
+      ],
+      "notStdout": "Took "
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api",
+        "--no-follow"
+      ],
+      "exit": 1,
+      "codes": [
+        "DEV_RESTART_FAILED"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        },
+        {
+          "match": "--force-recreate",
+          "status": 1
+        }
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --no-deps --force-recreate --wait --wait-timeout 120 inventory-api-app",
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}",
+        "docker logs --tail 50 abc123"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".platform/bricks/inventory-api/schema.graphql": "extra: Extra"
+  }
+}

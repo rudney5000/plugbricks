@@ -1,0 +1,7 @@
+# Read by Docker for services/{{name}}/Dockerfile only: the build context is the project folder, and the image needs
+# only these files (no virtual environment, no secrets, no other service).
+*
+!services/{{name}}/requirements.txt
+!services/{{name}}/**/*.py
+services/{{name}}/.venv
+!bricks/{{name}}/schema.graphql

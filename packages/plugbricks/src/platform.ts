@@ -287,6 +287,10 @@ function checkReferencedFiles(dir: string, m: Manifest): void {
     if (!existsSync(join(dir, file))) missing.push(issue("BRICK_FILE_MISSING", path, { brick: m.name, file }));
   };
   if (m.subgraph) need(m.subgraph.schema, "/subgraph/schema");
+  if (m.subgraph?.grpc) {
+    need(m.subgraph.grpc.proto, "/subgraph/grpc/proto");
+    need(m.subgraph.grpc.mapping, "/subgraph/grpc/mapping");
+  }
   for (const [cap, p] of Object.entries(m.provides ?? {})) {
     const scripts = p.provision.scripts;
     if (scripts !== undefined) need(scripts, `/provides/${cap}/provision/scripts`);
@@ -536,6 +540,84 @@ function checkFederation(project: Project, leaving?: string, joining?: SubgraphI
   return result.federation;
 }
 
+/**
+ * Writes .platform/bricks/<name> from the brick folder `from`, whose integrity is `integrity`: through a temp dir and a
+ * rename, so that the copy is never half-written.
+ */
+function installCopy(root: string, from: string, name: string, integrity: string): void {
+  const dest = join(root, BRICKS_DIR, name);
+  const tmp = join(root, BRICKS_DIR, `.${name}.tmp-${process.pid}`);
+  mkdirSync(join(root, BRICKS_DIR), { recursive: true });
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp);
+  // The copy is exactly what was hashed: text files are written with LF (a CRLF shell script
+  // would fail in a Linux container), binary files byte for byte. File modes are kept.
+  for (const f of listBrickFiles(from, name)) {
+    mkdirSync(dirname(join(tmp, f)), { recursive: true });
+    const mode = statSync(join(from, f)).mode & 0o777;
+    writeFileSync(join(tmp, f), normalizeLineEndings(readFileSync(join(from, f))), { mode });
+    chmodSync(join(tmp, f), mode);
+  }
+  if (brickIntegrity(tmp, name) !== integrity) {
+    rmSync(tmp, { recursive: true, force: true });
+    fail("BRICK_MODIFIED", { brick: name });
+  }
+  // A leftover copy can only exist after a crash between copy and save: it is not in the lock, so replace it.
+  rmSync(dest, { recursive: true, force: true });
+  renameSync(tmp, dest);
+}
+
+// ---------- refreshing the contract of an installed brick (D37) ----------
+
+export interface ContractRefresh {
+  /** The contract files that differ between the brick's folder and the installed copy; none when nothing changed. */
+  changed: string[];
+  /** Replaces the installed copy and records it in the lock. Does nothing when nothing changed. */
+  apply: () => void;
+}
+
+/**
+ * What "dev" may take from the folder an installed brick came from (D37): its contract, the schema of its subgraph and,
+ * for a gRPC one, the proto and the mapping. Any other difference, the manifest first, is refused: it changes what the
+ * platform is made of, which "remove" then "add" does. Checks that the new contract still composes, and writes nothing
+ * before apply.
+ */
+export function contractRefresh(root: string, brick: string): ContractRefresh {
+  const project = readProject(root);
+  const entry = project.lock.bricks[brick];
+  if (!entry) fail("BRICK_NOT_INSTALLED", { name: brick });
+  const copy = join(project.root, BRICKS_DIR, brick);
+  // The copy is what the lock says, or nothing is built on it.
+  if (!existsSync(copy) || brickIntegrity(copy, brick) !== entry.integrity) fail("BRICK_MODIFIED", { brick });
+  const from = resolve(project.root, entry.source.endsWith(".json") ? dirname(entry.source) : entry.source);
+  if (!existsSync(join(from, "plugin.json"))) fail("BRICK_NOT_FOUND", { path: entry.source });
+  const integrity = brickIntegrity(from, brick);
+  if (integrity === entry.integrity) return { changed: [], apply: () => {} };
+
+  const installed = readJson(join(copy, "plugin.json"), `${BRICKS_DIR}/${brick}/plugin.json`) as Manifest;
+  const g = installed.subgraph;
+  const contract = new Set((g ? [g.schema, ...(g.grpc ? [g.grpc.proto, g.grpc.mapping] : [])] : []).map((f) => path.posix.normalize(f)));
+  const read = (dir: string, f: string) => (existsSync(join(dir, f)) ? normalizeLineEndings(readFileSync(join(dir, f))) : undefined);
+  const changed = [...new Set([...listBrickFiles(copy, brick), ...listBrickFiles(from, brick)])].sort().filter((f) => {
+    const [a, b] = [read(copy, f), read(from, f)];
+    return a === undefined || b === undefined || !a.equals(b);
+  });
+  const others = changed.filter((f) => !contract.has(f) || !existsSync(join(from, f)));
+  if (others.length) fail("DEV_BRICK_CHANGED", { brick, files: others.join(", "), source: entry.source });
+
+  const shown = (rel: string) => portableRelative(project.root, join(from, rel)) || rel;
+  const federation = checkFederation(project, brick, subgraphOf(brick, installed, from, shown));
+  return {
+    changed,
+    apply: () => {
+      installCopy(project.root, from, brick, integrity);
+      project.lock.bricks[brick].integrity = integrity;
+      setFederation(project.lock, federation);
+      save(project);
+    },
+  };
+}
+
 // ---------- add ----------
 
 /**
@@ -760,27 +842,7 @@ export function addBrick(root: string, brickPath: string, options: { byName?: st
     subgraphOf(m.name, m, brickDir, (rel) => portableRelative(project.root, join(brickDir, rel)) || rel),
   );
 
-  // Copy through a temp dir + rename so .platform/bricks/<name> is never half-written.
-  const dest = join(project.root, BRICKS_DIR, m.name);
-  const tmp = join(project.root, BRICKS_DIR, `.${m.name}.tmp-${process.pid}`);
-  mkdirSync(join(project.root, BRICKS_DIR), { recursive: true });
-  rmSync(tmp, { recursive: true, force: true });
-  mkdirSync(tmp);
-  // The copy is exactly what was hashed: text files are written with LF (a CRLF shell script
-  // would fail in a Linux container), binary files byte for byte. File modes are kept.
-  for (const f of listBrickFiles(brickDir, m.name)) {
-    mkdirSync(dirname(join(tmp, f)), { recursive: true });
-    const mode = statSync(join(brickDir, f)).mode & 0o777;
-    writeFileSync(join(tmp, f), normalizeLineEndings(readFileSync(join(brickDir, f))), { mode });
-    chmodSync(join(tmp, f), mode);
-  }
-  if (brickIntegrity(tmp, m.name) !== integrity) {
-    rmSync(tmp, { recursive: true, force: true });
-    fail("BRICK_MODIFIED", { brick: m.name });
-  }
-  // A leftover copy can only exist after a crash between copy and save: it is not in the lock, so replace it.
-  rmSync(dest, { recursive: true, force: true });
-  renameSync(tmp, dest);
+  installCopy(project.root, brickDir, m.name, integrity);
 
   lock.bricks[m.name] = entry;
   for (const cap of Object.keys(m.provides ?? {})) lock.capabilities[cap] = m.name;

@@ -28,7 +28,7 @@ The first version. It will be published under the `next` dist-tag: `npm create p
   anything; `--yes` for a script (D26). `remove`, `enable` and `disable` refuse what would break another brick
   (D14, D21).
 - `create <name> --kind api|web` writes a new GraphQL subgraph or web brick, with its code and its image recipe in
-  `services/` (D28).
+  `services/` (D28); `--lang python` writes the API in Python (D38).
 
 ### Running a platform
 
@@ -50,6 +50,12 @@ The first version. It will be published under the `next` dist-tag: `npm create p
   needs its role (D19, D20, D22).
 - `status`, and `status --runtime` for what the runtime really runs, read-only (D10). One changing command at a
   time per platform (D16).
+
+### Writing a service
+
+- `dev <brick>` rebuilds the image of a brick from `services/<brick>`, takes its new schema (and proto), restarts that
+  service alone, and the router when the schema changed, in a running platform, then follows its logs. Docker Compose
+  only; a change of manifest still needs `remove` and `add` (D37).
 
 ### When something goes wrong
 

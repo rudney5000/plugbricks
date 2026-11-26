@@ -1,0 +1,15 @@
+# Image of {{name}}. Build it from the project folder (the schema comes from the brick):
+#   docker build -t {{image}} -f services/{{name}}/Dockerfile .
+FROM python:3.13.18-alpine
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PORT=4000
+WORKDIR /app
+# Every package pinned and checked against its hash. To change them: edit requirements.in, then
+# pip-compile --generate-hashes --strip-extras -o requirements.txt requirements.in (from pip-tools).
+COPY services/{{name}}/requirements.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
+COPY services/{{name}}/ ./
+COPY bricks/{{name}}/schema.graphql ./
+# Never root at run time. wget (busybox) stays available for the brick's health check.
+USER nobody
+EXPOSE 4000
+CMD ["python", "main.py"]

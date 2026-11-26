@@ -2276,6 +2276,70 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   router wraps a subgraph's error: the code is in `errors[0].extensions.errors[0].extensions.code`.
 - **Not tested.** Kubernetes (rendered, not applied). An adapter that checks tokens or calls a REST API that asks for one.
 
+## D37. `plugbricks dev <brick>`: rebuild one brick and restart it alone
+
+- **Status:** implemented (2026-11-26). Item 2 of section 5 of `docs/roadmap.md`.
+- **Context:** after a change to a service, its author typed the `docker build` that `create` printed, then went through
+  `up` on the whole platform, then asked for the logs. A change of schema was worse: the router composes the installed copy of the brick, and `add`
+  refuses a brick that changed (`BRICK_NAME_CONFLICT`), so a new field meant `remove`, then `add`.
+- **Decision.**
+  - **The command.** `dev <brick> [--service <name>] [--no-follow]`: in a platform that is up, builds
+    `docker build -t <image> -f services/<brick>/Dockerfile .` (the command `create` prints, D28), recreates that service
+    alone with `docker compose up --no-deps --force-recreate --wait`, and follows its logs (`--no-follow`: the last 20
+    lines). One turn per command: run it again after the next change. No watching of files: it would need a long-running
+    process, and a rebuild on every save is rarely what is wanted.
+  - **The contract follows the code.** When the schema of the brick's subgraph (and, for a gRPC one, the proto and the
+    mapping) differs from the installed copy, `dev` takes it: it checks that the new one composes before anything is built,
+    updates the installed copy and the lock after the build, and recreates the router with the service.
+  - **Only the contract.** Any other difference in the brick's folder, the manifest first, is refused
+    (`DEV_BRICK_CHANGED`): a new service, volume or requirement changes what the platform is made of. Updating an installed
+    brick in general is chantier 11 and needs its own decision (what happens to volumes, secrets, web ports).
+  - **Nothing changes unless the image is built.** Not installed, disabled, external, no code in `services/` (`DEV_NO_SOURCE`),
+    an image named by digest (`DEV_IMAGE_BY_DIGEST`), a platform that is not up, a schema that does not parse or compose:
+    refused before the build. A failed build (`DEV_BUILD_FAILED`) leaves the installed copy, the lock and the containers as
+    they were. A service that does not start (`DEV_RESTART_FAILED`) shows its last 50 lines; the new contract is then
+    installed, as the next turn expects.
+  - **The lock** (D16) covers the check, the build and the restart, not the following of the logs: another command can run
+    meanwhile.
+  - **Docker Compose only.** On Kubernetes the image has to reach the cluster (import or push, D28), which differs per
+    cluster; `dev` has no `--runtime`.
+- **Tested.** CLI scenarios `dev-compose` (the commands run, the router only with a new schema, nothing changed by a failed
+  build, the logs of a service that does not start) and `dev-refusals`. Three mutations, each caught: the contract applied
+  before the build, the router never restarted, any changed file accepted. By hand on Docker Compose with an API written by
+  `create`: a new field in the schema and its resolver answered through the router after about 27 s; a TypeScript error left
+  the platform serving as before; a manifest change and a broken schema were refused; a crash at start showed the error;
+  while the logs were followed another command ran, and SIGINT stopped the following.
+- **Not done.** Kubernetes; a brick whose services use several images built from one folder; `dev` for several bricks at
+  once. `up` itself returns before the router listens (it has no health check on Compose, D9).
+
+## D38. `create --kind api --lang python`: a second service template
+
+- **Status:** implemented (2026-11-26). Item 3 of section 5 of `docs/roadmap.md`, its Python half.
+- **Context:** the README says plugbricks does not care what is inside an image, and only Node services existed: nothing
+  tested the claim.
+- **Decision.**
+  - **The option.** `--lang node|python`, with `--kind api` only (a web brick has one template). `node` stays the default.
+  - **The brick is the same.** One manifest and one schema template for every language: the contract is the schema. Only
+    the service folder differs (`templates/api/service-python`).
+  - **Ariadne** (1.1.1) with uvicorn (0.54.0) on `python:3.13.18-alpine`: it starts from the SDL, so the schema of the
+    brick stays the only one, and it has the federation entities. A library that builds the schema from classes would
+    describe it twice.
+  - **Requirements** pinned with their hashes (`requirements.in`, `requirements.txt` from `pip-compile --generate-hashes`,
+    installed with `--require-hashes`), the equivalent of the Node template's lock file; Dependabot follows them.
+  - **What it does like the Node one:** `/graphql` and `/health`, nothing else; no web explorer; a non-root image; an
+    entity and its reference resolver; the message of an unexpected exception stays out of the answer (Ariadne passes it
+    on by default: the template masks it, and lets a `GraphQLError` through).
+  - **The health check** of the API brick now calls `http://127.0.0.1:4000/health`, not `localhost`: in the Python image
+    `wget` resolves `localhost` to `::1`, and a server that listens on IPv4 only was reported unhealthy (found by running
+    it). Bricks already created keep their manifest.
+- **Tested.** CLI scenarios `create-api-python` (the same brick, a Python and a Node API composing) and the refusals; the
+  packed package ships the template; end to end on Docker Compose (`e2e-compose`): the Python image built with the printed
+  command, `stockItems` through the router, then `dev` added a field. One mutation caught: `--lang` ignored. By hand: a
+  Node API referring to an entity of the Python one (`_entities` across languages), an unexpected error masked and a
+  `GraphQLError` passed with its code, `_service` answering, `docker stop` in under a second with exit code 0.
+- **Not done.** Go (its federation library generates code, a build step to design); a Python web brick; token checks in
+  either template (D28: no brick requires anything); Kubernetes for a Python service.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

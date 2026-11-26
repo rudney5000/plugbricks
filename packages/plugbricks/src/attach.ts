@@ -63,7 +63,7 @@ export function resolveTarget(root: string, brick: string, service?: string): { 
 }
 
 /** The Compose container of `name` in `platform`, found by its labels: works even when .generated/ was deleted. */
-function composeContainer(exec: Exec, root: string, platform: string, name: string, running: boolean): string {
+export function composeContainer(exec: Exec, root: string, platform: string, name: string, running: boolean): string {
   const r = exec(
     "docker",
     [

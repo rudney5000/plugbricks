@@ -9,6 +9,9 @@
 
 # The compiled code of a service that plugbricks create wrote (services/), when built outside its image.
 services/*/dist/
+# The virtual environment and caches of a Python service, when run outside its image.
+services/*/.venv/
+__pycache__/
 
 node_modules/
 *.log

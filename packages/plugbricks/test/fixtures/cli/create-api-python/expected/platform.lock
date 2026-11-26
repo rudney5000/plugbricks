@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "inventory-api": {
+      "integrity": "sha256-7fbf0d25fe94071912c795709b22956985e245ba07897d34a9c07a91701754f6",
+      "provides": [],
+      "requires": {},
+      "source": "bricks/inventory-api",
+      "tags": [
+        "api",
+        "graphql"
+      ],
+      "version": "0.1.0",
+      "volumes": []
+    },
+    "orders-api": {
+      "integrity": "sha256-87f102a5c742cf983e0bf586146d6c78ac2482d986254382411a8a0ce95c1ef8",
+      "provides": [],
+      "requires": {},
+      "source": "bricks/orders-api",
+      "tags": [
+        "api",
+        "graphql"
+      ],
+      "version": "0.1.0",
+      "volumes": []
+    }
+  },
+  "capabilities": {},
+  "federation": {
+    "composer": {
+      "name": "@wundergraph/composition",
+      "version": "0.68.2"
+    },
+    "routerCompatibilityVersion": "1",
+    "schemaSha256": "3a75b12acd10cc3e0c3789151d5f42a220ed9689eec18d1936d650848e789906",
+    "subgraphs": [
+      "inventory-api",
+      "orders-api"
+    ]
+  },
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

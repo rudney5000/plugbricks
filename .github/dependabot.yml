@@ -72,6 +72,15 @@ updates:
       create-api-template:
         patterns: ["*"]
 
+  # The Python service template of "plugbricks create --kind api --lang python" (D38): pinned and hashed requirements.
+  - package-ecosystem: pip
+    directory: /packages/plugbricks/templates/api/service-python
+    schedule:
+      interval: weekly
+    groups:
+      create-api-python-template:
+        patterns: ["*"]
+
   # tools/wgc-crosscheck holds only the official Cosmo CLI for a test; a new version is a new reference to compare with.
   - package-ecosystem: npm
     directory: /tools/wgc-crosscheck

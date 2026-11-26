@@ -144,6 +144,13 @@ export const MESSAGES = {
   EXTERNAL_NOT_RUN: 'brick "{brick}" is an external subgraph ({url}): plugbricks does not run it',
   BRICK_DISABLED_NOT_RUNNING: 'brick "{brick}" is disabled, so nothing of it runs; "plugbricks enable {brick}", then up',
   ROUTER_NOT_IN_PLATFORM: "this platform has no router: no installed brick serves a subgraph",
+  DEV_NO_SOURCE: 'brick "{brick}" has no code to build here: dev builds services/{brick}/Dockerfile, which "plugbricks create" writes',
+  DEV_BRICK_CHANGED:
+    'dev only takes a new schema (and proto) from {source}, and {files} changed too; "plugbricks remove {brick}" then "plugbricks add {brick}" to take the whole brick',
+  DEV_IMAGE_BY_DIGEST: 'brick "{brick}" names its image by digest ({image}), which a build cannot produce; name a tag in its manifest',
+  DEV_BUILD_FAILED: "the image {image} was not built (docker build exited with {status}); nothing changed",
+  DEV_RESTART_FAILED:
+    '"{name}" did not start with the new image (docker compose exited with {status}); its last lines are above, "plugbricks logs {brick}" shows more',
   SERVICE_REQUIRED: 'brick "{brick}" has several services ({services}); name one with --service',
   SERVICE_UNKNOWN: 'brick "{brick}" has no service "{service}"; its services: {services}',
   SERVICE_NOT_RUNNING:
