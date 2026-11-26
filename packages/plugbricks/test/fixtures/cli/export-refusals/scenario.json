@@ -1,0 +1,113 @@
+{
+  "description": "export refuses a folder inside what plugbricks rewrites or keeps private, a folder that is a file, a missing or extra argument, and the options that are not its own (D34)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        ".generated/out"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXPORT_DIR_IN_PLATFORM"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        ".secrets"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXPORT_DIR_IN_PLATFORM"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        ".platform/bricks"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXPORT_DIR_IN_PLATFORM"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "platform.json"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXPORT_DIR_NOT_EMPTY"
+      ]
+    },
+    {
+      "run": [
+        "export"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_MISSING_ARGUMENT"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "a",
+        "b"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_UNEXPECTED_ARGUMENT"
+      ]
+    },
+    {
+      "run": [
+        "generate",
+        "--with-secrets"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    },
+    {
+      "run": [
+        "export",
+        "out",
+        "--context",
+        "x",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    }
+  ],
+  "absent": [
+    ".generated/out",
+    ".secrets/out",
+    "out"
+  ]
+}
