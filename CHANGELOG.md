@@ -38,6 +38,8 @@ The first version. It will be published under the `next` dist-tag: `npm create p
 - The Cosmo router in front of the subgraphs, whose composition is checked when a brick is added (D8, D9); on Docker
   Compose it is published on the loopback address only, and it accepts browser calls only from the platform's own
   pages (D17).
+- An external subgraph: a brick without services whose subgraph is a GraphQL service that runs elsewhere
+  (`subgraph.url`), composed and routed like the others; the token goes to it only when its manifest asks (D33).
 - Capabilities provided by the example bricks: `database` (PostgreSQL), `queue` (RabbitMQ, NATS: D11 to D13),
   `oidc` (Keycloak: D18, D19).
 - With an `oidc` provider: the router requires a token, the APIs check it again themselves, and each operation

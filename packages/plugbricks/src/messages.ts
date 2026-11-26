@@ -119,6 +119,18 @@ export const MESSAGES = {
 
   // remove
   BRICK_NOT_INSTALLED: 'no brick named "{name}" is installed',
+  SERVICES_EMPTY: "a brick needs at least one service, unless its subgraph runs elsewhere (subgraph.url)",
+  SUBGRAPH_SERVICE_OR_URL:
+    "a subgraph names either the service of this brick that serves it (service) or the address of a service that runs elsewhere (url), not both",
+  EXTERNAL_ONLY: '"{field}" applies only to an external subgraph (subgraph.url)',
+  EXTERNAL_SUBGRAPH_PATH: "an external subgraph has no path: write it in the url",
+  EXTERNAL_WITH_SERVICES: "a brick whose subgraph runs elsewhere (subgraph.url) has no services of its own",
+  EXTERNAL_FIELD_NOT_ALLOWED: 'a brick whose subgraph runs elsewhere cannot have "{field}": plugbricks runs nothing of it',
+  EXTERNAL_URL_INVALID: '"{url}" is not a valid address',
+  EXTERNAL_URL_CREDENTIALS:
+    "the address of an external subgraph cannot hold a user or a password: it would sit in the manifest and the lock",
+  EXTERNAL_URL_LOOPBACK: '"{host}" names the router\'s own container; a service of this machine is reached at host.docker.internal',
+  EXTERNAL_NOT_RUN: 'brick "{brick}" is an external subgraph ({url}): plugbricks does not run it',
   BRICK_DISABLED_NOT_RUNNING: 'brick "{brick}" is disabled, so nothing of it runs; "plugbricks enable {brick}", then up',
   ROUTER_NOT_IN_PLATFORM: "this platform has no router: no installed brick serves a subgraph",
   SERVICE_REQUIRED: 'brick "{brick}" has several services ({services}); name one with --service',

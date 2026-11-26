@@ -106,6 +106,8 @@ function provisionTask(r: PlanRequirement, plan: Plan): Yaml {
  * Docker installed as a snap, that option alone makes the exec of /router fail ("operation not
  * permitted") and the router restart forever (D9).
  */
+const dependsOn = (entries: [string, Yaml][]): Record<string, Yaml> => (entries.length ? { depends_on: Object.fromEntries(entries) } : {});
+
 function routerService(r: PlanRouter): Yaml {
   return {
     image: r.image,
@@ -124,11 +126,14 @@ function routerService(r: PlanRouter): Yaml {
       ...(r.auth ? [{ type: "bind", source: `./${ROUTER_AUTH_FILE}`, target: ROUTER_AUTH_PATH, read_only: true }] : []),
     ],
     ports: [{ target: ROUTER_CONTAINER_PORT, published: String(r.port), host_ip: "127.0.0.1", protocol: "tcp" }],
-    // With a token check (D19) it also waits for the oidc provider: it cannot start without its keys.
-    depends_on: Object.fromEntries([
-      ...r.subgraphs.map((s) => [s.service, { condition: s.healthy ? "service_healthy" : "service_started" }]),
-      ...(r.auth ? [[r.auth.service, { condition: r.auth.healthy ? "service_healthy" : "service_started" }]] : []),
+    // With a token check (D19) it also waits for the oidc provider: it cannot start without its keys. An external
+    // subgraph (D33) is neither started nor waited for: a router with only those waits for nothing.
+    ...dependsOn([
+      ...r.subgraphs.map((s): [string, Yaml] => [s.service, { condition: s.healthy ? "service_healthy" : "service_started" }]),
+      ...(r.auth ? [[r.auth.service, { condition: r.auth.healthy ? "service_healthy" : "service_started" }] as [string, Yaml]] : []),
     ]),
+    // A subgraph of this machine (D33): Docker Desktop knows host.docker.internal, a Linux engine needs it given.
+    ...(r.hostGateway ? { extra_hosts: ["host.docker.internal:host-gateway"] } : {}),
     restart: "unless-stopped",
   };
 }

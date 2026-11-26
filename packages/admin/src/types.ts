@@ -36,6 +36,8 @@ export interface AdminBrick {
   subgraph: boolean;
   /** A web brick's entry page, http://127.0.0.1:<webPort><path> (D17); null for any other brick. */
   webUrl: string | null;
+  /** The address of a subgraph that runs elsewhere (D33); null for any other brick. */
+  external: string | null;
   extends: string;
   provides: string[];
   requires: string;

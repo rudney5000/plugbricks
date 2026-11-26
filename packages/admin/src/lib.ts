@@ -33,6 +33,7 @@ export function hostsOf(brick: AdminBrick, router: RouterView | null): Host[] {
   if (!brick.enabled) return [];
   const hosts: Host[] = [];
   if (brick.webUrl) hosts.push({ url: brick.webUrl, note: "Web page" });
+  if (brick.external) hosts.push({ url: brick.external, note: "External subgraph, not supervised" });
   if (brick.subgraph && router?.address) hosts.push({ url: `http://${router.address}/graphql`, note: "GraphQL, through the router" });
   return hosts;
 }

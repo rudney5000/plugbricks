@@ -35,6 +35,80 @@ function checkTemplates(
   for (const [k, v] of Object.entries(values ?? {})) checkTemplate(v, `${path}/${k}`, context, issues);
 }
 
+/** The hosts that name the machine itself: inside the router's container, its own container (D33). */
+const LOOPBACK = /^(localhost|127(\.\d{1,3}){3}|\[::1\]|0\.0\.0\.0)$/i;
+
+/**
+ * A subgraph is served by one of the brick's services, or by a service that runs elsewhere (D33). An external brick
+ * has no services, and nothing a service would need: it provides and requires nothing, publishes no page, and its
+ * roles are the service's own business.
+ */
+function checkSubgraph(
+  m: {
+    services: unknown[];
+    subgraph?: { service?: string; url?: string; path?: string; forwardAuthorization?: boolean };
+    provides?: unknown;
+    requires?: unknown;
+    web?: unknown;
+    authorization?: unknown;
+  },
+  names: Set<string>,
+  issues: ManifestIssue[],
+): void {
+  const g = m.subgraph;
+  if (!g) {
+    if (m.services.length === 0) issues.push(issue("SERVICES_EMPTY", "/services", {}));
+    return;
+  }
+  if ((g.service === undefined) === (g.url === undefined)) {
+    issues.push(issue("SUBGRAPH_SERVICE_OR_URL", "/subgraph", {}));
+    return;
+  }
+  if (g.service !== undefined) {
+    if (!names.has(g.service)) issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: g.service }));
+    if (g.forwardAuthorization !== undefined)
+      issues.push(issue("EXTERNAL_ONLY", "/subgraph/forwardAuthorization", { field: "forwardAuthorization" }));
+    return;
+  }
+  // External (D33).
+  if (g.path !== undefined) issues.push(issue("EXTERNAL_SUBGRAPH_PATH", "/subgraph/path", {}));
+  if (m.services.length) issues.push(issue("EXTERNAL_WITH_SERVICES", "/services", {}));
+  for (const field of ["provides", "requires", "web", "authorization"] as const) {
+    if (m[field] !== undefined) issues.push(issue("EXTERNAL_FIELD_NOT_ALLOWED", `/${field}`, { field }));
+  }
+  let url: URL;
+  try {
+    url = new URL(g.url!);
+  } catch {
+    issues.push(issue("EXTERNAL_URL_INVALID", "/subgraph/url", { url: g.url! }));
+    return;
+  }
+  if (url.username || url.password) issues.push(issue("EXTERNAL_URL_CREDENTIALS", "/subgraph/url", {}));
+  if (LOOPBACK.test(url.hostname)) issues.push(issue("EXTERNAL_URL_LOOPBACK", "/subgraph/url", { host: url.hostname }));
+}
+
+/**
+ * Whether requests to an external subgraph travel in clear to a host outside this machine and its private network:
+ * `add` warns then (D33). host.docker.internal, names under .internal or .local, and private addresses are exempt.
+ */
+export function externalInClear(rawUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:") return false;
+  const host = url.hostname.toLowerCase();
+  if (host === "host.docker.internal" || host.endsWith(".internal") || host.endsWith(".local")) return false;
+  const ip = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (ip) {
+    const [a, b] = [Number(ip[1]), Number(ip[2])];
+    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return false;
+  }
+  return true;
+}
+
 /** Validates a parsed manifest against the JSON Schema, then the cross-field rules a schema cannot express. */
 export function validateManifest(manifest: unknown): ValidationResult {
   const schemaProblems = schemaIssues(manifestSchema.validate, manifest);
@@ -53,7 +127,8 @@ export function validateManifest(manifest: unknown): ValidationResult {
         inject: Record<string, string>;
       }
     >;
-    subgraph?: { service: string };
+    subgraph?: { service?: string; url?: string; path?: string; forwardAuthorization?: boolean };
+    volumes?: unknown;
     requires?: Record<string, unknown>;
     authorization?: { queries?: string; mutations?: string };
     web?: { service: string; path?: string };
@@ -110,9 +185,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
     checkTemplates(p.provision.env, `/provides/${cap}/provision/env`, "provisionEnv", issues);
     checkTemplates(p.inject, `/provides/${cap}/inject`, "inject", issues);
   }
-  if (m.subgraph && !names.has(m.subgraph.service)) {
-    issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: m.subgraph.service }));
-  }
+  checkSubgraph(m, names, issues);
   const dependencies = new Set<string>();
   (m.dependencies ?? []).forEach((d, i) => {
     if (d.plugin === m.name) issues.push(issue("SELF_DEPENDENCY", `/dependencies/${i}/plugin`, { name: d.plugin }));

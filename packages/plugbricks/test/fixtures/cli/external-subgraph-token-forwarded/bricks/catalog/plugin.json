@@ -1,0 +1,11 @@
+{
+  "name": "catalog",
+  "version": "0.1.0",
+  "description": "A subgraph that runs elsewhere (D33).",
+  "services": [],
+  "subgraph": {
+    "url": "https://catalog.example.com/graphql",
+    "schema": "schema.graphql",
+    "forwardAuthorization": true
+  }
+}

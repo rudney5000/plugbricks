@@ -1,0 +1,58 @@
+{
+  "description": "an external subgraph extends an entity of the platform (D33): composition and the extends checks are the same, the owner cannot be removed while it is extended, and a subgraph of this machine (host.docker.internal) gives the router that name on Compose, over http without a warning",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "reviews"
+      ],
+      "stdout": "Added reviews 0.1.0",
+      "notStdout": "in clear"
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: orders-api, reviews"
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "remove",
+        "orders-api"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTENDS_IN_USE"
+      ],
+      "stderr": "its entities are still extended by \"reviews\"",
+      "unchanged": true
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/compose.yaml": "    extra_hosts:\n      - host.docker.internal:host-gateway\n"
+  }
+}

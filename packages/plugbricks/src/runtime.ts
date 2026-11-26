@@ -434,9 +434,11 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
     // refuses "up" on a project without services: with no brick left, "down" does the same job.
     // --wait: return only once every service runs (and is healthy when it has a healthcheck) and
     // every wait and provision task has exited 0, as `kubectl rollout status` does on Kubernetes.
-    const args = plan.services.length
-      ? [...composeBase(plan), "up", "--detach", "--remove-orphans", "--wait", "--wait-timeout", String(composeWaitTimeout(plan))]
-      : ["compose", "--project-name", plan.platform, "down", "--remove-orphans"];
+    // A router alone runs too: a platform whose only subgraphs run elsewhere (D33).
+    const args =
+      plan.services.length || plan.router
+        ? [...composeBase(plan), "up", "--detach", "--remove-orphans", "--wait", "--wait-timeout", String(composeWaitTimeout(plan))]
+        : ["compose", "--project-name", plan.platform, "down", "--remove-orphans"];
     const r = run(deps, dir, "docker", args);
     if (r.status !== 0) {
       const timeouts = composeWaitTimeouts(deps, dir, plan, r.stderr + r.stdout);
@@ -447,7 +449,7 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
     requireKubectl(deps, dir, target);
     for (const f of [K8S_NAMESPACE_FILE, K8S_SECRET_FILE, K8S_RESOURCES_FILE]) {
       // kubectl refuses a file with no object in it.
-      if (f === K8S_RESOURCES_FILE && plan.services.length === 0) continue;
+      if (f === K8S_RESOURCES_FILE && plan.services.length === 0 && !plan.router) continue;
       const args = ["apply", "--filename", f];
       const r = kubectl(deps, dir, target, args);
       if (r.status !== 0) throw new PlugbricksError([failed("kubectl", [...target, ...args], r)]);

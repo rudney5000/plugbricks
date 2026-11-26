@@ -1,0 +1,60 @@
+{
+  "description": "an external subgraph (D33): a brick without services whose subgraph is called at its url; it composes, the router calls it as it is and neither starts nor waits for it, status says it is not supervised, and logs and exec refuse it",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "catalog"
+      ],
+      "stdout": "Added catalog 0.1.0",
+      "notStdout": "in clear"
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": [
+        "catalog 0.1.0  external subgraph at https://catalog.example.com/graphql, not supervised",
+        "Federation: catalog"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "logs",
+        "catalog"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTERNAL_NOT_RUN"
+      ],
+      "stderr": "brick \"catalog\" is an external subgraph (https://catalog.example.com/graphql): plugbricks does not run it",
+      "commands": []
+    },
+    {
+      "run": [
+        "exec",
+        "catalog"
+      ],
+      "exit": 1,
+      "codes": [
+        "EXTERNAL_NOT_RUN"
+      ],
+      "commands": []
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/router-config.json": "https://catalog.example.com/graphql"
+  }
+}

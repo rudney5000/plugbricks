@@ -107,6 +107,7 @@ function printDeclared(io: Io, s: StatusResult): void {
     const parts = [
       ...(b.enabled ? [] : ["disabled"]),
       ...(b.webPort !== undefined ? [`pages on 127.0.0.1:${b.webPort}`] : []),
+      ...(b.external !== undefined ? [`external subgraph at ${b.external}, not supervised`] : []),
       ...(b.provides.length ? [`provides ${b.provides.join(", ")}`] : []),
       ...Object.entries(b.requires).map(([cap, r]) => {
         if (!r.optional) return `requires ${cap} from ${r.provider} (wait ${r.wait}, ${r.timeoutSeconds}s)`;
@@ -329,6 +330,9 @@ export function main(argv: string[], io: Io): number {
           for (const dep of r.missingDependencies) {
             io.stdout(`  dependency "${dep}" is not installed; ${r.name} will not work without it`);
           }
+          if (r.inClear) {
+            io.stdout(`  ${r.name} is called over http at ${r.inClear}: its requests and answers travel in clear (D33)`);
+          }
           if (r.openApi) {
             io.stdout(
               `  ${r.name} serves GraphQL and requires oidc but has no "authorization" block: with an oidc provider, any valid token can call it`,
@@ -503,7 +507,10 @@ export function main(argv: string[], io: Io): number {
           only(0, "");
           const r = up(root, runtime, { pruneVolumes: values["prune-volumes"] }, deps);
           if (r.generated.secretsCreated.length) io.stdout(`Created ${r.generated.secretsCreated.length} secret(s) in .secrets/`);
-          io.stdout(`Platform ${r.generated.plan.platform} is up (${runtime}): ${r.generated.plan.services.length} service(s)`);
+          const plan = r.generated.plan;
+          io.stdout(
+            `Platform ${plan.platform} is up (${runtime}): ${plan.services.length} service(s)${plan.router ? " and the router" : ""}`,
+          );
           for (const v of r.pruned) io.stdout(`  deleted volume ${vol(v)}`);
           if (r.pending.length && !values["prune-volumes"]) {
             io.stdout(`Pending deletion, kept until "plugbricks up --prune-volumes": ${r.pending.map(vol).join(", ")}`);

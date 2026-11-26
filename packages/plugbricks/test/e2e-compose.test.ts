@@ -1059,3 +1059,83 @@ describe("bricks written by create", () => {
     600_000,
   );
 });
+
+// An external subgraph (D33): a GraphQL service that runs outside the platform, here a container of its own published on
+// the address of Docker's bridge, which the router reaches as host.docker.internal. Built from the template of create.
+describe("a subgraph that runs elsewhere (D33)", () => {
+  const name = "pbtest-external";
+  const routerAt = 14109;
+  const servicePort = 14111;
+  const service = "pbtest-external-service";
+  const image = "pbtest-external/inventory-api:0.1.0";
+
+  afterAll(() => {
+    spawnSync("docker", ["rm", "--force", service], { encoding: "utf8" });
+  });
+
+  it.skipIf(!ready)(
+    `routes to it through the router, starts nothing for it, and keeps answering when it is down${why}`,
+    async () => {
+      // The service, outside any platform: written by create in a scratch project, built, and run by hand.
+      const source = project(`${name}-source`, []);
+      expect(cli(source, ["init", "--name", "pbtest-external"]).code).toBe(0);
+      expect(cli(source, ["create", "inventory", "--kind", "api"]).code).toBe(0);
+      const build = spawnSync("docker", ["build", "--quiet", "-t", image, "-f", "services/inventory-api/Dockerfile", "."], {
+        cwd: source,
+        encoding: "utf8",
+      });
+      expect(build.status, build.stderr).toBe(0);
+      // host.docker.internal is the gateway of Docker's bridge: a port published on 127.0.0.1 only would not be reached.
+      const gateway = spawnSync("docker", ["network", "inspect", "bridge", "--format", "{{(index .IPAM.Config 0).Gateway}}"], {
+        encoding: "utf8",
+      }).stdout.trim();
+      spawnSync("docker", ["rm", "--force", service], { encoding: "utf8" });
+      const started = spawnSync("docker", ["run", "--detach", "--name", service, "--publish", `${gateway}:${servicePort}:4000`, image], {
+        encoding: "utf8",
+      });
+      expect(started.status, started.stderr).toBe(0);
+
+      // The platform: one external brick, no services of its own.
+      const work = project(name, []);
+      mkdirSync(join(work, "bricks/inventory"), { recursive: true });
+      cpSync(join(source, "bricks/inventory-api/schema.graphql"), join(work, "bricks/inventory/schema.graphql"));
+      writeFileSync(
+        join(work, "bricks/inventory/plugin.json"),
+        JSON.stringify({
+          name: "inventory",
+          version: "0.1.0",
+          services: [],
+          subgraph: { url: `http://host.docker.internal:${servicePort}/graphql`, schema: "schema.graphql" },
+        }),
+      );
+      expect(cli(work, ["init", "--name", name]).code).toBe(0);
+      expect(cli(work, ["add", "inventory"]).code).toBe(0);
+      routerPort(work, routerAt);
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      expect(up.out).toContain("0 service(s) and the router");
+      await routerReady(routerAt);
+      expect(containersOf(name, "--format", "{{.Names}}").trim().split("\n")).toEqual([`${name}-router-1`]);
+
+      const answer = await through(routerAt, "inventoryItems", "{ inventoryItems { id name } }");
+      expect(answer.body).toEqual({
+        data: {
+          inventoryItems: [
+            { id: "1", name: "first" },
+            { id: "2", name: "second" },
+          ],
+        },
+      });
+
+      // Not supervised: stopped by hand, the router still answers, with its error for that subgraph.
+      expect(spawnSync("docker", ["stop", service], { encoding: "utf8" }).status).toBe(0);
+      const down = await through(routerAt, "inventoryItems while down", "{ inventoryItems { id } }");
+      expect(down.status).toBe(200);
+      expect(JSON.stringify(down.body)).toContain("Failed to fetch from Subgraph 'inventory'");
+      console.log(`external subgraph at host.docker.internal:${servicePort}: answered through the router, then down without stopping it`);
+
+      expect(cli(work, ["down"]).code).toBe(0);
+    },
+    600_000,
+  );
+});

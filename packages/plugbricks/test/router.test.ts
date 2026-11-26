@@ -183,6 +183,8 @@ describe("rendering rules on a hand-made plan", () => {
     config,
     configSha256: createHash("sha256").update(config).digest("hex"),
     subgraphs,
+    external: [],
+    hostGateway: false,
     allowedOrigins: ["http://127.0.0.1:4000"],
   });
 

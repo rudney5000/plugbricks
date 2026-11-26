@@ -1,0 +1,44 @@
+{
+  "description": "with a token check (D19), the router passes the token on to the platform's own subgraphs and not to an external one (D33): one header rule per subgraph that gets it",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/keycloak"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "catalog"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/router.yaml": "headers:\n  subgraphs:\n    orders-api:\n      request:\n        - op: propagate\n          named: Authorization\n"
+  }
+}

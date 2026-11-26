@@ -51,7 +51,10 @@ export function resolveTarget(root: string, brick: string, service?: string): { 
   if (!isBrickEnabled(project.platform, brick)) fail("BRICK_DISABLED_NOT_RUNNING", { brick });
   const manifest = JSON.parse(readFileSync(join(project.root, BRICKS_DIR, brick, "plugin.json"), "utf8")) as {
     services: { name: string }[];
+    subgraph?: { url?: string };
   };
+  // A subgraph that runs elsewhere has nothing here to read or enter (D33).
+  if (manifest.subgraph?.url !== undefined) fail("EXTERNAL_NOT_RUN", { brick, url: manifest.subgraph.url });
   const names = manifest.services.map((s) => s.name);
   if (service !== undefined && !names.includes(service)) fail("SERVICE_UNKNOWN", { brick, service, services: names.join(", ") });
   if (service === undefined && names.length > 1) fail("SERVICE_REQUIRED", { brick, services: names.join(", ") });

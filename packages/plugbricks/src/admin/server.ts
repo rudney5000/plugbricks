@@ -609,14 +609,21 @@ async function bricksView(o: AdminOptions) {
     } catch {
       // An unreadable copy can stop the refusal check too; the problem is already in `problems`.
     }
+    // A subgraph that runs elsewhere (D33): nothing of it is deployed here, so nothing to deploy and no state to read.
+    const external = m?.subgraph?.url ?? null;
     return {
       name: b.name,
       version: b.version,
       tags: b.tags ?? [],
       enabled: b.enabled,
-      deployed: services.some((s) => s.deployed),
-      state: worst?.state ?? (b.enabled ? (planned ? "not deployed" : "unknown") : "stopped"),
-      reason: worst?.reason ?? (b.enabled ? (planned ? null : "the platform cannot be planned") : "disabled in platform.json"),
+      deployed: external !== null ? b.enabled : services.some((s) => s.deployed),
+      state:
+        external !== null && b.enabled ? "unknown" : (worst?.state ?? (b.enabled ? (planned ? "not deployed" : "unknown") : "stopped")),
+      reason:
+        external !== null && b.enabled
+          ? "external subgraph, not supervised"
+          : (worst?.reason ?? (b.enabled ? (planned ? null : "the platform cannot be planned") : "disabled in platform.json")),
+      external,
       restarts: services.reduce((n, s) => n + s.restarts, 0),
       port: m?.services[0]?.port ?? null,
       subgraph: m?.subgraph !== undefined,

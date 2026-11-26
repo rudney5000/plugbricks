@@ -1,0 +1,44 @@
+{
+  "description": "an external subgraph whose manifest says forwardAuthorization gets the token like the others (D33): the router keeps one rule for all",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/keycloak"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "catalog"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    }
+  ],
+  "expectRaw": {
+    ".generated/compose/router.yaml": "headers:\n  all:\n    request:\n      - op: propagate\n        named: Authorization\n"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "../../../schemas/plugin-manifest.schema.json",
+  "name": "empty",
+  "version": "0.1.0",
+  "services": []
+}

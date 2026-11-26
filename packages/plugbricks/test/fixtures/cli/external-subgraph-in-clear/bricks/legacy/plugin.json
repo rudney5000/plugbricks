@@ -1,0 +1,10 @@
+{
+  "name": "legacy",
+  "version": "0.1.0",
+  "description": "A subgraph that runs elsewhere (D33).",
+  "services": [],
+  "subgraph": {
+    "url": "http://legacy.example.com/graphql",
+    "schema": "schema.graphql"
+  }
+}

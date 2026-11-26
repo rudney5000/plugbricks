@@ -2033,6 +2033,59 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done here.** The logs of the provision and wait tasks (they are not services); a development loop that
   rebuilds and restarts one brick (`plugbricks dev`, item 2).
 
+## D33. An external subgraph: a brick without a container, for a GraphQL service that runs elsewhere
+
+- **Status:** accepted (2026-11-26), with the four recommendations put to the owner: the address in the manifest, no
+  token unless the brick asks for it, `http` accepted with a warning, and the core first. Step 1 is implemented; the
+  comparison of the declared schema with the service's (step 2) is not. Item 1 of section 4 of `docs/roadmap.md`.
+- **Context:** plugbricks federates GraphQL services it starts itself. A team that already runs one (a catalogue, a
+  legacy API) wants it behind the same router, composed and checked with the others, without plugbricks running it.
+- **Decision.**
+  - **The manifest.** `subgraph.url` instead of `subgraph.service`: `{ "url": "https://catalog.example.com/graphql",
+    "schema": "schema.graphql" }`, and `services: []`. Composition, `extends` (both ways) and the router
+    configuration are the same as for any subgraph; the router calls the URL as it is. A brick is then either
+    external or made of services, not both. It provides nothing, requires nothing, has no volume, no web pages and no
+    `authorization` block: there is no service to wire, provision, publish or configure, and the roles an external
+    service checks are its own business (D22). It may declare `dependencies` (D21) and be one.
+  - **The address**, in the manifest: one external brick describes one service. Another address is another brick, or
+    a remove and an add; values per environment come with section 6 of the roadmap. A URL with a user or password
+    is refused (a secret would sit in the manifest and the lock), and so is a loopback address (`localhost`,
+    `127.0.0.1`, `::1`): it would name the router's own container. A service of this machine is reached at
+    `host.docker.internal` (the router gets that name on Docker Compose; on Kubernetes the cluster's own name for the
+    machine, `host.k3d.internal` on k3d, is the person's to give).
+  - **http** is accepted; `add` warns that the requests travel in clear, unless the host is `host.docker.internal`, a
+    name under `.internal` or `.local`, or a private address.
+  - **The token** (D20): the router passes `Authorization` on to the platform's own subgraphs, and to an external
+    one only when its manifest says `"forwardAuthorization": true`. A token of the platform is not handed to a service
+    whose configuration is not ours without a decision written in its manifest. With such a subgraph the router gets
+    one header rule per subgraph instead of the rule for all.
+  - **Running.** `up` starts nothing for it and does not wait for it; the router starts anyway, and a query that
+    reaches it while it is down gets the router's error for that subgraph. `down` stops nothing of it. `status`,
+    `status --runtime` and the admin say "external, not supervised", with its address; `logs` and `exec` refuse it.
+- **Implemented (step 1).** The schema lets `services` be empty and a subgraph have `url` and `forwardAuthorization`
+  (`path` is now optional for a service's subgraph too, `/graphql` by default as before); `manifest.ts` gives each
+  rule its code: `SUBGRAPH_SERVICE_OR_URL`, `EXTERNAL_WITH_SERVICES`, `EXTERNAL_FIELD_NOT_ALLOWED`,
+  `EXTERNAL_SUBGRAPH_PATH`, `EXTERNAL_ONLY`, `EXTERNAL_URL_INVALID`, `EXTERNAL_URL_CREDENTIALS`,
+  `EXTERNAL_URL_LOOPBACK`, `SERVICES_EMPTY`; `logs` and `exec` refuse it (`EXTERNAL_NOT_RUN`). The router has no
+  `depends_on` for it, and gets `extra_hosts: host.docker.internal:host-gateway` on Compose when an address uses that
+  name. `up` now starts a router that has no service of the platform to wait for (it used to run `down` on a platform
+  without services). `status`, `status --runtime` (an optional `external` list in the router, additive to version 1
+  of the report) and the admin show the address and "not supervised".
+- **Verified on this machine.** The pinned router (0.372.0) accepts `headers.subgraphs.<name>` and refuses an unknown
+  key of `headers` (`additional properties ... not allowed`), so the per-subgraph token rule is read. On a Linux Docker
+  engine, `host.docker.internal` is the gateway of Docker's bridge (172.18.0.1 here): a service published on
+  127.0.0.1 only is not reached (the router answers `Failed to fetch from Subgraph`), one published on the gateway's
+  address is. Docker Desktop forwards that name to the machine's own loopback; not tried here.
+- **Tested.** Nine invalid manifests (one code each); the CLI scenarios `external-subgraph` (golden files: the router's
+  address, no service, no `depends_on`), `external-subgraph-extends` (an external subgraph extends `Order` of
+  `orders-api`; `remove orders-api` refused; `extra_hosts`), `external-subgraph-in-clear`, `external-subgraph-token`
+  and `external-subgraph-token-forwarded`; the admin's hosts; end to end on Docker Compose (`e2e-compose`, "a subgraph
+  that runs elsewhere"): a service built from the template of `create`, run outside the platform, answered through a
+  router that runs alone, and the router still answering, with its error for that subgraph, once the service is
+  stopped. Kubernetes is covered by the same plan and generated files, not run.
+- **Step 2, not done:** a command that compares the schema file with what the service serves (`_service { sdl }`),
+  since composition reads the file and the service can drift from it.
+
 ---
 
 ## Already applied (milestone 2)
