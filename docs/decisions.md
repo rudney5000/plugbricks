@@ -2333,12 +2333,46 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
     `wget` resolves `localhost` to `::1`, and a server that listens on IPv4 only was reported unhealthy (found by running
     it). Bricks already created keep their manifest.
 - **Tested.** CLI scenarios `create-api-python` (the same brick, a Python and a Node API composing) and the refusals; the
-  packed package ships the template; end to end on Docker Compose (`e2e-compose`): the Python image built with the printed
+  packed package ships the template (`dist`: this check was written with D39, it was missing when D38 first said so); end
+  to end on Docker Compose (`e2e-compose`): the Python image built with the printed
   command, `stockItems` through the router, then `dev` added a field. One mutation caught: `--lang` ignored. By hand: a
   Node API referring to an entity of the Python one (`_entities` across languages), an unexpected error masked and a
   `GraphQLError` passed with its code, `_service` answering, `docker stop` in under a second with exit code 0.
-- **Not done.** Go (its federation library generates code, a build step to design); a Python web brick; token checks in
+- **Not done.** Go (D39, done after); a Python web brick; token checks in
   either template (D28: no brick requires anything); Kubernetes for a Python service.
+
+## D39. `create --kind api --lang go`: a service whose code is generated when the image is built
+
+- **Status:** implemented (2026-11-26). Item 3 of section 5 of `docs/roadmap.md`, its Go half; with D37 and D38, chantier
+  9 is done.
+- **Context:** the Go library for a federation subgraph, gqlgen, writes Go code from the schema: where that generation
+  happens had to be decided.
+- **Decision.**
+  - **gqlgen** (0.17.98) on `golang:1.27.4-alpine`, the binary copied alone into `alpine:3.24.4` (about 24 MB, against
+    about 270 MB for the Node image), non-root, with `go.mod` and `go.sum` (every module verified by its checksum);
+    Dependabot follows them.
+  - **Generation in the image build,** from the schema of the brick (`go tool gqlgen generate`), so that the schema stays the
+    only one and no generated file is committed. No resolver section in `gqlgen.yml`: gqlgen writes no stub, so a field
+    without a resolver is a compile error that names the missing method, rather than a service that fails when the field is
+    asked. For an editor, the same command runs in the service folder (the comment of `graph/resolver.go` gives it, and
+    `.gitignore` of a new project ignores what it writes).
+  - **Names.** `graph/resolver.go` names the types and methods that gqlgen will generate, so `create` follows gqlgen's naming
+    rule, with its list of initialisms (`UserUrlItem` is `UserURLItem` in Go). The method comes from the field's name, the
+    type from the type's: for `x-id`, `XIDItems` returns `[]*model.XIdItem`. A first version named both from the type and
+    two names of forty-four did not compile.
+  - **Like the other templates:** `/graphql` (POST only) and `/health`, no web explorer, introspection on, an entity and its
+    resolver; the message of an unexpected error stays in the log (gqlgen passes it on by default: `graph/errors.go` masks
+    it and lets a `*gqlerror.Error` through); a clean stop on SIGTERM.
+- **Tested.** `test/create.test.ts` (sixteen names as gqlgen wrote them); CLI scenario `create-api-go`; the packed package
+  ships the template; end to end on Docker Compose, a brick named `x-id` built with the printed command and queried through
+  the router. Two mutations, each caught: the method named from the type, no initialisms. By hand: the names of 44 brick
+  names compared with the code gqlgen generated (no difference); a Go API and a Node one composed; a field without a
+  resolver stopped `dev` with the missing method, the platform unchanged; an unexpected error masked and logged, a
+  `*gqlerror.Error` passed with its code; a Node API referring to an entity of the Go one; `_service` answering; `docker
+  stop` immediate, exit code 0.
+- **Limit.** A gqlgen update that changes its naming rule or its initialisms would break the template for some names: the
+  end-to-end test builds one awkward name, and the list in `src/create.ts` says which version it comes from.
+- **Not done.** A Go web brick; token checks; Kubernetes for a Go service.
 
 ## Already applied (milestone 2)
 

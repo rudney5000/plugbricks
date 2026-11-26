@@ -28,7 +28,7 @@ The first version. It will be published under the `next` dist-tag: `npm create p
   anything; `--yes` for a script (D26). `remove`, `enable` and `disable` refuse what would break another brick
   (D14, D21).
 - `create <name> --kind api|web` writes a new GraphQL subgraph or web brick, with its code and its image recipe in
-  `services/` (D28); `--lang python` writes the API in Python (D38).
+  `services/` (D28); `--lang python` or `--lang go` writes the API in that language (D38, D39).
 
 ### Running a platform
 
