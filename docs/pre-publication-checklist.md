@@ -31,8 +31,9 @@ is added. Each item says what to check and why.
       licence, since part of it was written on an employer's machine. Only the author can check this.
 - [x] **First version number** (D24): 0.1.0, published from a `v0.1.0` tag by `.github/workflows/publish.yml`, under the
       `next` dist-tag. 0.x means the manifest, the lock and the CLI codes can still change in a minor version.
-- [ ] **Private vulnerability reporting** is enabled (Settings, Code security, Private vulnerability reporting), so that
-      the link of `SECURITY.md` works.
+- [x] **Private vulnerability reporting** is enabled (2026-11-26; Settings, Advanced Security, Private vulnerability
+      reporting; checked with `GET /repos/rudney5000/plugbricks/private-vulnerability-reporting`), so that the link of
+      `SECURITY.md` works.
 - [ ] **The accounts and settings that only the owner can create** (D24): an npm account with two-factor authentication,
       the `NPM_TOKEN` repository secret, and an `npm` environment with a required reviewer. Then check the names once more.
 - [x] **Example bricks for a new project** (D25, D30): `create-plugbricks` copies `postgres`, `rabbitmq` and `nats` into

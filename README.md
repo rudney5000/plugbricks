@@ -245,6 +245,25 @@ The brick uses `${web.origin}`, the address the browser uses (`http://127.0.0.1:
 allowed only in the env of a web brick's own service. The realm is imported on the first start only, and
 the admin must run on port 4100, the redirect URI of the realm's client (D18).
 
+### A subgraph that runs elsewhere
+
+A brick can federate a GraphQL service that plugbricks does not run (D33): no services, and the address in its
+subgraph. Composition, `extends` and the router are the same as for any subgraph; `up` starts nothing for it, and
+`status` says it is not supervised.
+
+```json
+{
+  "name": "catalog",
+  "version": "0.1.0",
+  "services": [],
+  "subgraph": { "url": "https://catalog.example.com/graphql", "schema": "schema.graphql" }
+}
+```
+
+The router does not pass the caller's token on to it unless the subgraph says `"forwardAuthorization": true`. A service
+of this machine is `http://host.docker.internal:<port>/...` (never `localhost`, which would be the router's own
+container); on a Linux Docker engine it must listen on the address of Docker's bridge, not on 127.0.0.1 only.
+
 ### `queue`: one message broker for every service that needs it
 
 `examples/rabbitmq` is a brick that provides the `queue` capability. Install it once, then any number of bricks can require it:
