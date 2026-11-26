@@ -2103,6 +2103,52 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 
 ---
 
+## D34. `plugbricks export <dir>`: the files of the platform, to run without plugbricks
+
+- **Status:** implemented (2026-11-26). Item 1 of section 8 of `docs/roadmap.md`.
+- **Context:** the first objection of a team to a tool that writes its runtime files is "and if we want to leave?".
+  `generate` already writes the Compose file or the Kubernetes manifests, but into `.generated/`, which ignores itself,
+  refers to the project (the provision scripts at `../../.platform/bricks/...`), says "do not edit, run plugbricks
+  generate", and keeps the secrets in `.secrets/`. Leaving meant copying and fixing all of that by hand.
+- **Decision.**
+  - **The command.** `plugbricks export <dir> [--runtime compose|k8s] [--with-secrets]`. Compose by default, like the
+    others. `<dir>` is relative to where the command is typed, and it must not exist or be empty: an export never
+    overwrites (`EXPORT_DIR_NOT_EMPTY`), and it refuses a folder inside `.generated/`, `.secrets/` or `.platform/`, which
+    plugbricks rewrites or keeps private (`EXPORT_DIR_IN_PLATFORM`).
+  - **What it writes.** Compose: `compose.yaml`, `router-config.json` (and `router.yaml` with a token check), the
+    provision scripts in `scripts/<name>/` with the modes of the installed copy (a script mounted read-only has to stay
+    executable), `.env.example` or `.env`, and a `README.md`. Kubernetes: `namespace.yaml`, `resources.yaml` (the
+    router's configuration is in its ConfigMap), `secret.example.yaml` or `secret.yaml`, and a `README.md`. The
+    `README.md` gives the commands (`docker compose up -d`; the three `kubectl apply`), says what to change before
+    exposing the router (it is on 127.0.0.1, or a ClusterIP Service), and lists the images the files name: an image built
+    from `services/` has to be pushed to a registry first. The files are the ones `up` applies, with two differences: the
+    scripts are read from the folder beside the file, and the header says the copy is the reader's (plugbricks does not
+    read it and never rewrites it).
+  - **Secrets.** No secret value unless asked. Without `--with-secrets`, `.env.example` lists the variables with nothing
+    after the `=` (Compose refuses an empty one: `${VAR:?...}`, with a message that says to fill `.env`), and
+    `secret.example.yaml` holds `CHANGE-ME` for each. With `--with-secrets`, the values already in `.secrets/secrets.env`
+    go to `.env` or `secret.yaml` (mode 0600), and a `.gitignore` of the folder ignores that file. The values are never in
+    `compose.yaml` or `resources.yaml`. A folder one is going to commit is the ordinary case, so the safe form is the
+    default.
+  - **Read-only for the platform.** No lock (D16) and no secret created: if `--with-secrets` finds one missing it
+    refuses and says to run `generate` (`EXPORT_SECRETS_MISSING`), because creating a secret changes the platform.
+  - **A one-way copy.** There is no `import`, and no `up` from an exported folder. The labels `plugbricks/...` and
+    `app.kubernetes.io/managed-by: plugbricks` stay in the manifests: they are inert, and removing them would make the
+    copy differ from what runs.
+- **Tested.** CLI scenarios `export-compose`, `export-k8s` and `export-refusals`; `test/export.test.ts` (nothing of the
+  project changes and no secret is created; no path out of the folder in the Compose file; scripts byte for byte and with
+  their mode; no secret value anywhere without `--with-secrets`, and only in `.env` or `secret.yaml` with it; mode 0600;
+  every image listed). Two mutations, each caught: the scripts' path left as `../../`, and the secrets written without
+  `--with-secrets`. By hand, on Docker Compose 5: the exported folder of the starter, run with plain `docker compose up -d
+  --wait` and no plugbricks (the web port edited, since 8080 was taken: the copy is meant to be edited): every service
+  healthy, the router answered `{ __typename }`, the page of `orders-web` answered 200, and `docker compose down --volumes`
+  removed everything; without `.env`, `docker compose config` refuses with the message that says to fill it.
+- **Not tested here.** The Kubernetes files applied to a cluster (`kubectl` is not installed here): they are the files
+  `up` applies, checked by the k3d job, plus the one difference that is the header; the Secret of `secret.yaml` is the one
+  `up` applies too.
+- **Not done.** `export --out` for `generate`; a `kustomization.yaml` or a Helm chart; the volume size (1Gi, as `up`
+  writes it) is the reader's to change; an image built locally is listed, not pushed.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

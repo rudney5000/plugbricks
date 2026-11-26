@@ -66,6 +66,7 @@ npx plugbricks logs <brick>             # when a service falls: its logs (--foll
 npx plugbricks up                       # Docker Compose (needs Docker with Compose v2)
 npx plugbricks up --runtime k8s --context my-cluster   # Kubernetes; you always name the cluster (add --kubeconfig <file> if needed)
 npx plugbricks down                     # stops everything; your data and secrets are kept
+npx plugbricks export ./deploy          # the same files in a folder of their own, to run without plugbricks
 ```
 
 If one of the bricks serves a GraphQL subgraph, `up` also starts a router in front of it. With Docker Compose it answers at `http://127.0.0.1:4000/graphql` (change the port with `router.port` in `platform.json`), and only from your own machine: nothing else is published.
