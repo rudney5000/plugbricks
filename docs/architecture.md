@@ -2,7 +2,7 @@
 
 How plugbricks works, from the files a user writes to the containers that answer a GraphQL request.
 This document grows with the project: each section says whether it describes what is **built** or
-what is **planned**. The reasons behind each choice are in `docs/decisions.md` (D1 to D20); this
+what is **planned**. The reasons behind each choice are in `docs/decisions.md` (D1, D2, …); this
 document links to them instead of repeating them.
 
 ## 1. Vocabulary

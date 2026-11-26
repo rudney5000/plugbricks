@@ -56,8 +56,8 @@ npm run format          # Prettier writes the formatting it checks
   `packages/plugbricks/src/messages.ts`: codes are stable, tools match on them, never on the message text.
 - **The decision**, when the change alters behaviour or a contract: a new entry in `docs/decisions.md`, or the
   status of the entry it completes, with what was tested and what was not.
-- **The docs** it makes wrong: the README, `docs/architecture.md`, `docs/roadmap.md`, the README of the project
-  template.
+- **The docs** it makes wrong: the guide (`docs/guide/`), the README, `docs/architecture.md`, `docs/roadmap.md`, the
+  README of the project template. A fact is written in one place: link to it rather than copy it.
 - **LF line endings** everywhere (`.gitattributes`): brick scripts run in Linux containers.
 - **Pinned versions**: dependencies at an exact version, actions by commit SHA, images by version or digest.
 

@@ -1,0 +1,24 @@
+{
+  "name": "plugbricks-docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The documentation site (D40): VitePress over the Markdown files of this folder. A standalone package with its own lock file, not an npm workspace and never published.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "mermaid": "12.3.0",
+    "vitepress": "1.6.4"
+  },
+  "//overrides": "vitepress 1.6.4 asks for vite 5, whose development server has open advisories fixed in vite 6.4; the site builds with it.",
+  "overrides": {
+    "vite": "6.4.6"
+  }
+}

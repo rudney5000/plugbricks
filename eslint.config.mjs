@@ -19,6 +19,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/.test-work/**",
       "**/coverage/**",
+      "docs/.vitepress/cache/**",
       ".generated/**",
       ".secrets/**",
       ".platform/**",

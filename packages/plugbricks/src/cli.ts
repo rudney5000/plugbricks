@@ -93,6 +93,9 @@ Options:
                          the current context is never used)
   --kubeconfig <file>    With --context: the kubeconfig file that defines it (default: kubectl's own)
   --allow-context <name> Lets --context name a protected cluster ("platform", "k3d-platform")
+  --issuer <url>         With admin: the OIDC issuer to sign in with (default: the platform's own oidc provider)
+  --client-id <id>       With admin: the OIDC client of the admin (required without --dev); a confidential client's
+                         secret is read from PLUGBRICKS_OIDC_CLIENT_SECRET
   --prune-volumes        With up: delete the volumes listed in pendingDeletion of platform.lock
   -y, --yes              With add: also add what the brick needs from bricks/, without asking
   --with-secrets         With export: also write the secret values (.env or secret.yaml), ignored by a .gitignore

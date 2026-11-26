@@ -17,6 +17,19 @@ updates:
       - dependency-name: "@graphql-tools/utils"
         update-types: ["version-update:semver-major"]
 
+  # The documentation site (D40): a standalone package with its own lock file.
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: weekly
+    groups:
+      docs-site:
+        patterns: ["*"]
+    # vitepress 1 runs on vite 6 through the override in docs/package.json: a newer major would not build it.
+    ignore:
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+
   # apis/orders-api is a standalone package with its own lock file (not an npm workspace).
   - package-ecosystem: npm
     directory: /apis/orders-api

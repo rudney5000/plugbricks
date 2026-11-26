@@ -1,7 +1,7 @@
 # Signing in to the admin with Keycloak
 
 The admin is a **host process** (`plugbricks admin`). Its identity provider is either the platform's
-own **Keycloak brick** (`examples/keycloak`, D18, see the README) or an **external issuer**: a Keycloak you
+own **Keycloak brick** (`examples/keycloak`, D18, see [the admin](guide/admin.md)) or an **external issuer**: a Keycloak you
 run on the host (or anywhere reachable from it). This page walks through the second: a local Keycloak, a
 public client (PKCE, no secret) and the `plugbricks-admin` / `plugbricks-viewer` realm roles.
 
@@ -64,7 +64,7 @@ Since D17 a brick can publish its pages on its own loopback port, and since D18 
 the same realm, roles and client, built into its image (`apis/keycloak`) **without any user**, its
 console at `http://127.0.0.1:<webPort>/admin/`, its administrator's password generated in
 `.secrets/secrets.env`. With it, `plugbricks admin --client-id plugbricks-admin` finds the issuer by itself
-(D19); `--issuer` is for an external Keycloak, as on this page. The README section "`keycloak`" shows the
+(D19); `--issuer` is for an external Keycloak, as on this page. [The admin](guide/admin.md#signing-in-with-the-keycloak-brick) shows the
 commands.
 
 ### Roles of the APIs (D22)

@@ -5,6 +5,8 @@ dist/
 *.log
 .test-work/
 coverage/
+# The documentation site's cache (its output is under dist/).
+docs/.vitepress/cache/
 
 # Golden files of the CLI scenarios: generated output that the tests compare against.
 !packages/plugbricks/test/fixtures/cli/*/expected/.generated/

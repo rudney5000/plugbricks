@@ -45,3 +45,9 @@ is added. Each item says what to check and why.
       chain (vite, esbuild, tinypool); the fix is a major upgrade (D7). The production audit is clean. Settle this, and
       the tree of `tools/wgc-crosscheck`, before depending on the test run for anything beyond this repository.
 - [ ] **The CI is green on Linux, macOS and Windows, and the Kubernetes job passed.**
+- [ ] **The documentation site** (D40), the owner's choice, before or after the first publication: in the repository's
+      settings, Pages, source "GitHub Actions"; then in Settings, Secrets and variables, Actions, Variables, add
+      `PAGES_ENABLED` with the value `true`, and run the "Documentation" workflow. The page is public as soon as it is
+      published, at `https://<owner>.github.io/plugbricks/`: it carries the GitHub account name.
+- [ ] **After the first publication,** remove the "Not published yet" notes (`docs/guide/getting-started.md`,
+      `docs/guide/limits.md`, `README.md`).
