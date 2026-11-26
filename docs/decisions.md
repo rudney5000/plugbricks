@@ -2149,6 +2149,65 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not done.** `export --out` for `generate`; a `kustomization.yaml` or a Helm chart; the volume size (1Gi, as `up`
   writes it) is the reader's to change; an image built locally is listed, not pushed.
 
+## D35. gRPC services through Cosmo Connect: what was checked, and what plugbricks would have to do
+
+- **Status:** study (2026-11-26). Nothing is implemented in plugbricks; the decision on what to build is open (last
+  paragraph). Item 2 of section 4 of `docs/roadmap.md`.
+- **Context:** a team with a gRPC service wants it behind the same router as its GraphQL subgraphs. Cosmo Connect lets the
+  router call a gRPC service as a subgraph: a GraphQL schema is written, `wgc grpc-service generate` produces the Protocol
+  Buffers, the service implements them. The roadmap said "not verified at all in plugbricks". This is what was verified.
+- **Verified, by running it (router 0.372.0 pinned by digest, as `up` runs it; `wgc` 0.133.13 from `tools/wgc-crosscheck`;
+  a gRPC server of about 25 lines with `@grpc/grpc-js` implementing the generated proto).**
+  - **The router supports it, with no flag.** A static `router-config.json` with a `grpc` block (`protoSchema` and
+    `mapping`) in the subgraph's data source is enough; no environment variable or option to switch on.
+  - **How a gRPC subgraph is declared to `wgc router compose`:** in the input file, `name`, `routing_url` and a `grpc` block
+    with `schema_file`, `proto_file` and `mapping_file` (read in `wgc`'s own code; the documentation page that shows it was
+    not readable).
+  - **`routing_url` is a gRPC target, not a URL.** `host:port` works (`host.docker.internal:50051`); `grpc://host:50051` makes
+    the router fail every request with `invalid target address ... too many colons in address`.
+  - **Plain text by default.** The call to the service ran without TLS. The documentation says TLS is opt-in for gRPC
+    subgraphs, under `tls.client_grpc` (and not `tls.client`); not tried.
+  - **`wgc grpc-service generate <name> -i schema.graphql -o dir`** wrote `service.proto`, `mapping.json` and
+    `service.proto.lock.json` (the documentation says `service.mapping.json`: it is wrong for this version). The service
+    is named after the argument (`catalog` gives `service Catalog`), the package is `service.v1`, each root field is a
+    method (`QueryProduct`, `MutationRename`) and each `@key` an entity lookup (`LookupProductById`, which takes the keys
+    in a list and must answer in the same order).
+  - **What worked through the router:** a list, a field with an argument, a mutation, and the federation both ways with an
+    HTTP subgraph: a gRPC root field with a field from the HTTP subgraph (`_entities` sent to the HTTP side), and an HTTP
+    root field with a field from the gRPC service (one `LookupProductById` call with the key). Nullable single objects came
+    back as null.
+  - **The token does not reach the service.** With a request carrying `Authorization` and another header, the gRPC service
+    saw only `user-agent`. With `headers: all: request: [{op: propagate, named: Authorization}, ...]` in the router's
+    `router.yaml` (the file D19 already writes when the router checks tokens), both arrived as gRPC metadata. So a gRPC
+    brick would not do the second check of D20 unless the router is told to propagate the header, and nothing in the
+    router's own check is lost: it validates the token before any subgraph.
+  - **What the composer of plugbricks needs.** `buildRouterConfig` of `@wundergraph/cosmo-shared` 0.50.2, which
+    `federation.ts` calls, has a `SubgraphKind.GRPC` (with `protoSchema` and `mapping`) next to the `Standard` it is given
+    today; `wgc` composes the SDL of a gRPC subgraph like any other. Not run through plugbricks: the type declarations
+    and the `wgc` code were read, and the config written by `wgc` was served by the router.
+- **Documented, not tried.** Not supported over gRPC: subscriptions, streaming, nested keys in entity lookups, nullable list
+  items (`[String]` is a warning), custom scalars other than fixed mappings (`wgc` takes `--custom-scalar-mapping`). The
+  documentation contradicts itself on union types (a table says supported, the linting table says error). The version
+  that introduced gRPC services is not stated; request wire encoding is "since 0.357.0".
+- **Not verified.** TLS and mTLS to the service; `headers.subgraphs.<name>` (a rule for one gRPC subgraph only); Kubernetes
+  (the same files, and a Service name as the target: `<brick>-<service>:<port>`); a federation of several gRPC services;
+  what `wgc grpc-service generate --with-operations` produces; the tutorial of the documentation.
+- **What plugbricks would have to do (not decided).**
+  1. A manifest form for the subgraph: `subgraph: { service, grpc: { schema, proto, mapping } }`, the three files in the
+     brick like `schema.graphql` is, and the subgraph's address built as `<brick>-<service>:<port>` with no scheme and no
+     path (the HTTP form is `http://...<path>`).
+  2. `federation.ts`: pass `kind: GRPC`, `protoSchema` and `mapping` for such a brick; composition and the `extends` checks
+     are unchanged.
+  3. D19/D22: when the router checks tokens, add the `propagate` rule for the gRPC subgraphs (the HTTP ones get the header
+     by default); the roles of D22 are the service's business, as for an external subgraph (D33).
+  4. The proto is the contract: who generates it. Either the author runs `wgc grpc-service generate` and gives the files
+     (nothing new to ship: `wgc` stays a tool of the author), or plugbricks does it (a new dependency, `@wundergraph/protographic`,
+     which `wgc` uses). The first is the smaller step. Drift between the proto and the schema is then the author's: `schema check`
+     cannot ask a gRPC service for its SDL; `wgc` keeps a `service.proto.lock.json` for the field numbers.
+  5. `create <name> --kind grpc`: a service from a template that implements the generated proto. Not before the rest.
+- **Open.** Whether to build 1 to 3 (one step, with a scenario and a service of this study as the example), and the answer
+  to 4. This study does not decide them.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
