@@ -1,0 +1,70 @@
+{
+  "description": "create <name> --kind api --lang python (D38) writes the same brick as a Node API and a Python service in services/<name>, with pinned and hashed requirements and its placeholders filled",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "create",
+        "inventory",
+        "--kind",
+        "api",
+        "--lang",
+        "python"
+      ],
+      "stdout": [
+        "Created inventory-api: bricks/inventory-api (the brick) and services/inventory-api (its code and image recipe)\nAdded inventory-api 0.1.0",
+        "  docker build -t demo/inventory-api:0.1.0 -f services/inventory-api/Dockerfile .\n  plugbricks up"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: inventory-api"
+    },
+    {
+      "run": [
+        "create",
+        "orders",
+        "--kind",
+        "api",
+        "--lang",
+        "node"
+      ]
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": "Federation: inventory-api, orders-api"
+    }
+  ],
+  "exists": [
+    "bricks/inventory-api/plugin.json",
+    "services/inventory-api/Dockerfile",
+    "services/inventory-api/Dockerfile.dockerignore",
+    "services/inventory-api/main.py",
+    "services/inventory-api/requirements.in",
+    "services/inventory-api/requirements.txt",
+    "services/orders-api/src/main.ts"
+  ],
+  "absent": [
+    "services/inventory-api/main.py.tmpl",
+    "services/inventory-api/package.json",
+    "services/inventory-api/src",
+    "services/orders-api/main.py"
+  ],
+  "expectRaw": {
+    "bricks/inventory-api/plugin.json": "http://127.0.0.1:4000/health",
+    "services/inventory-api/main.py": "item = FederatedObjectType(\"InventoryItem\")",
+    "services/inventory-api/requirements.txt": "--hash=sha256:",
+    "services/inventory-api/Dockerfile": "COPY bricks/inventory-api/schema.graphql ./",
+    "services/inventory-api/Dockerfile.dockerignore": "!services/inventory-api/**/*.py"
+  }
+}

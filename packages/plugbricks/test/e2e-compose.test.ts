@@ -1002,24 +1002,26 @@ describe("the queue capability with NATS", () => {
   );
 });
 
-// "plugbricks create" (D28): what it writes builds and runs as it is. An API and a web brick are created, their images
-// built from the project folder with the command create prints, and the platform answers through the router.
+// "plugbricks create" (D28): what it writes builds and runs as it is. An API, a Python API (D38) and a web brick are
+// created, their images built from the project folder with the command create prints, and the platform answers through the
+// router. Then "plugbricks dev" (D37) gives the Python API a new field.
 describe("bricks written by create", () => {
   const name = "pbtest-create";
   const routerAt = 14107;
   const pageAt = 14108;
 
   it.skipIf(!ready)(
-    `builds the images of a created API and web brick, and serves them through the router${why}`,
+    `builds the images of the created bricks, serves them through the router, and takes a new field with dev${why}`,
     async () => {
       const work = project(name, []);
       expect(cli(work, ["init", "--name", name]).code).toBe(0);
       const builds: string[] = [];
-      for (const [base, kind] of [
-        ["inventory", "api"],
-        ["shop", "web"],
+      for (const args of [
+        ["inventory", "--kind", "api"],
+        ["stock", "--kind", "api", "--lang", "python"],
+        ["shop", "--kind", "web"],
       ]) {
-        const r = cli(work, ["create", base, "--kind", kind]);
+        const r = cli(work, ["create", ...args]);
         expect(r.code, r.err).toBe(0);
         builds.push(/^ {2}(docker build .*)$/m.exec(r.out)![1]);
       }
@@ -1047,12 +1049,33 @@ describe("bricks written by create", () => {
           ],
         },
       });
+      const stock = await through(routerAt, "stockItems", "{ stockItems { name } }");
+      expect(stock.body).toEqual({ data: { stockItems: [{ name: "first" }, { name: "second" }] } });
+
+      // A new field in the schema and its resolver: dev rebuilds that service alone and restarts the router with it.
+      const schema = join(work, "bricks/stock-api/schema.graphql");
+      writeFileSync(schema, `${readFileSync(schema, "utf8")}\nextend type Query {\n  added: String\n}\n`);
+      const main = join(work, "services/stock-api/main.py");
+      const code = readFileSync(main, "utf8");
+      expect(code).toContain("@item.reference_resolver");
+      writeFileSync(
+        main,
+        code.replace(
+          "@item.reference_resolver",
+          '@query.field("added")\ndef resolve_added(*_):\n    return "by dev"\n\n\n@item.reference_resolver',
+        ),
+      );
+      const turn = cli(work, ["dev", "stock-api", "--no-follow"]);
+      expect(turn.code, `${turn.out}\n${turn.err}`).toBe(0);
+      expect(turn.out).toContain("Took schema.graphql from the brick");
+      await routerReady(routerAt);
+      expect((await through(routerAt, "added", "{ added }")).body).toEqual({ data: { added: "by dev" } });
       // The page's server asks the router itself, through GRAPHQL_URL.
       await until("the page", async () => (await get(pageAt, "/health")) === 200);
       const html = await (await fetch(`http://127.0.0.1:${pageAt}/`)).text();
       expect(html).toContain("<title>shop-web</title>");
       expect(html).toContain("the router answered 200");
-      console.log(`created bricks: inventoryItems through the router, the page of shop-web read the router`);
+      console.log(`created bricks: Node and Python APIs through the router, a field added with dev, the page of shop-web read the router`);
 
       expect(cli(work, ["down"]).code).toBe(0);
     },

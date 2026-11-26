@@ -1,0 +1,62 @@
+"""{{name}}: a GraphQL subgraph in Python, created by "plugbricks create".
+
+Its schema is bricks/{{name}}/schema.graphql, the one the platform composes; the image carries a copy of it (see the
+Dockerfile). Replace the items below with your own data.
+"""
+
+import os
+from pathlib import Path
+
+import uvicorn
+from ariadne import QueryType, format_error
+from ariadne.asgi import GraphQL
+from ariadne.contrib.federation import FederatedObjectType, make_federated_schema
+from ariadne.explorer import ExplorerHttp405
+from graphql import GraphQLError
+
+ITEMS = [{"id": "1", "name": "first"}, {"id": "2", "name": "second"}]
+
+query = QueryType()
+item = FederatedObjectType("{{Type}}")
+
+
+@query.field("{{field}}")
+def resolve_items(*_):
+    return ITEMS
+
+
+@item.reference_resolver
+def resolve_reference(_, _info, representation):
+    # Called by the router when another subgraph refers to an item by its key.
+    return next((i for i in ITEMS if i["id"] == representation["id"]), None)
+
+
+def format_masked(error, debug=False):
+    """Raise a GraphQLError to tell the caller something; the message of any other exception stays in the log."""
+    original = error.original_error
+    if original is not None and not isinstance(original, GraphQLError):
+        return {"message": "Unexpected error.", "path": error.path}
+    return format_error(error, debug)
+
+
+schema = make_federated_schema((Path(__file__).parent / "schema.graphql").read_text(), query, item)
+graphql = GraphQL(schema, explorer=ExplorerHttp405(), error_formatter=format_masked)
+
+
+async def app(scope, receive, send):
+    """GraphQL on /graphql, and /health, which the brick's health check calls. Nothing else is served."""
+    if scope["type"] != "http":
+        return
+    if scope["path"] == "/graphql":
+        await graphql(scope, receive, send)
+        return
+    status, body = (200, b"ok\n") if scope["path"] == "/health" else (404, b"not found\n")
+    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"text/plain")]})
+    await send({"type": "http.response.body", "body": body})
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "4000"))
+    print(f"{{name}}: listening on :{port} (/graphql, /health)", flush=True)
+    # uvicorn stops on SIGTERM (docker stop, Kubernetes) once the requests in flight are answered.
+    uvicorn.run(app, host="0.0.0.0", port=port, lifespan="off", access_log=False, log_level="warning")

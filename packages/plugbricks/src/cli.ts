@@ -23,7 +23,7 @@ import { startAdmin } from "./admin/server.js";
 import { platformOidcIssuer } from "./plan.js";
 import { withPlatformLock } from "./lock.js";
 import { needsOf, type Choice } from "./needs.js";
-import { BRICK_KINDS, createBrick, type BrickKind } from "./create.js";
+import { API_LANGUAGES, BRICK_KINDS, createBrick, type ApiLanguage, type BrickKind } from "./create.js";
 import { doctor } from "./doctor.js";
 import { execIn, logs } from "./attach.js";
 import { schemaCheck } from "./schemacheck.js";
@@ -60,7 +60,7 @@ Commands:
   add <name>             Install the brick bricks/<name> of this project (or the folder <name> here)
   add <path>             Install the brick at <path> (a directory with a plugin.json)
                          Either way, what it needs from bricks/ is proposed first (--yes: add it without asking)
-  create <name> --kind api|web [--image <ref>]
+  create <name> --kind api|web [--lang node|python] [--image <ref>]
                          Write a new brick <name>-api or <name>-web in bricks/ and its code in services/, and add it
   remove <name>          Uninstall a brick
   enable <name>          Deploy an installed brick again (it was disabled)
@@ -97,6 +97,7 @@ Options:
   -y, --yes              With add: also add what the brick needs from bricks/, without asking
   --with-secrets         With export: also write the secret values (.env or secret.yaml), ignored by a .gitignore
   --kind api|web         With create: a GraphQL subgraph or a web brick
+  --lang node|python     With create --kind api: the language of its service (default node)
   --image <ref>          With create: the image its manifest names (default <platform>/<name>:0.1.0), pinned
   --dir <path>           Run in <path> instead of the current directory
   -h, --help             Show this help
@@ -183,6 +184,7 @@ export function main(argv: string[], io: Io): number {
           tail: { type: "string" },
           url: { type: "string" },
           image: { type: "string" },
+          lang: { type: "string" },
           "with-secrets": { type: "boolean" },
           "no-follow": { type: "boolean" },
           port: { type: "string" },
@@ -232,6 +234,7 @@ export function main(argv: string[], io: Io): number {
     if (values.tail !== undefined) optionFor("tail", "logs");
     if (values.url !== undefined) optionFor("url", "schema");
     if (values.image !== undefined) optionFor("image", "create");
+    if (values.lang !== undefined) optionFor("lang", "create");
     if (values["with-secrets"] !== undefined) optionFor("with-secrets", "export");
     if (values["no-follow"] !== undefined) optionFor("no-follow", "dev");
     const runtime = (values.runtime ?? "compose") as Runtime;
@@ -366,7 +369,14 @@ export function main(argv: string[], io: Io): number {
               detail: `create needs --kind ${BRICK_KINDS.join(" or ")}${values.kind === undefined ? "" : ` (got "${values.kind}")`}`,
             });
           }
-          const r = createBrick(root, args[0], kind, { image: values.image });
+          const lang = values.lang as ApiLanguage | undefined;
+          if (lang !== undefined && (kind !== "api" || !API_LANGUAGES.includes(lang))) {
+            throw usage("USAGE_INVALID_OPTION", "", {
+              detail:
+                kind === "api" ? `--lang must be ${API_LANGUAGES.join(" or ")} (got "${lang}")` : "--lang only applies with --kind api",
+            });
+          }
+          const r = createBrick(root, args[0], kind, { image: values.image, lang });
           io.stdout(`Created ${r.name}: ${r.brickDir} (the brick) and ${r.serviceDir} (its code and image recipe)`);
           io.stdout(`Added ${r.added.name} ${r.added.version}`);
           // The build context is the project folder: the image of an API carries the schema of its brick.

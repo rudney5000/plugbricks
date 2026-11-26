@@ -13,6 +13,10 @@ import { issue } from "./issues.js";
 export const BRICK_KINDS = ["api", "web"] as const;
 export type BrickKind = (typeof BRICK_KINDS)[number];
 
+/** The languages of an API's service (D38); a web brick has one template. */
+export const API_LANGUAGES = ["node", "python"] as const;
+export type ApiLanguage = (typeof API_LANGUAGES)[number];
+
 /** Where the code of the services created by "create" goes, next to bricks/ (D28). */
 export const SERVICE_FOLDER = "services";
 
@@ -74,7 +78,12 @@ export function createdName(base: string, kind: BrickKind): string {
  * Writes bricks/<name> and services/<name> from the template of `kind`, then adds the brick. Writes nothing when it
  * refuses; when the add itself is refused, removes what it wrote, so that nothing is left half done.
  */
-export function createBrick(root: string, base: string, kind: BrickKind, options: { image?: string } = {}): CreateResult {
+export function createBrick(
+  root: string,
+  base: string,
+  kind: BrickKind,
+  options: { image?: string; lang?: ApiLanguage } = {},
+): CreateResult {
   const project = readProject(root);
   const name = createdName(base, kind);
   if (!isBrickName(base) || !isBrickName(name)) {
@@ -115,7 +124,9 @@ export function createBrick(root: string, base: string, kind: BrickKind, options
   const created = [dirname(brickDir), dirname(serviceDir)].filter((d) => !existsSync(d));
   try {
     copyTemplate(join(TEMPLATES, kind, "brick"), brickDir, values, name);
-    copyTemplate(join(TEMPLATES, kind, "service"), serviceDir, values, name);
+    // The brick is the same whatever its service is written in: the contract is the schema (D38).
+    const service = options.lang && options.lang !== "node" ? `service-${options.lang}` : "service";
+    copyTemplate(join(TEMPLATES, kind, service), serviceDir, values, name);
     const added = addBrick(project.root, brickDir, { byName: name });
     return {
       name,
