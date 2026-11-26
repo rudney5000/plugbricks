@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { issue, type Issue } from "./issues.js";
+import { devRebuild } from "./dev.js";
 import { exportPlatform } from "./export.js";
 import {
   addBrick,
@@ -74,6 +75,9 @@ Commands:
   export <dir> [--with-secrets]
                          Write the Compose file or the Kubernetes manifests into <dir>, to run without plugbricks;
                          no secret value unless --with-secrets; <dir> must not exist yet
+  dev <brick> [--service <name>] [--no-follow]
+                         Rebuild the image of services/<brick>, take its new schema, restart that service alone in the
+                         running platform (Docker Compose) and follow its logs
   doctor                 Check what up needs (Node, Docker or kubectl, ports, images) and say what to fix; read-only
   status --runtime <name> [--json]
                          Also read what the runtime really runs (read-only): state, reason, restarts
@@ -180,6 +184,7 @@ export function main(argv: string[], io: Io): number {
           url: { type: "string" },
           image: { type: "string" },
           "with-secrets": { type: "boolean" },
+          "no-follow": { type: "boolean" },
           port: { type: "string" },
           dev: { type: "boolean" },
           issuer: { type: "string" },
@@ -222,12 +227,13 @@ export function main(argv: string[], io: Io): number {
     if (values["prune-volumes"] !== undefined) optionFor("prune-volumes", "up");
     if (values.yes !== undefined) optionFor("yes", "add");
     if (values.kind !== undefined) optionFor("kind", "create");
-    if (values.service !== undefined) optionFor("service", "logs", "exec");
+    if (values.service !== undefined) optionFor("service", "logs", "exec", "dev");
     if (values.follow !== undefined) optionFor("follow", "logs");
     if (values.tail !== undefined) optionFor("tail", "logs");
     if (values.url !== undefined) optionFor("url", "schema");
     if (values.image !== undefined) optionFor("image", "create");
     if (values["with-secrets"] !== undefined) optionFor("with-secrets", "export");
+    if (values["no-follow"] !== undefined) optionFor("no-follow", "dev");
     const runtime = (values.runtime ?? "compose") as Runtime;
     if (!RUNTIMES.includes(runtime)) {
       throw usage("USAGE_INVALID_OPTION", "", { detail: `--runtime must be one of: ${RUNTIMES.join(", ")} (got "${values.runtime}")` });
@@ -369,6 +375,9 @@ export function main(argv: string[], io: Io): number {
           io.stdout("Next, build its image, then start the platform:");
           io.stdout(`  docker build -t ${r.image} -f ${at(`${r.serviceDir}/Dockerfile`)} ${here || "."}`);
           io.stdout(`  plugbricks up${values.dir !== undefined ? ` --dir ${values.dir}` : ""}`);
+          io.stdout(
+            `After a change to its code or its schema: plugbricks dev ${r.name}${values.dir !== undefined ? ` --dir ${values.dir}` : ""}`,
+          );
           // On Kubernetes the image must be where the cluster pulls it: imported into a local cluster (kept, since a
           // pinned tag is pulled only when missing), or pushed to a registry it reads.
           io.stdout(`On Kubernetes, the cluster needs the image: import it (k3d image import ${r.image} --cluster <name>,`);
@@ -415,6 +424,20 @@ export function main(argv: string[], io: Io): number {
             `To follow the service: update bricks/${r.brick}/${r.file.split("/").pop()}, then "plugbricks remove ${r.brick}" and "plugbricks add ${r.brick}".`,
           );
           return 1;
+        }
+        case "dev": {
+          only(1, "a brick name");
+          const brick = args[0];
+          const attachDeps = { exec: io.runtime?.exec, attach: io.runtime?.attach };
+          // The lock covers the change only: following the logs must not keep the platform locked (D16).
+          const r = withPlatformLock(root, `dev ${brick}`, () =>
+            devRebuild(root, brick, { service: values.service }, { ...deps, ...attachDeps }),
+          );
+          io.stdout(`${r.service} runs the new ${r.image}`);
+          if (r.changed.length) io.stdout(`Took ${r.changed.join(", ")} from the brick; the router restarted with it`);
+          const follow = !values["no-follow"];
+          if (follow) io.stdout("Its logs follow (Ctrl-C to stop; run dev again after your next change):");
+          return logs(root, "compose", brick, { service: values.service, follow, tail: 20 }, attachDeps);
         }
         case "export": {
           only(1, "a folder");

@@ -1,0 +1,218 @@
+{
+  "description": "dev (D37) refuses what it cannot rebuild or take: a brick that is not installed, disabled or without code in services/, a platform that is not up, a manifest that changed, a schema that does not parse or does not compose; nothing is built and nothing changes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "create",
+        "inventory",
+        "--kind",
+        "api"
+      ]
+    },
+    {
+      "run": [
+        "dev",
+        "nope"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_NOT_INSTALLED"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "dev",
+        "postgres"
+      ],
+      "exit": 1,
+      "codes": [
+        "DEV_NO_SOURCE"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api"
+      ],
+      "exit": 1,
+      "codes": [
+        "SERVICE_HAS_NO_CONTAINER"
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api",
+        "--service",
+        "nope"
+      ],
+      "exit": 1,
+      "codes": [
+        "SERVICE_UNKNOWN"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "disable",
+        "inventory-api"
+      ]
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api"
+      ],
+      "exit": 1,
+      "codes": [
+        "BRICK_DISABLED_NOT_RUNNING"
+      ],
+      "commands": [],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "enable",
+        "inventory-api"
+      ]
+    },
+    {
+      "mutate": {
+        "append": {
+          "file": "bricks/inventory-api/schema.graphql",
+          "text": "\ntype {\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "exit": 1,
+      "codes": [
+        "SUBGRAPH_SCHEMA_INVALID"
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": "bricks/inventory-api/schema.graphql",
+          "text": "type Query {\n  broken: Nothing\n}\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "exit": 1,
+      "codes": [
+        "COMPOSITION_FAILED"
+      ],
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}"
+      ],
+      "unchanged": true
+    },
+    {
+      "mutate": {
+        "writeText": {
+          "file": "bricks/inventory-api/notes.txt",
+          "text": "new file\n"
+        }
+      }
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api"
+      ],
+      "fake": [
+        {
+          "match": "docker ps",
+          "stdout": "abc123\n"
+        }
+      ],
+      "exit": 1,
+      "codes": [
+        "DEV_BRICK_CHANGED"
+      ],
+      "stderr": "notes.txt",
+      "commands": [
+        "docker ps --all --filter label=com.docker.compose.project=demo --filter label=com.docker.compose.service=inventory-api-app --format {{.ID}}"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "dev"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_MISSING_ARGUMENT"
+      ]
+    },
+    {
+      "run": [
+        "dev",
+        "inventory-api",
+        "--runtime",
+        "k8s"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    },
+    {
+      "run": [
+        "up",
+        "--no-follow"
+      ],
+      "exit": 2,
+      "codes": [
+        "USAGE_INVALID_OPTION"
+      ]
+    }
+  ]
+}

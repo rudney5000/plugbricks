@@ -179,7 +179,15 @@ function requireKubectl(deps: RuntimeDeps, root: string, target: string[]): void
 
 // ---------- Docker Compose ----------
 
-const composeBase = (plan: Plan) => ["compose", "--project-name", plan.platform, "--file", COMPOSE_FILE, "--env-file", COMPOSE_ENV_FILE];
+export const composeBase = (plan: Plan) => [
+  "compose",
+  "--project-name",
+  plan.platform,
+  "--file",
+  COMPOSE_FILE,
+  "--env-file",
+  COMPOSE_ENV_FILE,
+];
 
 /**
  * Wait tasks that made this `up` fail by giving up: named in Compose's error output AND exited
