@@ -1,0 +1,27 @@
+{
+  "name": "plugbricks-example-stock-api",
+  "version": "0.1.0",
+  "description": "Example subgraph for plugbricks: a GraphQL adapter in front of a REST API, written from its OpenAPI contract, federation v2. Built as the image ghcr.io/rudney5000/plugbricks/stock-api:0.1.0.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@apollo/subgraph": "2.17.0",
+    "graphql": "17.1.0",
+    "graphql-yoga": "6.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
+  }
+}

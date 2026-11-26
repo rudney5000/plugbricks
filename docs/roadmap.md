@@ -23,7 +23,7 @@ when the one before it that it depends on is merged.
 | 10  | ~~`export`: leave plugbricks with plain Compose or Kubernetes files~~ (done, D34)     | 8, item 1      | nothing                                       | code                              |
 | 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
 | 12  | More ready-made bricks (Redis, MySQL or MariaDB, object storage, a test mail server)  | 7              | step 3                                        | code                              |
-| 13  | gRPC through Cosmo Connect (~~studied and built~~, D35), a REST adapter example         | 4, items 2 and 3 | step 7                                      | study, then docs                  |
+| 13  | ~~gRPC through Cosmo Connect (D35), a REST adapter example (D36)~~ (done)               | 4, items 2 and 3 | step 7                                      | study, then docs                  |
 | 14  | Signed images and an SBOM; a short demo video                                         | 8, items 2 and 3 | step 8 (public images)                      | code, then the owner              |
 | 15  | What was decided earlier and is not done                                              | 9              | nothing                                       | code or docs                      |
 
@@ -141,7 +141,8 @@ themselves). What it federates today is a **GraphQL service in Federation v2 tha
    Kubernetes (D35).
 3. **REST services.** No OpenAPI-to-GraphQL converter is built into the router. Until something better exists: an
    adapter brick (a GraphQL subgraph that calls the REST API, written from the OpenAPI contract). Worth one documented
-   example.
+   example. **Done (D36):** `examples/stock-api` in front of `examples/stock-rest`. Not shown: an adapter that checks
+   tokens or sends a credential to the REST API.
 
 Not covered: a federation already run by Apollo (Router or Gateway): plugbricks replaces it, it does not join it.
 

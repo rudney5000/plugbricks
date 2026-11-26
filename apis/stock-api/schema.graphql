@@ -1,0 +1,21 @@
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+
+"""
+An item of the stock, as the REST API behind this adapter knows it.
+"""
+type Item @key(fields: "sku") {
+  sku: ID!
+  name: String!
+  quantity: Int!
+}
+
+type Query {
+  "One item, or null when the stock has no such sku."
+  item(sku: ID!): Item
+  items: [Item!]!
+}
+
+type Mutation {
+  "Adds a delivery to an item: quantity is a whole number between 1 and 1000. Null when the stock has no such sku."
+  restock(sku: ID!, quantity: Int!): Item
+}

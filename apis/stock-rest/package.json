@@ -1,0 +1,15 @@
+{
+  "name": "plugbricks-example-stock-rest",
+  "version": "0.1.0",
+  "description": "Example REST API for plugbricks: it stands for a service you already run (openapi.json). Built as the image ghcr.io/rudney5000/plugbricks/stock-rest:0.1.0.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "start": "node main.js",
+    "test": "node --test"
+  }
+}

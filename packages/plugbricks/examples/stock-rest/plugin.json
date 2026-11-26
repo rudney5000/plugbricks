@@ -1,0 +1,24 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "stock-rest",
+  "version": "0.1.0",
+  "description": "Example REST API: it stands for a service you already run, with an OpenAPI contract and no GraphQL. Nothing of it is published: the stock-api adapter calls it on the platform's network. Its source is apis/stock-rest; build the image with: docker build -t ghcr.io/rudney5000/plugbricks/stock-rest:0.1.0 apis/stock-rest",
+  "services": [
+    {
+      "name": "app",
+      "image": "ghcr.io/rudney5000/plugbricks/stock-rest:0.1.0",
+      "port": 8080,
+      "healthcheck": {
+        "exec": [
+          "wget",
+          "-qO-",
+          "http://localhost:8080/health"
+        ]
+      }
+    }
+  ],
+  "tags": [
+    "api",
+    "rest"
+  ]
+}

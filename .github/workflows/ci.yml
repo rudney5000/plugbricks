@@ -43,6 +43,7 @@ jobs:
             apis/orders-api/package-lock.json
             apis/shipping-api/package-lock.json
             apis/catalog-grpc/package-lock.json
+            apis/stock-api/package-lock.json
             apis/queue-consumer/package-lock.json
             apis/orders-web/package-lock.json
 
@@ -73,6 +74,18 @@ jobs:
 
       - name: Example gRPC service catalog-grpc
         working-directory: apis/catalog-grpc
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      # The REST example (D36): the API has no dependency, so nothing to install; the adapter is tested against it.
+      - name: Example REST API stock-rest
+        working-directory: apis/stock-rest
+        run: npm test
+
+      - name: Example adapter stock-api
+        working-directory: apis/stock-api
         run: |
           npm ci
           npm run typecheck
@@ -116,6 +129,7 @@ jobs:
             apis/orders-api/package-lock.json
             apis/shipping-api/package-lock.json
             apis/catalog-grpc/package-lock.json
+            apis/stock-api/package-lock.json
             apis/queue-consumer/package-lock.json
             apis/orders-web/package-lock.json
 
@@ -172,6 +186,7 @@ jobs:
             apis/orders-api/package-lock.json
             apis/shipping-api/package-lock.json
             apis/catalog-grpc/package-lock.json
+            apis/stock-api/package-lock.json
             apis/queue-consumer/package-lock.json
             apis/orders-web/package-lock.json
             tools/wgc-crosscheck/package-lock.json

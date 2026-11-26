@@ -2237,6 +2237,45 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   today the author runs `wgc grpc-service generate` and gives the files, the smaller step), and `create <name> --kind grpc`,
   a service template that implements a generated proto. Not before someone writes a second gRPC service.
 
+## D36. A REST service behind an adapter subgraph: the `stock-api` example
+
+- **Status:** implemented (2026-11-26). Item 3 of section 4 of `docs/roadmap.md`.
+- **Context:** a team's service speaks REST. The router has no OpenAPI to GraphQL converter, so "bring your REST service" had
+  no answer but "write a GraphQL subgraph". What was missing is one worked example of that subgraph, and of the decisions
+  it has to make.
+- **Decision.** No new feature in plugbricks: two example bricks and the code of their services.
+  - **`stock-rest`** stands for the service one already runs: a REST API with an OpenAPI contract (`apis/stock-rest`,
+    `openapi.json`), no dependency, no GraphQL, nothing published.
+  - **`stock-api`** is the adapter, a GraphQL subgraph written by hand from that contract (`apis/stock-api`): one function
+    per operation, one entity (`Item @key(fields: "sku")`) so that other subgraphs can refer to it. No generator: it
+    would add a dependency or a build step, and three operations do not need one (none was tried).
+  - **Two bricks, not one with two services**, because in real use only the adapter is a brick of the platform: its
+    `dependencies` (D21) name the stand-in, and one drops that dependency when pointing it at a real service.
+  - **The address.** `STOCK_API_URL` in the adapter's manifest. A manifest has no variable for the address of another brick,
+    so it names the runtime name plugbricks gives that service, `<brick>-<service>` (D32), the same on Compose and on
+    Kubernetes: `http://stock-rest-app:8080`. A real service is named by its own address there.
+  - **What the adapter decides**, and its tests hold it to:
+    - an id is checked against the contract's pattern before it enters a URL (`..`, `/`, `?` never reach the REST API);
+    - the REST API's `404` is `null`, its `400` is `BAD_USER_INPUT` with its message; anything else (unreachable, slower
+      than 5 s, another status, an answer off the contract) is `UPSTREAM_UNAVAILABLE`, and the caller learns neither the
+      address nor the answer, which go to the log;
+    - no redirect is followed;
+    - `/health` says the adapter runs, not that the REST API does: restarting the adapter would not bring it back;
+    - one REST call per entity reference, with a comment saying where to batch;
+    - **no credential is passed on.** The router checks the token (D19); the example does not check it again (it does not
+      declare `requires.oidc`) and does not send it to the REST API. A real adapter has to decide both, per service: its own
+      credential for the REST API, or the caller's token when that API accepts the platform's issuer.
+- **Tested.** `apis/stock-rest`: four tests (`node --test`). `apis/stock-api`: thirteen, the adapter in front of the real
+  stand-in (including the six refused ids, the references, the failures and the timeout) and the contract (every call it made
+  is an operation of `openapi.json`; the sku pattern is the contract's; the brick's schema is the one served). Three
+  mutations, each caught: no id check, redirects followed, the upstream's message passed to the caller. CLI scenario
+  `rest-adapter` (the dependency, the address in the Compose file and the Service of that name in the Kubernetes manifests).
+  `examples-federation` composes it with the others. By hand with plugbricks on Docker Compose (images built locally):
+  `add stock-api --yes` added `stock-rest`, `up`, a list, a restock, both refusals, `null` for an unknown sku, and with
+  `stock-rest` stopped `UPSTREAM_UNAVAILABLE` and the reason in `logs`, `status --runtime` showing which one stopped. The
+  router wraps a subgraph's error: the code is in `errors[0].extensions.errors[0].extensions.code`.
+- **Not tested.** Kubernetes (rendered, not applied). An adapter that checks tokens or calls a REST API that asks for one.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
