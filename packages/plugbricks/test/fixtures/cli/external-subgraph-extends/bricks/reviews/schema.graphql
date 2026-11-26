@@ -1,0 +1,7 @@
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
+
+"An order of orders-api; this external service adds its reviews."
+type Order @key(fields: "id") {
+  id: ID!
+  reviews: [String!]!
+}

@@ -25,6 +25,7 @@ const brick = (name: string, state: AdminBrick["state"], tags: string[]): AdminB
   port: 4000,
   subgraph: false,
   webUrl: null,
+  external: null,
   extends: "",
   provides: [],
   requires: "",
@@ -67,6 +68,12 @@ describe("the Bricks view helpers", () => {
     expect(hostsOf(api, r)).toEqual([{ url: "http://127.0.0.1:4000/graphql", note: "GraphQL, through the router" }]);
     expect(hostsOf(page, r)).toEqual([{ url: "http://127.0.0.1:8080/orders", note: "Web page" }]);
     expect(hostsOf({ ...page, subgraph: true }, r).map((h) => h.note)).toEqual(["Web page", "GraphQL, through the router"]);
+    // An external subgraph (D33): its own address, and the router that federates it.
+    const external = { ...api, external: "https://catalog.example.com/graphql" };
+    expect(hostsOf(external, r)).toEqual([
+      { url: "https://catalog.example.com/graphql", note: "External subgraph, not supervised" },
+      { url: "http://127.0.0.1:4000/graphql", note: "GraphQL, through the router" },
+    ]);
     expect(hostsOf(brick("postgres", "healthy", []), r)).toEqual([]);
     expect(hostsOf({ ...page, enabled: false }, r)).toEqual([]);
     expect(hostsOf(api, router(null, []))).toEqual([]);

@@ -1,0 +1,10 @@
+{
+  "name": "intranet",
+  "version": "0.1.0",
+  "description": "A subgraph that runs elsewhere (D33).",
+  "services": [],
+  "subgraph": {
+    "url": "http://10.0.3.7:8080/graphql",
+    "schema": "schema.graphql"
+  }
+}

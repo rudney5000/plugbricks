@@ -49,7 +49,8 @@ export interface BrickManifest {
     healthcheck?: Partial<Healthcheck> & { exec: string[] };
     env?: Record<string, string>;
   }[];
-  subgraph?: { service: string; schema: string; path?: string };
+  /** One of the brick's services (service, path), or a service that runs elsewhere (url, D33). */
+  subgraph?: { service?: string; url?: string; schema: string; path?: string; forwardAuthorization?: boolean };
   /** The service that serves web pages (D17). */
   web?: { service: string; path?: string };
   /** On a web brick that provides oidc: what the router needs to check its tokens (D19). */
@@ -149,6 +150,10 @@ export interface PlanRouter {
   configSha256: string;
   /** The subgraph services the router calls; it starts after them. */
   subgraphs: { service: string; brick: string; healthy: boolean }[];
+  /** The subgraphs that run elsewhere (D33): called at their address, neither started nor waited for. */
+  external: { brick: string; url: string; forwardAuthorization: boolean }[];
+  /** Whether an external subgraph is on this machine (host.docker.internal): Compose then gives the router that name. */
+  hostGateway: boolean;
   /**
    * Origins a browser may call the router from (its CORS_ALLOW_ORIGINS, D17). Any other Origin is
    * refused with 403 and its request is not run; requests without an Origin header are not affected.
@@ -587,8 +592,20 @@ function buildRouter(
 ): PlanRouter | undefined {
   const inputs: SubgraphInput[] = [];
   const subgraphs: PlanRouter["subgraphs"] = [];
+  const external: PlanRouter["external"] = [];
   for (const [brick, m] of manifests) {
     if (!m.subgraph) continue;
+    if (m.subgraph.url !== undefined) {
+      inputs.push({
+        brick,
+        file: `${BRICKS_DIR}/${brick}/${m.subgraph.schema}`,
+        sdl: router.readSchema(brick, m.subgraph.schema),
+        url: m.subgraph.url,
+        extends: m.extends ?? [],
+      });
+      external.push({ brick, url: m.subgraph.url, forwardAuthorization: m.subgraph.forwardAuthorization === true });
+      continue;
+    }
     const service = services.find((s) => s.brick === brick && s.service === m.subgraph!.service)!;
     inputs.push({
       brick,
@@ -604,7 +621,9 @@ function buildRouter(
   names.add("configmap", `${ROUTER_NAME}-config`, "router", "the router configuration");
   const built = buildRouterConfigFile(inputs);
   if (!built.ok) throw new PlugbricksError(built.issues);
-  const auth = routerAuth(manifests, services, webPorts);
+  // The token goes to the platform's own subgraphs, and to an external one only when its manifest asks (D33).
+  const withToken = inputs.map((i) => i.brick).filter((b) => external.every((e) => e.brick !== b || e.forwardAuthorization));
+  const auth = routerAuth(manifests, services, webPorts, { withToken, all: withToken.length === inputs.length });
   return {
     name: ROUTER_NAME,
     image: ROUTER_IMAGE,
@@ -612,6 +631,8 @@ function buildRouter(
     config: built.json,
     configSha256: createHash("sha256").update(built.json).digest("hex"),
     subgraphs: subgraphs.sort((a, b) => a.service.localeCompare(b.service)),
+    external: external.sort((a, b) => a.brick.localeCompare(b.brick)),
+    hostGateway: external.some((e) => new URL(e.url).hostname === "host.docker.internal"),
     allowedOrigins: allowedOrigins(router.port, services),
     ...(auth ? { auth } : {}),
   };
@@ -641,6 +662,7 @@ function routerAuth(
   manifests: Map<string, BrickManifest>,
   services: PlanService[],
   webPorts: Record<string, number>,
+  token: { withToken: string[]; all: boolean },
 ): PlanRouterAuth | undefined {
   const found = [...manifests].find(([, m]) => m.oidc !== undefined && m.provides?.oidc !== undefined);
   if (!found) return undefined;
@@ -657,8 +679,19 @@ function routerAuth(
     version: "1",
     authentication: { jwt: { jwks: [{ url: jwksUrl, issuers: [issuer], audiences: [m.oidc!.audience], algorithms: ["RS256"] }] } },
     authorization: { require_authentication: true },
-    // The token goes on to every subgraph, which checks it itself (D20): by default the router passes nothing on.
-    headers: { all: { request: [{ op: "propagate", named: "Authorization" }] } },
+    // The token goes on to the subgraphs, which check it themselves (D20): by default the router passes nothing on.
+    // One rule for all, unless an external subgraph is left out (D33): then one rule per subgraph that gets it.
+    ...(token.all
+      ? { headers: { all: { request: [{ op: "propagate", named: "Authorization" }] } } }
+      : token.withToken.length
+        ? {
+            headers: {
+              subgraphs: Object.fromEntries(
+                [...token.withToken].sort().map((b) => [b, { request: [{ op: "propagate", named: "Authorization" }] }]),
+              ),
+            },
+          }
+        : {}),
   });
   return {
     provider,

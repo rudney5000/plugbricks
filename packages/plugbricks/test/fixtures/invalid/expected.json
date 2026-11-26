@@ -183,5 +183,50 @@
     "code": "INVALID_VALUE",
     "path": "/dependencies/0/operations/0",
     "why": "a dependency uses queries or mutations of its target"
+  },
+  "external-service-and-url.json": {
+    "code": "SUBGRAPH_SERVICE_OR_URL",
+    "path": "/subgraph",
+    "why": "a subgraph names a service or a url, not both (D33)"
+  },
+  "external-path.json": {
+    "code": "EXTERNAL_SUBGRAPH_PATH",
+    "path": "/subgraph/path",
+    "why": "an external url holds its own path (D33)"
+  },
+  "external-url-credentials.json": {
+    "code": "EXTERNAL_URL_CREDENTIALS",
+    "path": "/subgraph/url",
+    "why": "no user or password in the url: it would sit in the manifest and the lock (D33)"
+  },
+  "external-url-loopback.json": {
+    "code": "EXTERNAL_URL_LOOPBACK",
+    "path": "/subgraph/url",
+    "why": "localhost names the router's own container (D33)"
+  },
+  "external-url-invalid.json": {
+    "code": "EXTERNAL_URL_INVALID",
+    "path": "/subgraph/url",
+    "why": "the url must parse (D33)"
+  },
+  "external-with-services.json": {
+    "code": "EXTERNAL_WITH_SERVICES",
+    "path": "/services",
+    "why": "an external brick has no services of its own (D33)"
+  },
+  "external-requires.json": {
+    "code": "EXTERNAL_FIELD_NOT_ALLOWED",
+    "path": "/requires",
+    "why": "nothing of an external brick runs here, so nothing to wire (D33)"
+  },
+  "forward-authorization-internal.json": {
+    "code": "EXTERNAL_ONLY",
+    "path": "/subgraph/forwardAuthorization",
+    "why": "the token always goes to the platform's own subgraphs; the switch is for external ones (D33)"
+  },
+  "services-empty.json": {
+    "code": "SERVICES_EMPTY",
+    "path": "/services",
+    "why": "a brick needs a service, unless its subgraph is external (D33)"
   }
 }

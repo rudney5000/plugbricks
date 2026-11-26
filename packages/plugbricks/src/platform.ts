@@ -16,7 +16,7 @@ import { ROUTER_IMAGE } from "./drivers/common.js";
 import { composeSubgraphs, composerVersion, type FederationLock, type SubgraphInput } from "./federation.js";
 import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
-import { validateManifest } from "./manifest.js";
+import { externalInClear, validateManifest } from "./manifest.js";
 import { buildPlan, type BrickManifest } from "./plan.js";
 import type { IssueCode, IssueParams } from "./messages.js";
 import {
@@ -265,7 +265,7 @@ interface Manifest {
   services: { name: string; port: number; volumes?: { name: string; retention?: "retain" | "delete" }[] }[];
   provides?: Record<string, { provision: { command: string[]; scripts?: string } }>;
   requires?: Record<string, { wait?: "healthy" | "started"; timeoutSeconds?: number; optional?: boolean }>;
-  subgraph?: { service: string; schema: string; path?: string };
+  subgraph?: { service?: string; url?: string; schema: string; path?: string; forwardAuthorization?: boolean };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
   dependencies?: { plugin: string; description?: string; optional?: boolean; operations?: ("queries" | "mutations")[] }[];
@@ -454,6 +454,8 @@ function save(project: Project): void {
 
 /** Where the router will reach a brick's subgraph: the runtime name of its service, its port, the manifest's path. */
 function subgraphUrl(brick: string, m: Manifest): string {
+  // A subgraph that runs elsewhere is called at its own address (D33).
+  if (m.subgraph!.url !== undefined) return m.subgraph!.url;
   const service = m.services.find((s) => s.name === m.subgraph!.service);
   return `http://${brick}-${m.subgraph!.service}:${service?.port ?? 80}${m.subgraph!.path ?? "/graphql"}`;
 }
@@ -578,6 +580,8 @@ export interface AddResult {
   missingDependencies: string[];
   /** A GraphQL API that requires oidc but declares no "authorization" block (D22): any valid token may call it. */
   openApi: boolean;
+  /** An external subgraph called over http outside this machine and its private network (D33): "add" warns. */
+  inClear?: string;
 }
 
 /** Declared dependencies of `m` that no installed brick provides, sorted (the "add" warning, D21). */
@@ -666,6 +670,7 @@ export function addBrick(root: string, brickPath: string, options: { byName?: st
   const { lock, platform } = project;
   const missingDependencies = missingDeclaredDependencies(m, lock);
   const openApi = m.subgraph !== undefined && Object.hasOwn(m.requires ?? {}, "oidc") && m.authorization === undefined;
+  const inClear = m.subgraph?.url !== undefined && externalInClear(m.subgraph.url) ? m.subgraph.url : undefined;
   const installed = lock.bricks[m.name];
   if (installed) {
     if (installed.integrity === integrity) {
@@ -677,6 +682,7 @@ export function addBrick(root: string, brickPath: string, options: { byName?: st
         cancelledDeletions: [],
         missingDependencies,
         openApi,
+        ...(inClear ? { inClear } : {}),
       };
     }
     fail("BRICK_NAME_CONFLICT", { name: m.name, source: installed.source });
@@ -766,7 +772,16 @@ export function addBrick(root: string, brickPath: string, options: { byName?: st
   platform.bricks[m.name] = { source, ...(m.web ? { webPort: nextWebPort(platform) } : {}) };
   setFederation(lock, federation);
   save(project);
-  return { name: m.name, version: m.version, status: "added", reattachedVolumes, cancelledDeletions, missingDependencies, openApi };
+  return {
+    name: m.name,
+    version: m.version,
+    status: "added",
+    reattachedVolumes,
+    cancelledDeletions,
+    missingDependencies,
+    openApi,
+    ...(inClear ? { inClear } : {}),
+  };
 }
 
 // ---------- remove ----------
@@ -864,10 +879,21 @@ export function removeBrick(root: string, name: string): RemoveResult {
 
 // ---------- status ----------
 
+/** The address of a brick's external subgraph (D33), from its copy; undefined for any other brick, or an unreadable copy. */
+export function externalUrlOf(brickDir: string): string | undefined {
+  try {
+    const m = JSON.parse(readFileSync(join(brickDir, "plugin.json"), "utf8")) as { subgraph?: { url?: unknown } };
+    return typeof m.subgraph?.url === "string" ? m.subgraph.url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface StatusResult {
   name: string;
   /** webPort: where a web brick's pages are published (D17), from platform.json. */
-  bricks: (LockedBrick & { name: string; enabled: boolean; webPort?: number })[];
+  /** external: the address of a subgraph that runs elsewhere (D33), read from the brick's copy. */
+  bricks: (LockedBrick & { name: string; enabled: boolean; webPort?: number; external?: string })[];
   capabilities: Record<string, string>;
   retainedVolumes: VolumeRef[];
   pendingDeletion: VolumeRef[];
@@ -968,7 +994,14 @@ export function platformStatus(root: string): StatusResult {
         else problems.push(issue("BRICK_UNREADABLE", "", { brick: name, detail: (e as Error).message }));
       }
       const webPort = Object.hasOwn(platform.bricks, name) ? platform.bricks[name].webPort : undefined;
-      return { name, enabled: isBrickEnabled(platform, name), ...lock.bricks[name], ...(webPort !== undefined ? { webPort } : {}) };
+      const external = externalUrlOf(join(dir, BRICKS_DIR, name));
+      return {
+        name,
+        enabled: isBrickEnabled(platform, name),
+        ...lock.bricks[name],
+        ...(webPort !== undefined ? { webPort } : {}),
+        ...(external !== undefined ? { external } : {}),
+      };
     });
   const federation = federationStatus({ root: dir, platform, lock }, problems);
   return {

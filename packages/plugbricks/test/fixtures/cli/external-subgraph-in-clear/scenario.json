@@ -1,0 +1,27 @@
+{
+  "description": "an external subgraph called over http outside this machine and its private network gets a warning at add (D33); a private address does not",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "legacy"
+      ],
+      "stdout": "  legacy is called over http at http://legacy.example.com/graphql: its requests and answers travel in clear (D33)"
+    },
+    {
+      "run": [
+        "add",
+        "intranet"
+      ],
+      "stdout": "Added intranet 0.1.0",
+      "notStdout": "in clear"
+    }
+  ]
+}

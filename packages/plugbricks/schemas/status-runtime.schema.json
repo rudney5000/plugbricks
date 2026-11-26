@@ -244,6 +244,23 @@
               }
             }
           }
+        },
+        "external": {
+          "type": "array",
+          "description": "The subgraphs that run elsewhere (D33): called at their address, not supervised by plugbricks, so with no state. Absent when there is none.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["brick", "url"],
+            "properties": {
+              "brick": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     }

@@ -80,6 +80,8 @@ export interface LiveRouter {
   digest: string | null;
   /** State of each subgraph service the router calls, so that a subgraph that is down shows here too. */
   subgraphs: { brick: string; name: string; state: LiveState }[];
+  /** The subgraphs that run elsewhere (D33): not supervised, so with no state. Absent when there is none. */
+  external?: { brick: string; url: string }[];
 }
 
 export interface LiveStatus {
@@ -488,6 +490,7 @@ export function buildLiveStatus(input: LiveInput): LiveStatus {
       subgraphs: plan.router.subgraphs
         .map((s) => ({ brick: s.brick, name: s.service, state: stateOf(s.service).state }))
         .sort((a, b) => a.name.localeCompare(b.name)),
+      ...(plan.router.external.length ? { external: plan.router.external.map((e) => ({ brick: e.brick, url: e.url })) } : {}),
     };
   }
 
@@ -622,7 +625,10 @@ export function liveStatusText(s: LiveStatus): string[] {
   ];
   if (s.router) {
     const r = s.router;
-    const subs = r.subgraphs.map((g) => `${g.name} ${g.state}`).join(", ");
+    const subs = [
+      ...r.subgraphs.map((g) => `${g.name} ${g.state}`),
+      ...(r.external ?? []).map((e) => `${e.brick} external (${e.url}, not supervised)`),
+    ].join(", ");
     out.push(`Router (runtime): ${r.address ?? "not published"}; image digest ${r.digest ?? "unknown"}; subgraphs: ${subs || "none"}`);
   }
   return out;
