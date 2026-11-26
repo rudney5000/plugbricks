@@ -228,5 +228,20 @@
     "code": "SERVICES_EMPTY",
     "path": "/services",
     "why": "a brick needs a service, unless its subgraph is external (D33)"
+  },
+  "grpc-with-url.json": {
+    "code": "GRPC_NEEDS_SERVICE",
+    "path": "/subgraph/grpc",
+    "why": "plugbricks does not call a gRPC service that runs elsewhere: grpc goes with a service of the brick (D35)"
+  },
+  "grpc-with-path.json": {
+    "code": "GRPC_SUBGRAPH_PATH",
+    "path": "/subgraph/path",
+    "why": "a gRPC service has no path (D35)"
+  },
+  "grpc-without-mapping.json": {
+    "code": "MISSING_FIELD",
+    "path": "/subgraph/grpc/mapping",
+    "why": "the proto and its mapping go together (D35)"
   }
 }

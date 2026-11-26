@@ -46,7 +46,7 @@ const LOOPBACK = /^(localhost|127(\.\d{1,3}){3}|\[::1\]|0\.0\.0\.0)$/i;
 function checkSubgraph(
   m: {
     services: unknown[];
-    subgraph?: { service?: string; url?: string; path?: string; forwardAuthorization?: boolean };
+    subgraph?: { service?: string; url?: string; path?: string; forwardAuthorization?: boolean; grpc?: { proto: string; mapping: string } };
     provides?: unknown;
     requires?: unknown;
     web?: unknown;
@@ -63,6 +63,11 @@ function checkSubgraph(
   if ((g.service === undefined) === (g.url === undefined)) {
     issues.push(issue("SUBGRAPH_SERVICE_OR_URL", "/subgraph", {}));
     return;
+  }
+  if (g.grpc !== undefined) {
+    // A gRPC service of the brick (D35): it has no path, and an external one is not supported.
+    if (g.service === undefined) issues.push(issue("GRPC_NEEDS_SERVICE", "/subgraph/grpc", {}));
+    if (g.path !== undefined) issues.push(issue("GRPC_SUBGRAPH_PATH", "/subgraph/path", {}));
   }
   if (g.service !== undefined) {
     if (!names.has(g.service)) issues.push(issue("UNKNOWN_SERVICE", "/subgraph/service", { name: g.service }));
@@ -127,7 +132,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
         inject: Record<string, string>;
       }
     >;
-    subgraph?: { service?: string; url?: string; path?: string; forwardAuthorization?: boolean };
+    subgraph?: { service?: string; url?: string; path?: string; forwardAuthorization?: boolean; grpc?: { proto: string; mapping: string } };
     volumes?: unknown;
     requires?: Record<string, unknown>;
     authorization?: { queries?: string; mutations?: string };

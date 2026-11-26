@@ -1,0 +1,31 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "catalog-grpc",
+  "version": "0.1.0",
+  "description": "Example gRPC service: a product catalog that the router calls as a subgraph through Cosmo Connect (D35). The GraphQL contract is schema.graphql; service.proto and mapping.json are what `wgc grpc-service generate` wrote from it, and the service implements the proto. The router checks the token (D19) and passes it on as gRPC metadata; this example does not check it again. Its source is apis/catalog-grpc; build the image with: docker build -t ghcr.io/rudney5000/plugbricks/catalog-grpc:0.1.0 apis/catalog-grpc",
+  "services": [
+    {
+      "name": "app",
+      "image": "ghcr.io/rudney5000/plugbricks/catalog-grpc:0.1.0",
+      "port": 50051,
+      "healthcheck": {
+        "exec": [
+          "node",
+          "dist/health.js"
+        ]
+      }
+    }
+  ],
+  "subgraph": {
+    "service": "app",
+    "schema": "schema.graphql",
+    "grpc": {
+      "proto": "service.proto",
+      "mapping": "mapping.json"
+    }
+  },
+  "tags": [
+    "api",
+    "grpc"
+  ]
+}

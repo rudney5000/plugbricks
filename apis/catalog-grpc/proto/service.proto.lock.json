@@ -1,0 +1,79 @@
+{
+  "version": "1.0.0",
+  "messages": {
+    "LookupProductByIdRequestKey": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "LookupProductByIdRequest": {
+      "fields": {
+        "keys": 1
+      }
+    },
+    "LookupProductByIdResponse": {
+      "fields": {
+        "result": 1
+      }
+    },
+    "Query": {
+      "fields": {
+        "product": 1,
+        "products": 2
+      }
+    },
+    "QueryProductRequest": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "QueryProduct": {
+      "fields": {
+        "id": 1
+      }
+    },
+    "QueryProductResponse": {
+      "fields": {
+        "product": 1
+      }
+    },
+    "QueryProductsRequest": {
+      "fields": {}
+    },
+    "QueryProductsResponse": {
+      "fields": {
+        "products": 1
+      }
+    },
+    "Mutation": {
+      "fields": {
+        "rename": 1
+      }
+    },
+    "MutationRenameRequest": {
+      "fields": {
+        "id": 1,
+        "name": 2
+      }
+    },
+    "MutationRename": {
+      "fields": {
+        "id": 1,
+        "name": 2
+      }
+    },
+    "MutationRenameResponse": {
+      "fields": {
+        "rename": 1
+      }
+    },
+    "Product": {
+      "fields": {
+        "id": 1,
+        "name": 2,
+        "price": 3
+      }
+    }
+  },
+  "enums": {}
+}

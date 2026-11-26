@@ -1,0 +1,26 @@
+{
+  "name": "plugbricks-example-catalog-grpc",
+  "version": "0.1.0",
+  "description": "Example gRPC service for plugbricks: a product catalog that the router calls as a subgraph through Cosmo Connect (D35), federation v2. Built as the image ghcr.io/rudney5000/plugbricks/catalog-grpc:0.1.0.",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "1.14.3",
+    "@grpc/proto-loader": "0.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
+  }
+}

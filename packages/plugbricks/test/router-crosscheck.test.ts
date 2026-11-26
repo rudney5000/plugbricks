@@ -56,56 +56,82 @@ function differences(a: unknown, b: unknown, path = "$"): string[] {
   return a === b ? [] : [`${path}: ours ${show(a)} / wgc ${show(b)}`];
 }
 
+/**
+ * Installs `bricks` (the examples, in this order) in a fresh project, lets plugbricks generate its router-config.json, gives
+ * wgc the same subgraphs, and returns the differences (empty when the two files are the same, but the ignored fields).
+ * A brick whose manifest has `subgraph.grpc` is given to wgc as a gRPC subgraph (D35), with its three files.
+ */
+function crosscheck(name: string, bricks: string[]): string[] {
+  const root = join(pkg, ".test-work", name);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
+  const run = (args: string[]) => main(args, { cwd: root, stdout: () => {}, stderr: () => {} });
+  for (const args of [["init", "--name", "demo"], ...bricks.map((b) => ["add", `examples/${b}`])]) {
+    expect(run(args), args.join(" ")).toBe(0);
+  }
+  generate(root, "compose");
+  const ours = JSON.parse(readFileSync(join(root, COMPOSE_ROUTER_CONFIG), "utf8"));
+
+  // The same subgraphs for wgc: the installed copies of the schemas, the addresses our runtime names give them.
+  const lines: string[] = ["version: 1", "subgraphs:"];
+  // plugbricks sorts its subgraphs by brick name, wgc keeps the order of its input file.
+  for (const brick of [...bricks]
+    .sort()
+    .filter((b) => JSON.parse(readFileSync(join(root, ".platform/bricks", b, "plugin.json"), "utf8")).subgraph)) {
+    const copy = join(root, ".platform/bricks", brick);
+    const m = JSON.parse(readFileSync(join(copy, "plugin.json"), "utf8"));
+    const port = m.services.find((s: { name: string }) => s.name === m.subgraph.service).port;
+    lines.push(`  - name: ${brick}`);
+    if (m.subgraph.grpc) {
+      lines.push(
+        `    routing_url: ${brick}-${m.subgraph.service}:${port}`,
+        "    grpc:",
+        `      schema_file: ${join(copy, m.subgraph.schema)}`,
+        `      proto_file: ${join(copy, m.subgraph.grpc.proto)}`,
+        `      mapping_file: ${join(copy, m.subgraph.grpc.mapping)}`,
+      );
+    } else {
+      lines.push(
+        `    routing_url: http://${brick}-${m.subgraph.service}:${port}/graphql`,
+        "    schema:",
+        `      file: ${join(copy, m.subgraph.schema)}`,
+      );
+    }
+  }
+  const input = join(root, "wgc-input.yaml");
+  writeFileSync(input, [...lines, ""].join("\n"));
+  const output = join(root, "wgc-router-config.json");
+  const composed = spawnSync(wgc, ["router", "compose", "--input", input, "--out", output], { encoding: "utf8", env });
+  expect(composed.status, `${composed.stdout}\n${composed.stderr}`).toBe(0);
+  const theirs = JSON.parse(readFileSync(output, "utf8"));
+
+  for (const ignored of IGNORED_IN_WGC) {
+    // The ignored field must be exactly what the reason says, so that something real never hides behind it.
+    expect(theirs[ignored.path[0]], ignored.reason).toEqual(ignored.expected);
+    delete theirs[ignored.path[0]];
+  }
+  const found = differences(ours, theirs);
+  console.log(
+    `cross-check ${name}: ours ${JSON.stringify(ours).length} bytes, wgc ${composed.stdout.includes("successfully") ? "composed" : "answered"}; ignored in wgc: ${IGNORED_IN_WGC.map((i) => i.path.join(".")).join(", ")}; differences: ${found.length === 0 ? "none" : `\n${found.join("\n")}`}`,
+  );
+  return found;
+}
+
 describe("our router configuration against wgc router compose", () => {
   it.skipIf(reason !== undefined)(
     `is the same configuration for orders and shipping, but the fields listed as ignored${why}`,
     () => {
-      const root = join(pkg, ".test-work/crosscheck");
-      rmSync(root, { recursive: true, force: true });
-      mkdirSync(root, { recursive: true });
-      cpSync(join(pkg, "examples"), join(root, "examples"), { recursive: true });
-      const run = (args: string[]) => main(args, { cwd: root, stdout: () => {}, stderr: () => {} });
-      for (const args of [
-        ["init", "--name", "demo"],
-        ["add", "examples/postgres"],
-        ["add", "examples/orders-api"],
-        ["add", "examples/shipping-api"],
-      ]) {
-        expect(run(args), args.join(" ")).toBe(0);
-      }
-      generate(root, "compose");
-      const ours = JSON.parse(readFileSync(join(root, COMPOSE_ROUTER_CONFIG), "utf8"));
+      const found = crosscheck("crosscheck", ["postgres", "orders-api", "shipping-api"]);
+      expect(found, `fields that differ between our router-config.json and wgc router compose:\n${found.join("\n")}`).toEqual([]);
+    },
+    120_000,
+  );
 
-      // The same subgraphs for wgc: the installed copies of the schemas, the URLs our runtime names give them.
-      const input = join(root, "wgc-input.yaml");
-      writeFileSync(
-        input,
-        [
-          "version: 1",
-          "subgraphs:",
-          ...["orders-api", "shipping-api"].flatMap((brick) => [
-            `  - name: ${brick}`,
-            `    routing_url: http://${brick}-app:4000/graphql`,
-            "    schema:",
-            `      file: ${join(root, ".platform/bricks", brick, "schema.graphql")}`,
-          ]),
-          "",
-        ].join("\n"),
-      );
-      const output = join(root, "wgc-router-config.json");
-      const composed = spawnSync(wgc, ["router", "compose", "--input", input, "--out", output], { encoding: "utf8", env });
-      expect(composed.status, `${composed.stdout}\n${composed.stderr}`).toBe(0);
-      const theirs = JSON.parse(readFileSync(output, "utf8"));
-
-      for (const ignored of IGNORED_IN_WGC) {
-        // The ignored field must be exactly what the reason says, so that something real never hides behind it.
-        expect(theirs[ignored.path[0]], ignored.reason).toEqual(ignored.expected);
-        delete theirs[ignored.path[0]];
-      }
-      const found = differences(ours, theirs);
-      console.log(
-        `cross-check: ours ${JSON.stringify(ours).length} bytes, wgc ${composed.stdout.includes("successfully") ? "composed" : "answered"}; ignored in wgc: ${IGNORED_IN_WGC.map((i) => i.path.join(".")).join(", ")}; differences: ${found.length === 0 ? "none" : `\n${found.join("\n")}`}`,
-      );
+  it.skipIf(reason !== undefined)(
+    `is the same configuration for a gRPC service next to the HTTP ones (D35)${why}`,
+    () => {
+      const found = crosscheck("crosscheck-grpc", ["postgres", "orders-api", "shipping-api", "catalog-grpc"]);
       expect(found, `fields that differ between our router-config.json and wgc router compose:\n${found.join("\n")}`).toEqual([]);
     },
     120_000,

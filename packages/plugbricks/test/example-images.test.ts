@@ -14,7 +14,7 @@ const script = join(pkg, "scripts/example-images.mjs");
 describe("the images of the examples (D29)", () => {
   it("lists one image per application example, built from apis/, pinned to a version", () => {
     const images = exampleImages();
-    expect(images.map((i) => i.brick)).toEqual(["keycloak", "orders-api", "orders-web", "queue-consumer", "shipping-api"]);
+    expect(images.map((i) => i.brick)).toEqual(["catalog-grpc", "keycloak", "orders-api", "orders-web", "queue-consumer", "shipping-api"]);
     for (const i of images) {
       expect(i.image, i.brick).toBe(`${REGISTRY}${i.context.slice("apis/".length)}:0.1.0`);
       expect(checkImagePin(i.image).ok, i.image).toBe(true);

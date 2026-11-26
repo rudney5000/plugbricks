@@ -1,0 +1,59 @@
+{
+  "description": "a gRPC service as a subgraph (D35): the brick composes with the other subgraphs, the router config holds its proto and is called at host:port, status lists it, schema check refuses it (it serves no SDL)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/catalog-grpc"
+      ],
+      "stdout": "Added catalog-grpc 0.1.0"
+    },
+    {
+      "run": [
+        "status"
+      ],
+      "stdout": [
+        "Federation: catalog-grpc"
+      ]
+    },
+    {
+      "run": [
+        "generate"
+      ]
+    },
+    {
+      "run": [
+        "schema",
+        "check",
+        "catalog-grpc"
+      ],
+      "exit": 1,
+      "codes": [
+        "SCHEMA_CHECK_GRPC"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "add",
+        "examples/catalog-grpc"
+      ],
+      "unchanged": true,
+      "stdout": "already installed"
+    }
+  ],
+  "exists": [
+    ".generated/compose/compose.yaml",
+    ".generated/compose/router-config.json"
+  ],
+  "expectRaw": {
+    ".generated/compose/router-config.json": "\"staticVariableContent\":\"catalog-grpc-app:50051\""
+  }
+}

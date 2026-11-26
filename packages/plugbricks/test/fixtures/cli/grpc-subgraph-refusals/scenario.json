@@ -1,0 +1,34 @@
+{
+  "description": "a gRPC brick whose mapping is not a mapping file, or whose proto does not declare the service its mapping names, is refused when it is added (D35), and nothing changes",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "bad-mapping"
+      ],
+      "exit": 1,
+      "codes": [
+        "GRPC_MAPPING_INVALID"
+      ],
+      "unchanged": true
+    },
+    {
+      "run": [
+        "add",
+        "bad-proto"
+      ],
+      "exit": 1,
+      "codes": [
+        "GRPC_PROTO_SERVICE_MISSING"
+      ],
+      "unchanged": true
+    }
+  ]
+}

@@ -34,6 +34,11 @@ export interface SubgraphInput {
   url: string;
   /** Entities of other bricks this one extends (the `extends` field of its manifest). */
   extends: { plugin: string; entities: string[] }[];
+  /**
+   * Present when the subgraph is a gRPC service (D35): `url` is then its target, host:port. The proto and the mapping
+   * that `wgc grpc-service generate` writes, as text, and where they are for messages.
+   */
+  grpc?: { protoFile: string; proto: string; mappingFile: string; mapping: string };
 }
 
 export interface FederationLock {
@@ -88,6 +93,42 @@ function parseAll(inputs: SubgraphInput[]): { parsed: Parsed[]; issues: Issue[] 
   return { parsed, issues };
 }
 
+/**
+ * The proto and the mapping of a gRPC subgraph (D35): the mapping must be what `wgc grpc-service generate` writes, and the
+ * proto must declare the service the mapping names. Composition never reads them; the router would only fail on a call.
+ */
+function grpcIssues(inputs: SubgraphInput[]): Issue[] {
+  const issues: Issue[] = [];
+  for (const input of inputs) {
+    if (!input.grpc) continue;
+    const { brick } = input;
+    const parsed = parseGrpcMapping(input.grpc.mapping);
+    if (typeof parsed === "string") {
+      issues.push(issue("GRPC_MAPPING_INVALID", "", { brick, file: input.grpc.mappingFile, detail: parsed }));
+      continue;
+    }
+    // `service Name {` in the proto, with no regard to comments: a name inside a comment is not looked for.
+    const declared = new RegExp(`^\\s*service\\s+${parsed.service.replace(/[^A-Za-z0-9_]/g, "")}\\s*\\{`, "m");
+    if (parsed.service === "" || !declared.test(input.grpc.proto.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""))) {
+      issues.push(issue("GRPC_PROTO_SERVICE_MISSING", "", { brick, file: input.grpc.protoFile, service: parsed.service }));
+    }
+  }
+  return issues;
+}
+
+/** The mapping as the router reads it, or the reason it cannot be. */
+function parseGrpcMapping(text: string): { service: string } | string {
+  const { GRPCMappingSchema }: typeof import("@wundergraph/cosmo-connect/dist/node/v1/node_pb") = nodeRequire(
+    "@wundergraph/cosmo-connect/dist/node/v1/node_pb",
+  );
+  const { fromJsonString }: typeof import("@bufbuild/protobuf") = nodeRequire("@bufbuild/protobuf");
+  try {
+    return fromJsonString(GRPCMappingSchema, text);
+  } catch (e) {
+    return (e as Error).message.split("\n")[0];
+  }
+}
+
 /** What composition cannot see: the intent written in `extends` (a lone `type Order @key` composes fine). */
 function extendsIssues(parsed: Parsed[]): Issue[] {
   const byBrick = new Map(parsed.map((p) => [p.brick, p]));
@@ -121,7 +162,7 @@ type FederationSuccess = Extract<ReturnType<Composition["federateSubgraphs"]>, {
 function federate(inputs: SubgraphInput[]): { ok: true; sorted: Parsed[]; result: FederationSuccess } | { ok: false; issues: Issue[] } {
   const { parsed, issues: syntax } = parseAll(inputs);
   if (syntax.length) return { ok: false, issues: syntax };
-  const wrong = extendsIssues(parsed);
+  const wrong = [...extendsIssues(parsed), ...grpcIssues(inputs)];
   if (wrong.length) return { ok: false, issues: wrong };
 
   const sorted = [...parsed].sort((a, b) => compare(a.brick, b.brick));
@@ -184,10 +225,10 @@ export function buildRouterConfigFile(inputs: SubgraphInput[]): { ok: true; json
   const lib = loadComposition();
   // cosmo-shared and its protobuf packages are ES modules: require() loads them synchronously on the Node versions we support.
   const shared: typeof import("@wundergraph/cosmo-shared") = nodeRequire("@wundergraph/cosmo-shared");
-  const { RouterConfigSchema }: typeof import("@wundergraph/cosmo-connect/dist/node/v1/node_pb") = nodeRequire(
+  const { RouterConfigSchema, GRPCMappingSchema }: typeof import("@wundergraph/cosmo-connect/dist/node/v1/node_pb") = nodeRequire(
     "@wundergraph/cosmo-connect/dist/node/v1/node_pb",
   );
-  const { toJsonString }: typeof import("@bufbuild/protobuf") = nodeRequire("@bufbuild/protobuf");
+  const { toJsonString, fromJsonString }: typeof import("@bufbuild/protobuf") = nodeRequire("@bufbuild/protobuf");
   const { printSchemaWithDirectives }: typeof import("@graphql-tools/utils") = nodeRequire("@graphql-tools/utils");
 
   const config = shared.buildRouterConfig({
@@ -196,19 +237,27 @@ export function buildRouterConfigFile(inputs: SubgraphInput[]): { ok: true; json
     fieldConfigurations: result.fieldConfigurations,
     routerCompatibilityVersion: lib.ROUTER_COMPATIBILITY_VERSION_ONE,
     schemaVersionId: STATIC_SCHEMA_VERSION_ID,
-    subgraphs: sorted.map((p, index) => {
+    subgraphs: sorted.map((p, index): import("@wundergraph/cosmo-shared").RouterSubgraph => {
       const subgraphConfig = result.subgraphConfigBySubgraphName.get(p.brick);
-      return {
-        kind: shared.SubgraphKind.Standard,
+      const common = {
         id: String(index),
         name: p.brick,
         url: p.url,
         sdl: p.sdl,
-        subscriptionUrl: "",
         schema: subgraphConfig?.schema,
         configurationDataByTypeName: subgraphConfig?.configurationDataByTypeName,
         costs: subgraphConfig?.costs,
       };
+      // A gRPC service (D35): the router calls it through Cosmo Connect, with the proto and the mapping, as `wgc router compose` does.
+      if (p.grpc) {
+        return {
+          ...common,
+          kind: shared.SubgraphKind.GRPC,
+          protoSchema: p.grpc.proto,
+          mapping: fromJsonString(GRPCMappingSchema, p.grpc.mapping),
+        };
+      }
+      return { ...common, kind: shared.SubgraphKind.Standard, subscriptionUrl: "" };
     }),
   });
   return { ok: true, json: toJsonString(RouterConfigSchema, config) };

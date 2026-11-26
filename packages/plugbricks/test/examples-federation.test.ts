@@ -19,21 +19,34 @@ function exampleSubgraphs(): SubgraphInput[] {
       brick,
       file: `examples/${brick}/${m.subgraph.schema}`,
       sdl: readFileSync(join(examples, brick, m.subgraph.schema), "utf8"),
-      url: `http://${brick}-${m.subgraph.service}:${service.port}${m.subgraph.path}`,
+      // A gRPC service is reached at host:port, with its proto and its mapping (D35).
+      url: m.subgraph.grpc
+        ? `${brick}-${m.subgraph.service}:${service.port}`
+        : `http://${brick}-${m.subgraph.service}:${service.port}${m.subgraph.path}`,
       extends: m.extends ?? [],
+      ...(m.subgraph.grpc
+        ? {
+            grpc: {
+              protoFile: `examples/${brick}/${m.subgraph.grpc.proto}`,
+              proto: readFileSync(join(examples, brick, m.subgraph.grpc.proto), "utf8"),
+              mappingFile: `examples/${brick}/${m.subgraph.grpc.mapping}`,
+              mapping: readFileSync(join(examples, brick, m.subgraph.grpc.mapping), "utf8"),
+            },
+          }
+        : {}),
     });
   }
   return inputs;
 }
 
 describe("the example bricks, composed together", () => {
-  it("orders and shipping compose, and shipping extends the Order entity of orders", () => {
+  it("orders, shipping and the gRPC catalog compose, and shipping extends the Order entity of orders", () => {
     const inputs = exampleSubgraphs();
-    expect(inputs.map((i) => i.brick)).toEqual(["orders-api", "shipping-api"]);
+    expect(inputs.map((i) => i.brick)).toEqual(["catalog-grpc", "orders-api", "shipping-api"]);
     expect(inputs.find((i) => i.brick === "shipping-api")?.extends).toEqual([{ plugin: "orders-api", entities: ["Order"] }]);
     const result = composeSubgraphs(inputs);
     expect(result.ok, result.ok ? "" : result.issues.map((i) => i.message).join("\n")).toBe(true);
-    if (result.ok) expect(result.federation?.subgraphs).toEqual(["orders-api", "shipping-api"]);
+    if (result.ok) expect(result.federation?.subgraphs).toEqual(["catalog-grpc", "orders-api", "shipping-api"]);
   });
 
   it("shipping alone is refused: its owner is missing", () => {

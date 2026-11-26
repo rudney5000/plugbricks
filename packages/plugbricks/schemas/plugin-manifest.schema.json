@@ -344,7 +344,23 @@
           "type": "string",
           "pattern": "^/",
           "default": "/graphql",
-          "description": "Path of the subgraph on its service, /graphql by default. Only with service: an external URL holds its own path."
+          "description": "Path of the subgraph on its service, /graphql by default. Only with service, and not with grpc: an external URL holds its own path, and a gRPC service has none."
+        },
+        "grpc": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["proto", "mapping"],
+          "properties": {
+            "proto": {
+              "type": "string",
+              "description": "Path of the Protocol Buffers file the service implements (what `wgc grpc-service generate` writes as service.proto), relative to the manifest."
+            },
+            "mapping": {
+              "type": "string",
+              "description": "Path of the mapping file that goes with it (what `wgc grpc-service generate` writes as mapping.json), relative to the manifest."
+            }
+          },
+          "description": "The service is a gRPC service, called by the router through Cosmo Connect (D35): the schema is its GraphQL contract, the proto and the mapping say how each field is a call. Only with service."
         },
         "forwardAuthorization": {
           "type": "boolean",
@@ -352,7 +368,7 @@
           "description": "Only with url: whether the router passes the caller's Authorization header on to this external service (D20, D33). Off by default: a token of the platform is not handed to a third party without a decision."
         }
       },
-      "description": "The GraphQL subgraph the brick serves: one of its services (service, path), or a service that runs elsewhere (url, D33)."
+      "description": "The GraphQL subgraph the brick serves: one of its services (service, path), a gRPC service of its own (service, grpc, D35), or a service that runs elsewhere (url, D33)."
     },
     "dependency": {
       "type": "object",
