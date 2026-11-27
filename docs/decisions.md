@@ -1854,7 +1854,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **For a platform already running the old names:** `remove orders` (and `shipping`) then `add orders-api`; the new API
   gets a new database, so the old orders are not carried over. This only concerns our own test platforms.
 - **Not done here:** the screenshots of the README show the old names; they will be taken again with the next change
-  of the admin.
+  of the admin. (The admin's screenshots were taken again on 2026-11-27.)
 
 ## D28. `plugbricks create <name> --kind api|web`: the brick in `bricks/`, its code in `services/`
 
@@ -2406,7 +2406,8 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   on that machine): queried, its page answered 200.
 - **Not tested.** The deployment itself, and whether the repository's token may deploy to Pages (a setting). The pages read on
   a phone. The commands of the other pages are checked for their names, not run.
-- **Limit.** The screenshot of the admin's dependencies is from an earlier version, and the page says so.
+- **Limit.** The screenshot of the admin's dependencies was from an earlier version when the site was written, and the
+  page said so; the admin's screenshots were taken again on 2026-11-27.
 
 ## Already applied (milestone 2)
 
