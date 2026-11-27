@@ -10,6 +10,7 @@ import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
 import { exampleImage } from "./helpers/images.js";
 import { checkIsolation, readStores, writeStores, type Exec } from "./helpers/stores.js";
+import { shape } from "./helpers/created-service.js";
 import { AUDIENCE, cases, claims, getQuery, ISSUER, makeKeys, post, startLab, startService, untilHealthy } from "./helpers/token-lab.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
@@ -1168,90 +1169,6 @@ describe("bricks written by create", () => {
   );
 });
 
-// What a service gets added to be tried: a mutation (the template has none, and the roles of a class need one), and rules
-// on its item (D22 step B): the type asks for the scope items:read, `secret` for items:secret or admin, `pair` for a and b,
-// `known` for a verified token. Returns the names the template chose for the item type and its query.
-function shape(work: string, brick: string, lang: string): { type: string; field: string } {
-  const schema = join(work, "bricks", brick, "schema.graphql");
-  const original = readFileSync(schema, "utf8");
-  const type = /^type (\w+) @key/m.exec(original)![1];
-  const field = /^type Query \{\s*(\w+):/m.exec(original)![1];
-  const ruled = original
-    .replace('import: ["@key"]', 'import: ["@key", "@authenticated", "@requiresScopes"]')
-    .replace(`type ${type} @key(fields: "id") {`, `type ${type} @key(fields: "id") @requiresScopes(scopes: [["items:read"]]) {`)
-    .replace(
-      "  name: String!\n}",
-      '  name: String!\n  secret: String @requiresScopes(scopes: [["items:secret"], ["admin"]])\n  pair: String @requiresScopes(scopes: [["a", "b"]])\n  known: String @authenticated\n}',
-    );
-  expect(ruled, "the schema must change").not.toBe(original);
-  writeFileSync(schema, `${ruled}\ntype Mutation {\n  touch: Boolean!\n}\n`);
-  const edit = (file: string, change: (text: string) => string) => {
-    const path = join(work, "services", brick, file);
-    const before = readFileSync(path, "utf8");
-    const after = change(before);
-    expect(after, `${file} must change`).not.toBe(before);
-    writeFileSync(path, after);
-  };
-  const values = (n: string) => ({ secret: `s${n}`, pair: `p${n}`, known: `k${n}` });
-  if (lang === "node")
-    edit("src/main.ts", (t) =>
-      t
-        .replace("  Query: {", "  Mutation: { touch: () => true },\n  Query: {")
-        .replace("  name: string;\n}", "  name: string;\n  secret?: string;\n  pair?: string;\n  known?: string;\n}")
-        .replace(
-          '{ id: "1", name: "first" }',
-          `{ id: "1", name: "first", ${Object.entries(values("1"))
-            .map(([k, v]) => `${k}: "${v}"`)
-            .join(", ")} }`,
-        )
-        .replace(
-          '{ id: "2", name: "second" }',
-          `{ id: "2", name: "second", ${Object.entries(values("2"))
-            .map(([k, v]) => `${k}: "${v}"`)
-            .join(", ")} }`,
-        ),
-    );
-  if (lang === "python")
-    edit("main.py", (t) =>
-      t
-        .replace("import QueryType,", "import MutationType, QueryType,")
-        .replace(
-          "query = QueryType()",
-          'query = QueryType()\nmutation = MutationType()\n\n\n@mutation.field("touch")\ndef resolve_touch(*_):\n    return True\n',
-        )
-        .replace("query, item)", "query, mutation, item)")
-        .replace(
-          '{"id": "1", "name": "first"}',
-          `{"id": "1", "name": "first", ${Object.entries(values("1"))
-            .map(([k, v]) => `"${k}": "${v}"`)
-            .join(", ")}}`,
-        )
-        .replace(
-          '{"id": "2", "name": "second"}',
-          `{"id": "2", "name": "second", ${Object.entries(values("2"))
-            .map(([k, v]) => `"${k}": "${v}"`)
-            .join(", ")}}`,
-        ),
-    );
-  if (lang === "go") {
-    const gv = (n: string) => `Secret: ptr("s${n}"), Pair: ptr("p${n}"), Known: ptr("k${n}")`;
-    edit(
-      "graph/resolver.go",
-      (t) =>
-        `${t.replace('Name: "first"}', `Name: "first", ${gv("1")}}`).replace('Name: "second"}', `Name: "second", ${gv("2")}}`)}
-func ptr(s string) *string { return &s }
-
-func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
-
-type mutationResolver struct{ *Resolver }
-
-func (r *mutationResolver) Touch(_ context.Context) (bool, error) { return true, nil }
-`,
-    );
-  }
-  return { type, field };
-}
-
 // The services create writes check the token themselves (D46) and the roles of a class of operation (D22, stage 2), in
 // Node, Python and Go: the same answers to the same tokens, made here and published as a JWKS by a busybox of the container
 // network, with no router and no Keycloak.
@@ -1418,7 +1335,7 @@ describe("the services written by create check the token (D46) and the roles (D2
           // Rules per field (D45): what the schema asks for, the scopes of the token answer. The class role `read` is held.
           const { type, field } = names[lang];
           const scoped = (scope: string) => token({ scope, resource_access: { [client]: { roles: ["read"] } } });
-          const all = `{ ${field} { id name secret pair known } }`;
+          const all = `{ ${field} { id name secret pair known tag } }`;
           const lacks = (where: string) => `forbidden: this token lacks what ${where} asks for`;
           const ask = async (what: string, authorization: string, query: string) => {
             const r = await post(guarded.base, authorization, { query });
@@ -1436,11 +1353,12 @@ describe("the services written by create check the token (D46) and the roles (D2
               secret: seen.includes("secret") ? `s${n}` : null,
               pair: seen.includes("pair") ? `p${n}` : null,
               known: `k${n}`,
+              tag: seen.includes("tag") ? `t${n}` : null,
             }));
           const tried = async (what: string, scope: string, seen: string[]) => {
             const body = await ask(what, scoped(scope), all);
             expect(body.data, `${lang}: ${what}`).toEqual({ [field]: items(seen) });
-            const refused = ["secret", "pair"].filter((f) => !seen.includes(f));
+            const refused = ["secret", "pair", "tag"].filter((f) => !seen.includes(f));
             const expected = ["0", "1"].flatMap((i) => refused.map((f) => `${field}.${i}.${f}`)).sort();
             expect((body.errors ?? []).map((e) => e.path.join(".")).sort(), `${lang}: ${what}`).toEqual(expected);
             for (const e of body.errors ?? []) {
@@ -1453,7 +1371,9 @@ describe("the services written by create check the token (D46) and the roles (D2
           await tried("a scope of the second set (OR)", "items:read admin", ["secret"]);
           await tried("one scope of an AND", "items:read a", []);
           await tried("both scopes of an AND", "items:read a b", ["pair"]);
-          await tried("every scope", "items:read items:secret a b", ["secret", "pair"]);
+          // A rule written on the interface's field holds for the field of the type that implements it, which has none of its own.
+          await tried("the scope an interface asks for", "items:read items:tag", ["tag"]);
+          await tried("every scope", "items:read items:secret items:tag a b", ["secret", "pair", "tag"]);
           // The rule of the type, on the field that returns it (a meta field does not carry it), and on the type's own fields.
           for (const [what, query] of [
             ["the fields of the type", `{ ${field} { id } }`],
