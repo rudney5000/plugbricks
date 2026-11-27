@@ -33,6 +33,7 @@ describe("the API's token check (D20)", () => {
       name: "service-account-orders-web",
       client: "orders-web",
       roles: {},
+      scopes: [],
     });
     // Without preferred_username the name is the subject.
     expect(await check(`Bearer ${await sign({ ...valid, preferred_username: undefined })}`)).toMatchObject({ name: "f2c1-uuid" });
@@ -87,7 +88,7 @@ describe("the API behind a token check (D20)", () => {
   let close = () => {};
   beforeAll(async () => {
     // A check that knows one token only: the server's behaviour, not the check, is under test here.
-    const server = createApp(pool, async (h) => (h === "Bearer good.to.ken" ? { subject: "s", name: "n", roles: {} } : null));
+    const server = createApp(pool, async (h) => (h === "Bearer good.to.ken" ? { subject: "s", name: "n", roles: {}, scopes: [] } : null));
     await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     close = () => server.close();
@@ -125,10 +126,10 @@ describe("the API with roles (D22)", () => {
     },
   } as never;
   const tokens: Record<string, Caller> = {
-    "Bearer reader.to.ken": { subject: "s", name: "reader", roles: { shipping: ["shipping:read"] } },
-    "Bearer none.to.ken": { subject: "s", name: "norole", roles: {} },
+    "Bearer reader.to.ken": { subject: "s", name: "reader", roles: { shipping: ["shipping:read"] }, scopes: [] },
+    "Bearer none.to.ken": { subject: "s", name: "norole", roles: {}, scopes: [] },
     // The role of another API, with the right name: it is not this API's role.
-    "Bearer orders.to.ken": { subject: "s", name: "orders-only", roles: { orders: ["shipping:read", "shipping:write"] } },
+    "Bearer orders.to.ken": { subject: "s", name: "orders-only", roles: { orders: ["shipping:read", "shipping:write"] }, scopes: [] },
   };
   let base = "";
   let close = () => {};

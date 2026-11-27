@@ -4,7 +4,7 @@ import { buildSubgraphSchema } from "@apollo/subgraph";
 import { GraphQLError, parse } from "graphql";
 import { createYoga } from "graphql-yoga";
 import type pg from "pg";
-import { authorizationPlugin, type Authorization, type Caller, type TokenCheck } from "./auth.js";
+import { authorizationPlugin, enforceFieldRules, type Authorization, type Caller, type TokenCheck } from "./auth.js";
 import { createOrder, findOrder, listOrders } from "./db.js";
 
 /** The SDL shipped with the brick (examples/orders-api/schema.graphql holds the same text). */
@@ -47,7 +47,8 @@ function resolvers(pool: pg.Pool) {
  * answers (the brick's healthcheck calls it). Nothing else is served.
  */
 export function createApp(pool: pg.Pool, checkToken?: TokenCheck, authorization?: Authorization): Server {
-  const schema = buildSubgraphSchema([{ typeDefs: parse(typeDefs), resolvers: resolvers(pool) as never }]);
+  // The rules per field of the schema (D45) apply to every call, the router's or a direct one.
+  const schema = enforceFieldRules(buildSubgraphSchema([{ typeDefs: parse(typeDefs), resolvers: resolvers(pool) as never }]));
   // The resolvers find the caller, checked below, in their context (D20); undefined without a token check.
   // With roles (D22), an operation whose class the caller's token has no role for stops before any resolver runs.
   const plugins = checkToken && authorization ? [authorizationPlugin(authorization)] : [];
