@@ -39,6 +39,9 @@ The documentation is the guide in [`docs/guide/`](docs/guide/getting-started.md)
 - `@authenticated` and `@requiresScopes` in a brick's schema are applied by the router. plugbricks refuses a schema
   where such a rule can be gone around through an interface, a union or `@requires` (D43), and gives a consumer the
   scopes its dependencies list (D44). The example APIs apply the rules themselves, for a direct call (D45); the services `create` writes, in Node, Python and Go, check the token (D46) the roles of an `authorization` block (D48) and the rules of the schema per field (D49).
+- The example bricks `orders-api`, `shipping-api` and `orders-web` are at 0.1.1, with their images: the two APIs apply the
+  rules per field of their schema (D45), and the page and the schema of `shipping-api` name the bricks as they are called now.
+  A project created before keeps its 0.1.0 bricks and images.
 
 ### Running a platform
 

@@ -20,7 +20,7 @@
         "add",
         "examples/orders-api"
       ],
-      "stdout": "Added orders-api 0.1.0"
+      "stdout": "Added orders-api 0.1.1"
     }
   ],
   "exists": [

@@ -378,7 +378,7 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.1
           ports:
             - containerPort: 4000
           env:
@@ -516,7 +516,7 @@ spec:
               readOnly: true
       containers:
         - name: app
-          image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.0
+          image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.1
           ports:
             - containerPort: 3000
           env:

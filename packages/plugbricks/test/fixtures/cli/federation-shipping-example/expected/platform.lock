@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
   "bricks": {
     "orders-api": {
-      "integrity": "sha256-3ba97f4e3f4b8cda13f2bbb3d3ac72eb48b4f7e76c66443cb40a8f58d837b03c",
+      "integrity": "sha256-dad80d508518885592d1d29a814e8730409eadad3ae99f2c2cefd25dfbd21dc4",
       "provides": [],
       "requires": {
         "database": {
@@ -21,7 +21,7 @@
         "api",
         "graphql"
       ],
-      "version": "0.1.0",
+      "version": "0.1.1",
       "volumes": []
     },
     "postgres": {
@@ -44,7 +44,7 @@
       ]
     },
     "shipping-api": {
-      "integrity": "sha256-ddeb1bb33d7eaf62885283bebeb364d635860eb269b317afffc977c90897f6b2",
+      "integrity": "sha256-097fa9dba19ae97d8fae747f0a97a1de18835ecd903e6b8531f045d3c95dc89c",
       "provides": [],
       "requires": {
         "database": {
@@ -63,7 +63,7 @@
         "api",
         "graphql"
       ],
-      "version": "0.1.0",
+      "version": "0.1.1",
       "volumes": []
     }
   },

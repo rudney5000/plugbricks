@@ -24,7 +24,7 @@
       "run": [
         "status"
       ],
-      "stdout": "orders-api 0.1.0  requires database from postgres (wait healthy, 120s)",
+      "stdout": "orders-api 0.1.1  requires database from postgres (wait healthy, 120s)",
       "unchanged": true
     }
   ]

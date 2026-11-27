@@ -4,8 +4,8 @@
     { "run": ["init", "--name", "demo"] },
     { "run": ["add", "examples/postgres"] },
     { "run": ["add", "examples/orders-api"] },
-    { "run": ["add", "examples/orders-web"], "stdout": "Added orders-web 0.1.0" },
-    { "run": ["status"], "stdout": "orders-web 0.1.0  pages on 127.0.0.1:8080" },
+    { "run": ["add", "examples/orders-web"], "stdout": "Added orders-web 0.1.1" },
+    { "run": ["status"], "stdout": "orders-web 0.1.1  pages on 127.0.0.1:8080" },
     { "run": ["generate"] },
     { "run": ["generate", "--runtime", "k8s"] }
   ],

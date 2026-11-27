@@ -2,7 +2,7 @@
 name: demo
 services:
   orders-api-app:
-    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.1
     environment:
       DATABASE_URL: "postgres://orders-api:${PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders-api"
     healthcheck:
@@ -65,7 +65,7 @@ services:
         condition: service_started
     restart: "no"
   orders-web-app:
-    image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.1
     environment:
       GRAPHQL_URL: http://router:3002/graphql
       PUBLIC_GRAPHQL_URL: http://127.0.0.1:4000/graphql

@@ -76,7 +76,7 @@ services:
         condition: service_started
     restart: "no"
   orders-api-app:
-    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.1
     environment:
       AUTHORIZATION_MUTATIONS_ROLE: orders:write
       AUTHORIZATION_QUERIES_ROLE: orders:read
@@ -192,7 +192,7 @@ services:
         condition: service_started
     restart: "no"
   orders-web-app:
-    image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-web:0.1.1
     environment:
       GRAPHQL_URL: http://router:3002/graphql
       OIDC_AUDIENCE: plugbricks-router

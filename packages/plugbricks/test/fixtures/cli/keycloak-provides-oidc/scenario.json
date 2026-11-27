@@ -5,7 +5,7 @@
     { "run": ["add", "examples/postgres"] },
     { "run": ["add", "examples/keycloak"] },
     { "run": ["add", "examples/orders-web"] },
-    { "run": ["status"], "stdout": "orders-web 0.1.0  pages on 127.0.0.1:8081; optionally requires oidc from keycloak (wait healthy, 300s)" },
+    { "run": ["status"], "stdout": "orders-web 0.1.1  pages on 127.0.0.1:8081; optionally requires oidc from keycloak (wait healthy, 300s)" },
     {
       "run": ["generate"],
       "stdout": "Created 4 secret(s) in .secrets/: PB_KEYCLOAK__ADMIN_PASSWORD, PB_KEYCLOAK__ORDERS_WEB__CLIENT_SECRET, PB_POSTGRES__KEYCLOAK__CONSUMER_PASSWORD, PB_POSTGRES__SUPERUSER_PASSWORD"
