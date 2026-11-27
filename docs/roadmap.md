@@ -207,7 +207,7 @@ come after step 3.
 - **Sign-in to the admin on k3d.** The sign-in is tested end to end on Docker Compose only; the k3d job covers the
   tokens through the router (D18).
 - **D22 step B**: a rule per field (`@requiresScopes`). Studied (D42): the router already applies the directives. Built: the
-  refusal of the ways around them (D43), the scopes in Keycloak (D44). The check in the example APIs (D45). The token check (D46) and the roles (D48) in the `create` templates. Left: the rules per field in them.
+  refusal of the ways around them (D43), the scopes in Keycloak (D44). The check in the example APIs (D45). The token check (D46), the roles (D48) and the rules per field (D49) in the `create` templates.
 - ~~**A Dependabot `ignore` rule** for `graphql` and `@graphql-tools/utils`~~: done on 2026-11-25 (majors ignored for the
   root directory, D8).
 - **Kafka**, deferred (and section 7 for the other bricks).

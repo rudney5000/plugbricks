@@ -115,8 +115,10 @@ identity provider in the platform it answers `401` to a request without a valid 
 (`context.caller` in Node, `info.context["caller"]` in Python, `CallerFrom(ctx)` in Go): who it is, its scopes and its client
 roles. It also applies the roles above (D48): the manifest `create` writes has no `authorization` block, so any valid token
 passes until you add one, for example `"authorization": { "queries": "items:read", "mutations": "items:write" }`; the service
-then answers `403` with `FORBIDDEN` to an operation whose class the token has no role for, before any resolver runs. It does
-not yet apply the rules of a schema (`@requiresScopes`), which you would write yourself.
+then answers `403` with `FORBIDDEN` to an operation whose class the token has no role for, before any resolver runs. It also
+applies the rules of its schema (D49): import `@authenticated` and `@requiresScopes` in the `@link` of `schema.graphql`
+(`import: ["@key", "@authenticated", "@requiresScopes"]`), write them where you want them, and a field is resolved only
+for a token with the scopes it asks for, whether the request comes through the router or not.
 
 ### A rule on one field
 
