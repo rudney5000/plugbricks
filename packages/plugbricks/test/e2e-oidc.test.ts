@@ -9,6 +9,7 @@ import { main } from "../src/cli.js";
 import { platformOidcIssuer } from "../src/plan.js";
 import { readProject } from "../src/platform.js";
 import { browser, signInThroughKeycloak } from "./helpers/oidc-browser.js";
+import { shape } from "./helpers/created-service.js";
 import { exampleImage } from "./helpers/images.js";
 
 // Real Keycloak sign-ins into `plugbricks admin`. Both blocks use the admin's port 4100, the redirect URI of the
@@ -439,4 +440,221 @@ describe.skipIf(!composeReady)("the keycloak brick: a sign-in through the Keyclo
     const session = await signInThroughKeycloak(browser(), appBase, origin, "alice", userPassword);
     expect(session).toMatchObject({ authenticated: true, dev: false, role: "admin", name: "Alice Admin", project: brickProject });
   }, 300_000);
+});
+
+// ---------- a service written by create, behind the router and the Keycloak of the platform (D46 to D49) ----------
+// What the tests of the services alone (a JWKS and made-up tokens) cannot say: that the names the manifest gives (the
+// roles, the scopes a dependency lists) are the ones Keycloak puts in the token, and that the router and the service each
+// refuse what the schema asks them to. The caller is a brick of its own, as a web brick is: its service account holds the
+// role of the queries and two of the scopes of the schema.
+const stockProject = "pbtest-kcstock";
+const stockKeycloak = 18101;
+const stockRouter = 14121;
+
+describe.skipIf(!composeReady)("a service written by create behind the router and Keycloak (D46 to D49)", () => {
+  const work = join(pkg, ".test-work/oidc-stock");
+  const project = join(work, "project");
+  const origin = `http://127.0.0.1:${stockKeycloak}`;
+  const cli = (args: string[]) => {
+    const out: string[] = [];
+    const code = main(args, { cwd: project, stdout: (l) => out.push(l), stderr: (l) => out.push(l) });
+    return { code, out: out.join("\n") };
+  };
+  const compose = (...args: string[]) => spawnSync("docker", ["compose", "--project-name", stockProject, ...args], { encoding: "utf8" });
+  let names = { type: "", field: "" };
+
+  beforeAll(async () => {
+    const build = spawnSync("docker", ["build", "--quiet", "--tag", exampleImage("keycloak"), join(repo, "apis", "keycloak")], {
+      encoding: "utf8",
+    });
+    expect(build.status, build.stderr).toBe(0);
+    compose("down", "--volumes", "--remove-orphans");
+    rmSync(work, { recursive: true, force: true });
+    mkdirSync(join(project, "bricks"), { recursive: true });
+    for (const brick of ["postgres", "keycloak"]) cpSync(join(pkg, "examples", brick), join(project, "bricks", brick), { recursive: true });
+    expect(cli(["init", "--name", stockProject]).code).toBe(0);
+
+    // The service, written by create, then given a mutation and rules on its schema, and the roles of a manifest.
+    const created = cli(["create", "stock", "--kind", "api", "--lang", "node"]);
+    expect(created.code, created.out).toBe(0);
+    // create installed it as written; it is added again below, once its schema and its manifest are changed.
+    expect(cli(["remove", "stock-api"]).code).toBe(0);
+    const line = /^ {2}(docker build .*)$/m.exec(created.out)![1];
+    const [cmd, ...args] = line.split(" ");
+    names = shape(project, "stock-api", "node", { withInterface: false });
+    const built = spawnSync(cmd, args, { cwd: project, encoding: "utf8" });
+    expect(built.status, `${line}\n${built.stderr}`).toBe(0);
+    const manifestFile = join(project, "bricks/stock-api/plugin.json");
+    const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+    manifest.authorization = { queries: "stock:read", mutations: "stock:write" };
+    writeFileSync(manifestFile, JSON.stringify(manifest, null, 2) + "\n");
+
+    // The caller: a brick that asks for oidc (so it gets a client of its own) and lists the service, with the role of its
+    // queries and two scopes of the schema. Its container does nothing; the test asks Keycloak for its token.
+    mkdirSync(join(project, "bricks/caller"), { recursive: true });
+    writeFileSync(
+      join(project, "bricks/caller/plugin.json"),
+      JSON.stringify({
+        name: "caller",
+        version: "0.1.0",
+        description: "Holds a client of its own in Keycloak, for the test.",
+        services: [{ name: "app", image: "busybox:1.36", port: 8080, args: ["sleep", "86400"], healthcheck: { exec: ["true"] } }],
+        requires: { oidc: {} },
+        dependencies: [{ plugin: "stock-api", operations: ["queries"], scopes: ["items:read", "items:secret"] }],
+      }),
+    );
+    for (const args of [
+      ["add", "postgres"],
+      ["add", "keycloak"],
+      ["add", "stock-api"],
+      ["add", "caller"],
+    ]) {
+      const r = cli(args);
+      expect(r.code, `${args.join(" ")}\n${r.out}`).toBe(0);
+    }
+    const file = join(project, "platform.json");
+    const platform = JSON.parse(readFileSync(file, "utf8"));
+    platform.bricks.keycloak.webPort = stockKeycloak;
+    platform.router = { port: stockRouter };
+    writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
+    const up = cli(["up"]);
+    expect(up.code, up.out).toBe(0);
+  }, 900_000);
+
+  afterAll(() => {
+    compose("down", "--volumes", "--remove-orphans");
+  }, 120_000);
+
+  const secrets = () => readFileSync(join(project, ".secrets/secrets.env"), "utf8");
+  const callerToken = async () => {
+    const secret = new RegExp("^PB_KEYCLOAK__CALLER__CLIENT_SECRET=(.+)$", "m").exec(secrets())![1];
+    const r = await fetch(`${origin}/realms/plugbricks/protocol/openid-connect/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "client_credentials", client_id: "caller", client_secret: secret }),
+    });
+    expect(r.status).toBe(200);
+    return ((await r.json()) as { access_token: string }).access_token;
+  };
+  const claimsOf = (token: string) => JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+  const throughRouter = async (query: string, token?: string) => {
+    const r = await fetch(`http://127.0.0.1:${stockRouter}/graphql`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ query }),
+    });
+    const text = await r.text();
+    return {
+      status: r.status,
+      text,
+      body: JSON.parse(text) as { data?: Record<string, unknown> | null; errors?: { message: string; path?: unknown[] }[] },
+    };
+  };
+  /** A call from inside the service's own container to itself, past the router. */
+  const direct = (query: string, authorization?: string) => {
+    const headers = { "content-type": "application/json", ...(authorization ? { authorization: `Bearer ${authorization}` } : {}) };
+    const r = compose(
+      "exec",
+      "-T",
+      "stock-api-app",
+      "node",
+      "-e",
+      `const r = await fetch("http://127.0.0.1:4000/graphql", { method: "POST", headers: ${JSON.stringify(headers)}, body: JSON.stringify({ query: ${JSON.stringify(query)} }) });
+       console.log(JSON.stringify({ status: r.status, text: await r.text() }));`,
+    );
+    expect(r.status, r.stderr).toBe(0);
+    return JSON.parse(r.stdout.trim().split("\n").pop()!) as { status: number; text: string };
+  };
+
+  it("puts the role of the queries and the scopes its dependency lists in the caller's token", async () => {
+    expect((await throughRouter(`{ ${names.field} { id } }`)).status).toBe(401);
+    const claims = claimsOf(await callerToken());
+    // The role of the queries of stock-api on its own client, and not the one of its mutations (D22).
+    expect(claims.resource_access["stock-api"]).toEqual({ roles: ["stock:read"] });
+    // The two scopes the dependency lists (D44), and none of the others the schema asks for.
+    const scopes = String(claims.scope).split(" ");
+    expect(scopes).toEqual(expect.arrayContaining(["items:read", "items:secret"]));
+    for (const other of ["admin", "a", "b", "items:tag"]) expect(scopes).not.toContain(other);
+  }, 60_000);
+
+  it("applies the rules of the schema per field, through the router and past it", async () => {
+    const token = await callerToken();
+    const { field } = names;
+    const ask = `{ ${field} { id name secret pair known } }`;
+    // Through the router: items:read (the type) and items:secret are held, a and b (pair) are not.
+    const answer = await throughRouter(ask, token);
+    expect(answer.status, answer.text).toBe(200);
+    const items = answer.body.data?.[field] as { id: string; name: string; secret: string | null; pair: string | null; known: string }[];
+    expect(
+      items.map((i) => [i.id, i.name, i.secret, i.pair, i.known]),
+      answer.text,
+    ).toEqual([
+      ["1", "first", "s1", null, "k1"],
+      ["2", "second", "s2", null, "k2"],
+    ]);
+    // The router redacts the field with its own error, and the service refused it too: its error comes back inside the
+    // router's "Failed to fetch from Subgraph" (the router asks the subgraph for a protected field, then redacts it).
+    const routerErrors = (answer.body.errors ?? []).filter(
+      (e) => (e as { extensions?: { code?: string } }).extensions?.code === "UNAUTHORIZED_FIELD_OR_TYPE",
+    );
+    expect(
+      routerErrors.map((e) => e.path),
+      answer.text,
+    ).toEqual([
+      [field, 0, "pair"],
+      [field, 1, "pair"],
+    ]);
+    expect(answer.text).toContain("forbidden: this token lacks what StockItem.pair asks for");
+
+    // Past the router the service applies the same rules itself: the same fields, the same refusal for pair.
+    const past = direct(ask, token);
+    expect(past.status, past.text).toBe(200);
+    const direct_ = JSON.parse(past.text);
+    expect(direct_.data[field].map((i: { secret: string | null; pair: string | null }) => [i.secret, i.pair])).toEqual([
+      ["s1", null],
+      ["s2", null],
+    ]);
+    expect(direct_.errors.map((e: { path: unknown[]; extensions: { code: string } }) => [e.path.at(-1), e.extensions.code])).toEqual([
+      ["pair", "FORBIDDEN"],
+      ["pair", "FORBIDDEN"],
+    ]);
+    // No token past the router: 401 from the service itself (D46).
+    expect(direct(`{ ${field} { id } }`).status).toBe(401);
+  }, 120_000);
+
+  it("refuses a mutation for lack of the role, then lets it through once the role is granted (D22, D48)", async () => {
+    const before = await callerToken();
+    // The router passes the token on; the service refuses the class of operation before any resolver runs.
+    const refused = await throughRouter("mutation { touch }", before);
+    expect(refused.body.data?.touch ?? null, refused.text).toBeNull();
+    expect(refused.text).toMatch(/FORBIDDEN|forbidden/);
+    const past = direct("mutation { touch }", before);
+    expect(past.status, past.text).toBe(403);
+    expect(past.text).toContain('the role \\"stock:write\\" of client \\"stock-api\\"');
+
+    // The operator grants the role in Keycloak. A token issued before keeps what it had (300 s).
+    const password = new RegExp("^PB_KEYCLOAK__ADMIN_PASSWORD=(.+)$", "m").exec(secrets())![1];
+    const granted = compose(
+      "exec",
+      "-T",
+      "-e",
+      `KC_CLI_PASSWORD=${password}`,
+      "keycloak-app",
+      "bash",
+      "-c",
+      [
+        "set -e",
+        "k=/opt/keycloak/bin/kcadm.sh; c=$(mktemp -d)",
+        'login() { "$k" "$@" --config "$c/kcadm.config"; }',
+        "login config credentials --server http://127.0.0.1:8080 --realm master --user admin >/dev/null",
+        "login add-roles -r plugbricks --uusername service-account-caller --cclientid stock-api --rolename stock:write",
+      ].join("; "),
+    );
+    expect(granted.status, granted.stderr).toBe(0);
+    expect(direct("mutation { touch }", before).status).toBe(403);
+    const after = await callerToken();
+    const done = await throughRouter("mutation { touch }", after);
+    expect(done.body, done.text).toEqual({ data: { touch: true } });
+    expect(JSON.parse(direct("mutation { touch }", after).text)).toEqual({ data: { touch: true } });
+  }, 120_000);
 });
