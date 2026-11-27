@@ -109,7 +109,11 @@ The API receives `AUTHORIZATION_QUERIES_ROLE` and `AUTHORIZATION_MUTATIONS_ROLE`
 token without the role. A brick that lists this API in its `dependencies` gets the roles of the operations it declares.
 Without an identity provider, nothing is asked.
 
-A generated service (`create`) requires nothing: it checks no token until you add the check.
+A generated service (`create`, in Node, Python or Go) asks for `oidc` as an option and checks the token itself: with an
+identity provider in the platform it answers `401` to a request without a valid token, even one that goes past the router
+(`/health` stays open), and without one it answers as before (D46). It receives the verified caller in its resolvers
+(`context.caller` in Node, `info.context["caller"]` in Python, `CallerFrom(ctx)` in Go): who it is, and its scopes. It does
+not yet check roles or the rules of a schema, which you would write yourself.
 
 ### A rule on one field
 
@@ -123,7 +127,7 @@ plugbricks builds nothing for this yet, but the directives of Apollo Federation 
   protected interface, a field computed from a protected one (`@requires`). The message says which rule to write, and
   where (D43).
 - **Your API should apply the rule too**, or a call that goes to it directly past the router gets the field. `orders-api` and
-  `shipping-api` do (`apis/orders-api/src/auth.ts`, `enforceFieldRules`, D45); the services `create` writes check no token yet.
+  `shipping-api` do (`apis/orders-api/src/auth.ts`, `enforceFieldRules`, D45); the services `create` writes check the token, not yet these rules.
 - **A consumer says which scopes it needs**, and the `keycloak` brick creates them and gives them to its client:
 
   ```jsonc
