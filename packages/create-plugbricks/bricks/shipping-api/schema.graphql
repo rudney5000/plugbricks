@@ -1,7 +1,7 @@
 extend schema
   @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key"])
 
-"An order, owned by the orders subgraph. This subgraph adds the shipment to it."
+"An order, owned by the orders-api subgraph. This subgraph adds the shipment to it."
 type Order @key(fields: "id") {
   id: ID!
   "Null until the order was shipped."
