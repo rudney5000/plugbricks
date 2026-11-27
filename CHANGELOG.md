@@ -34,6 +34,12 @@ The documentation is the guide in [`docs/guide/`](docs/guide/getting-started.md)
 - `create <name> --kind api|web` writes a new GraphQL subgraph or web brick, with its code and its image recipe in
   `services/` (D28); `--lang python` or `--lang go` writes the API in that language (D38, D39).
 
+### A rule per field
+
+- `@authenticated` and `@requiresScopes` in a brick's schema are applied by the router. plugbricks refuses a schema
+  where such a rule can be gone around through an interface, a union or `@requires` (D43), and gives a consumer the
+  scopes its dependencies list (D44). An API still checks nothing itself for a direct call.
+
 ### Running a platform
 
 - `generate`, `up` and `down` on Docker Compose and on Kubernetes, from files plugbricks writes itself (D5), with

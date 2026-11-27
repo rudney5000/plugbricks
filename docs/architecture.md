@@ -354,6 +354,6 @@ flowchart LR
 
 1. **Field-level authorization.** The role is per operation class (all queries, all mutations) of an API
    (D22, step A). A rule on one field (`@authenticated`, `@requiresScopes`, enforced by the router and by each API)
-   is the later step B; a role removed in Keycloak stays valid in the tokens already issued until they expire
-   (300 s by default).
+   is the later step B (studied in D42: the router already applies the directives); a role removed in Keycloak stays
+   valid in the tokens already issued until they expire (300 s by default).
 2. **Kafka**, as a third `queue` provider (deferred, see the README roadmap).

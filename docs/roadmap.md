@@ -206,7 +206,8 @@ come after step 3.
 - ~~**Admin screenshots** out of date (the old brick names, no optional links)~~: taken again on 2026-11-27.
 - **Sign-in to the admin on k3d.** The sign-in is tested end to end on Docker Compose only; the k3d job covers the
   tokens through the router (D18).
-- **D22 step B**: a rule per field (`@requiresScopes`) and the router enforcing it too. Only if a real field asks for it.
+- **D22 step B**: a rule per field (`@requiresScopes`). Studied (D42): the router already applies the directives. Built: the
+  refusal of the ways around them (D43), the scopes in Keycloak (D44). To build: the check in the APIs.
 - ~~**A Dependabot `ignore` rule** for `graphql` and `@graphql-tools/utils`~~: done on 2026-11-25 (majors ignored for the
   root directory, D8).
 - **Kafka**, deferred (and section 7 for the other bricks).
