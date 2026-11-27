@@ -63,9 +63,11 @@ export function checkIsolation(exec: Exec, server: string): void {
   // The list of buckets holds its own only.
   expect(exec("store-a", "curl", `${signed('"$AWS_ENDPOINT_URL_S3/"')} >/dev/null; grep -o '<Name>[^<]*' /tmp/body`)).toBe("<Name>store-a");
   // The master, volume and filer servers, which ask for no key, listen inside the container only: connections to them
-  // are refused (curl exit 7), while the S3 port of the same address answers.
+  // are refused (curl exit 7) on Compose, while the S3 port of the same address answers. On Kubernetes the pod network
+  // drops the packet instead of rejecting it (curl exit 28, a timeout): the address does not answer either, which is
+  // what this checks, so both exit codes are accepted.
   const connect = (port: number) =>
     exec("store-a", "curl", `curl -sS -m 5 -o /dev/null http://${server}:${port}/healthz 2>/dev/null; echo $?`);
   expect(connect(8333), "the S3 port, to prove the address is the server's").toBe("0");
-  for (const port of [9333, 19333, 8080, 18080, 8888, 18888]) expect(connect(port), `${port}`).toBe("7");
+  for (const port of [9333, 19333, 8080, 18080, 8888, 18888]) expect(["7", "28"], `${port}`).toContain(connect(port));
 }
