@@ -1,0 +1,6 @@
+{
+  "name": "buyer",
+  "version": "0.1.0",
+  "services": [{ "name": "app", "image": "busybox:1.36", "port": 4000 }],
+  "dependencies": [{ "plugin": "catalog", "scopes": ["billing:admin"], "optional": true }]
+}

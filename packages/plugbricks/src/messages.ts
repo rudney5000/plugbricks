@@ -77,6 +77,10 @@ export const MESSAGES = {
 
   // Federation: the subgraphs of the installed bricks (add, remove, status)
   COMPOSITION_FAILED: "the subgraphs of the installed bricks do not compose: {detail}",
+  DEPENDENCY_SCOPE_UNKNOWN:
+    '"{brick}" asks for the scope "{scope}" on "{target}", and no rule of the schema of "{target}" asks for it (its rules ask for: {known}) (D44)',
+  AUTHORIZATION_BYPASS:
+    '"{exposed}" gives what {protected} protects, without its rule, and the router would not refuse it: put {rule} on "{exposed}" in {files} (D43)',
   SUBGRAPH_SCHEMA_INVALID: 'the subgraph schema {file} of brick "{brick}" is not valid GraphQL (line {line}, column {column}): {detail}',
   EXTENDS_OWNER_MISSING: 'brick "{brick}" extends entity "{entity}" of brick "{owner}", which is not installed; add "{owner}" first',
   EXTENDS_ENTITY_MISSING:

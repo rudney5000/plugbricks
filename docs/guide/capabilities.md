@@ -110,3 +110,26 @@ token without the role. A brick that lists this API in its `dependencies` gets t
 Without an identity provider, nothing is asked.
 
 A generated service (`create`) requires nothing: it checks no token until you add the check.
+
+### A rule on one field
+
+plugbricks builds nothing for this yet, but the directives of Apollo Federation in a brick's schema (`@authenticated`,
+`@requiresScopes`) already reach the router, which applies them
+([what was tried](../decisions.md#d42-study-a-rule-per-field-d22-step-b-with-the-pinned-router)). If you use them:
+
+- **A rule is repeated where it could be gone around.** The router applies the rule of the field it is asked for, so
+  plugbricks refuses (`AUTHORIZATION_BYPASS`) a schema where protected data has another way out: the same field on an
+  interface, a field that returns a union or an interface which can be a protected type, a type that implements a
+  protected interface, a field computed from a protected one (`@requires`). The message says which rule to write, and
+  where (D43).
+- The rule is **the router's only**: a call that goes to your API directly is not checked unless your code checks it.
+- **A consumer says which scopes it needs**, and the `keycloak` brick creates them and gives them to its client:
+
+  ```jsonc
+  "dependencies": [{ "plugin": "catalog-api", "scopes": ["catalog:price"] }]
+  ```
+
+  Only a scope that a rule of that API's schema asks for can be listed. A scope is a name shared by the whole realm: name
+  it after the API. It is never taken back; remove it in Keycloak. With another identity provider, create the scopes
+  there.
+- Without an identity provider, every protected field is refused.

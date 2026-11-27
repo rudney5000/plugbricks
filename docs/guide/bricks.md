@@ -112,7 +112,8 @@ per capability. [`examples/postgres`](../../packages/plugbricks/examples/postgre
 
 `add` proposes a missing dependency from `bricks/`. `remove` refuses to take away a brick that an installed one declares,
 and `disable` while the declaring brick is enabled. `"optional": true` shows the link and protects nothing. With an
-identity provider, `operations` gives the brick the roles it needs to call that API.
+identity provider, `operations` gives the brick the roles it needs to call that API, and `scopes` the ones its protected
+fields ask for ([a rule on one field](./capabilities.md#a-rule-on-one-field)).
 
 ## Web pages
 

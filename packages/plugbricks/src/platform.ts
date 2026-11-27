@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import path, { basename, dirname, join, resolve, sep } from "node:path";
 import { ROUTER_IMAGE } from "./drivers/common.js";
+import { dependencyScopes } from "./authorization.js";
 import { composeSubgraphs, composerVersion, type FederationLock, type SubgraphInput } from "./federation.js";
 import { writeFileAtomic } from "./fsutil.js";
 import { issue, type Issue } from "./issues.js";
@@ -275,7 +276,13 @@ interface Manifest {
   };
   web?: { service: string; path?: string };
   extends?: { plugin: string; entities: string[] }[];
-  dependencies?: { plugin: string; description?: string; optional?: boolean; operations?: ("queries" | "mutations")[] }[];
+  dependencies?: {
+    plugin: string;
+    description?: string;
+    optional?: boolean;
+    operations?: ("queries" | "mutations")[];
+    scopes?: string[];
+  }[];
   /** The client roles that the tokens of the oidc provider need for this API (D22). */
   authorization?: { queries?: string; mutations?: string };
 }
@@ -528,15 +535,36 @@ function installedSubgraphs(
 }
 
 /**
+ * D44: the scopes the dependencies of each brick list must be asked by the schemas the platform would have. `inputs` are
+ * those schemas and `manifests` the bricks that stay or join.
+ */
+function checkDependencyScopes(manifests: Map<string, Manifest>, inputs: SubgraphInput[]): void {
+  const schemas = new Map(inputs.map((i) => [i.brick, i.sdl]));
+  const issues = [...manifests].flatMap(
+    ([brick, m]) =>
+      dependencyScopes(brick, m.dependencies, (target) => (manifests.has(target) ? (schemas.get(target) ?? null) : undefined)).issues,
+  );
+  if (issues.length) throw new PlugbricksError(issues);
+}
+
+/**
  * Composes the subgraphs the platform would have; throws the refusals, returns what the lock records.
  * An unreadable installed copy only matters when there is a federation to get right: a subgraph is
  * joining, or the lock already records one (the broken brick may be one of its subgraphs).
  */
-function checkFederation(project: Project, leaving?: string, joining?: SubgraphInput): FederationLock | undefined {
-  const { inputs, unreadable } = installedSubgraphs(project, leaving, joining);
+function checkFederation(
+  project: Project,
+  leaving?: string,
+  joining?: SubgraphInput,
+  /** The manifest of the brick that joins (or is refreshed), with or without a subgraph. */
+  newcomer?: Manifest,
+): FederationLock | undefined {
+  const { inputs, manifests, unreadable } = installedSubgraphs(project, leaving, joining);
   if (unreadable.length && (joining || project.lock.federation)) throw new PlugbricksError(unreadable);
   const result = composeSubgraphs(inputs);
   if (!result.ok) throw new PlugbricksError(result.issues);
+  if (newcomer) manifests.set(newcomer.name, newcomer);
+  checkDependencyScopes(manifests, inputs);
   return result.federation;
 }
 
@@ -606,7 +634,7 @@ export function contractRefresh(root: string, brick: string): ContractRefresh {
   if (others.length) fail("DEV_BRICK_CHANGED", { brick, files: others.join(", "), source: entry.source });
 
   const shown = (rel: string) => portableRelative(project.root, join(from, rel)) || rel;
-  const federation = checkFederation(project, brick, subgraphOf(brick, installed, from, shown));
+  const federation = checkFederation(project, brick, subgraphOf(brick, installed, from, shown), installed);
   return {
     changed,
     apply: () => {
@@ -840,6 +868,7 @@ export function addBrick(root: string, brickPath: string, options: { byName?: st
     project,
     undefined,
     subgraphOf(m.name, m, brickDir, (rel) => portableRelative(project.root, join(brickDir, rel)) || rel),
+    m,
   );
 
   installCopy(project.root, brickDir, m.name, integrity);

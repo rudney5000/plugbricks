@@ -138,6 +138,7 @@ services:
       KEYCLOAK_URL: http://keycloak-app:8080
       REALM: plugbricks
       ROLES: "orders:read orders:write"
+      SCOPES: ""
     volumes:
       - type: bind
         source: "../../.platform/bricks/keycloak/provision"
@@ -235,6 +236,7 @@ services:
       KEYCLOAK_URL: http://keycloak-app:8080
       REALM: plugbricks
       ROLES: ""
+      SCOPES: ""
     volumes:
       - type: bind
         source: "../../.platform/bricks/keycloak/provision"

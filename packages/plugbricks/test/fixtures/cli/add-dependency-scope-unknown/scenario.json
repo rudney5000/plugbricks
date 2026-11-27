@@ -1,0 +1,11 @@
+{
+  "description": "a dependency gives only the scopes a rule of its schema asks for: refused whichever of the two bricks is added last (D44)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    { "run": ["add", "bricks/catalog"], "stdout": "Added catalog 0.1.0" },
+    { "run": ["add", "bricks/buyer"], "exit": 1, "codes": ["DEPENDENCY_SCOPE_UNKNOWN"], "unchanged": true, "stderr": "its rules ask for: catalog:price" },
+    { "run": ["remove", "catalog"], "stdout": "Removed catalog" },
+    { "run": ["add", "bricks/buyer"], "stdout": "Added buyer 0.1.0" },
+    { "run": ["add", "bricks/catalog"], "exit": 1, "codes": ["DEPENDENCY_SCOPE_UNKNOWN"], "unchanged": true, "stderr": "its rules ask for: catalog:price" }
+  ]
+}

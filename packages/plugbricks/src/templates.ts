@@ -1,6 +1,6 @@
 /**
  * Templates in manifest values: `${provider.host}`, `${provider.port}`, `${consumer.name}`,
- * `${consumer.roles}`, `${consumer.grants}`, `${web.origin}` and `${secrets.<name>}`. Which ones a field may use depends on the field (TEMPLATE_CONTEXTS).
+ * `${consumer.roles}`, `${consumer.grants}`, `${consumer.scopes}`, `${web.origin}` and `${secrets.<name>}`. Which ones a field may use depends on the field (TEMPLATE_CONTEXTS).
  * Anything else written as `${...}` is refused when the brick is added, so a typo never
  * reaches a running container.
  */
@@ -15,6 +15,7 @@ export type TemplateVar =
   | "consumer.name"
   | "consumer.roles"
   | "consumer.grants"
+  | "consumer.scopes"
   | "web.origin"
   | "secrets";
 
@@ -30,9 +31,10 @@ export const TEMPLATE_CONTEXTS = {
   /**
    * consumer.roles: the roles the consumer's "authorization" block names, space-separated (D22): the provision task creates
    * them on the consumer's own client. consumer.grants: "<brick>/<role>" for each role of a dependency's block that the
-   * consumer's service account must hold, space-separated. Both are empty when there is nothing to say.
+   * consumer's service account must hold, space-separated. consumer.scopes: the scopes its tokens must carry to reach the
+   * protected fields of its dependencies (D44), space-separated. Each is empty when there is nothing to say.
    */
-  provisionEnv: ["provider.host", "provider.port", "consumer.name", "consumer.roles", "consumer.grants", "secrets"],
+  provisionEnv: ["provider.host", "provider.port", "consumer.name", "consumer.roles", "consumer.grants", "consumer.scopes", "secrets"],
   /** provider.web.origin: where the browser reaches a provider that is a web brick, e.g. the issuer of its tokens (D20). */
   inject: ["provider.host", "provider.port", "provider.web.origin", "consumer.name", "secrets"],
 } as const satisfies Record<string, readonly TemplateVar[]>;

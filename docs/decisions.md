@@ -2455,6 +2455,99 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   about 20 s after a restart of the server alone while it is reported healthy (seen: 16 and 23 s); a consumer's name must be a
   bucket name (3 to 63 characters); its image is large. The users and buckets of a removed consumer stay, like a PostgreSQL role.
 
+## D42. Study: a rule per field (D22, step B) with the pinned router
+
+- **Status:** studied (2026-11-27); nothing built, and what to build is not decided.
+- **Question:** what `@authenticated` and `@requiresScopes` in a brick's schema do today, and what step B of D22 would need.
+- **Method.** Docker Compose, a platform made by plugbricks: `postgres`, `keycloak` (26.7.3), the router 0.372.0, the
+  composer 0.68.2 (the latest published that day), two throwaway subgraphs **that check nothing** and log what they are asked,
+  and a caller. The scopes were created in Keycloak by hand (`kcadm`, client scopes with `include.in.token.scope`, assigned to
+  the caller as optional scopes). Neither the subgraphs nor the platform are kept in the repository.
+- **What works, with no change to plugbricks.**
+  - `add` accepts the directives, the rules reach `router-config.json` (`authorizationConfiguration` of
+    `fieldConfigurations`), and the router applies them to tokens of the platform's provider, reading their `scope` claim.
+  - A field, a type (the rule follows to every field that returns it), `@authenticated`, and the two levels of
+    `scopes: [[a, b], [c]]` (a and b, or c) behaved as written. Aliases, fragments, and a fragment on an interface applied to
+    a field of the protected type did not pass.
+  - A refusal is HTTP 200 with the code `UNAUTHORIZED_FIELD_OR_TYPE` and the field's name: `null` where the field allows it,
+    and the whole `data` null where it does not. Without a token, with a provider, the answer stays 401 (D19).
+  - A refused mutation is not sent to its subgraph. When one operation asks for an allowed and a refused mutation, the allowed
+    one **runs** and `data` can still be null.
+  - A **protected query field is still fetched** from its subgraph, and removed by the router: a resolver runs for a caller
+    who will not see its result.
+  - Without an identity provider the router refuses every protected field (`not authenticated`), an unsigned token included.
+  - Keycloak refuses a scope that is not assigned to the client (`invalid_scope`).
+- **What gets through. Two ways, both observed, and `add` says nothing about either.**
+  1. **Through an interface.** `price` protected on `Product`, which implements `Priced { price }`: `{ priced { price } }`
+     returned the price to a token without the scope. Declaring the same rule on the interface's field closed it.
+  2. **Through a derived field.** Another subgraph's `priceWithTax @requires(fields: "price")`, with no rule, returned the
+     price plus tax to a token without the scope. Declaring the rule on `priceWithTax` closed it.
+- **What the router does not cover.** A request sent to a subgraph from inside the platform got every protected field: the
+  rule exists in the router only, until each API checks it too (as D20 and step A do).
+- **What step B would take** (a proposal, for the owner):
+  1. **Guard what a person can already write:** `add` refuses, or warns about, a field that reads a protected one without a
+     rule of its own: an interface field implemented by a protected field, and a field whose `@requires` names one. Small,
+     and useful before anything else, since the directives already take effect.
+  2. **The scopes in Keycloak:** a way for a brick to say which scopes of an API it needs (its `dependencies`, as the roles
+     of step A), and the provision task creating the client scopes and assigning them.
+  3. **The check in the APIs:** the same rules, applied to a direct call, in the example APIs and the `create` templates.
+  4. Say in the output of `add` that protected fields are refused to everyone while no provider is installed.
+- **Not tested.** Kubernetes. Scopes assigned as default ones (no `scope` asked in the token request). Tokens of people.
+  Another provider than Keycloak. Unions, subscriptions, gRPC and external subgraphs. The router configuration compared with
+  `wgc` with these directives. Any check in an API.
+
+## D43. Composition refuses a rule per field that can be gone around
+
+- **Status:** implemented (2026-11-27). The first of what D42 proposed.
+- **Context:** the router applies the rule of the field it is asked for, (type written in the query, field). D42 saw two ways
+  around; trying every shape of protected data against the pinned router, without a token, showed more: **a whole protected
+  type came out through a union or an interface** (`{ results { ... on Secret { code } } }`), and a type implementing a
+  protected interface was open when asked for by its own name. The composer accepts all of them silently.
+- **Decision.** After composing, plugbricks refuses (`AUTHORIZATION_BYPASS`, one issue per place, with the rule to write and
+  the file) a schema where:
+  1. a field of an interface asks less than that field of a type that implements it, or the interface asks something that
+     none of those types asks;
+  2. a field returns a protected type, or an interface or a union that can be one, without that rule;
+  3. a type implements a protected interface without its rule, unless the implementers carry it between them;
+  4. a field with `@requires` asks less than a field it reads, at any depth of its selection.
+  "Less" compares the sets of scopes: a rule is enough when every caller it lets through also satisfies the other one. It is a
+  refusal and not a warning because the directive already takes effect, and its author expects the data to be closed. It runs
+  wherever plugbricks composes: `add`, `enable`, `remove`, `generate`, `up`, `dev`. A schema without these directives is not
+  affected.
+- **Tested.** `test/authorization.test.ts`, one case per shape; removing any of the checks, or accepting any rule as enough,
+  made it fail. Golden scenario `add-authorization-bypass`. On the pinned router, a schema with 14 ways to protected data: 8 of
+  them gave it away without a token; the check named those; with the rules it asked for, all 14 were refused. The two schemas
+  of D42 are refused for the two fields D42 saw.
+- **Limits.** What was tried is what is checked: `@interfaceObject`, subscriptions and gRPC subgraphs with these directives
+  were not tried. It says nothing about a request that goes to a subgraph directly. The rule it asks for can be stricter than
+  wished: a union of a public and a protected type needs the rule on the field that returns it (split the field otherwise). A
+  platform that already holds such a schema is refused at its next `generate`.
+
+## D44. `dependencies[].scopes`: the platform gives a consumer's client the scopes of protected fields
+
+- **Status:** implemented (2026-11-27). The second of what D42 proposed.
+- **Context:** the router reads the `scope` claim; the scopes had to be created in Keycloak and assigned by hand.
+- **Decision.**
+  - A dependency may list `"scopes": ["catalog:price"]`: what the brick's tokens need to read or change the protected fields
+    of that dependency. The names follow the pattern of the roles (D22).
+  - **A dependency gives only its own scopes.** Each one must be asked by a rule of that dependency's schema, or `add`,
+    `enable`, `dev` and the plan refuse it (`DEPENDENCY_SCOPE_UNKNOWN`), whichever of the two bricks comes last. A client
+    scope is a name of the whole realm: without this, listing any dependency would give any scope, another API's included.
+  - The provider's provision task receives `SCOPES` (the template `${consumer.scopes}`); `create-client.sh` creates a scope the
+    realm lacks, with `include.in.token.scope`, and assigns it as a **default** scope of the consumer's client: its tokens carry
+    it without the request naming one, so no code changes.
+  - Nothing is given without an enabled provider of `oidc`, or while the dependency is not installed.
+- **Tested.** Plan tests; golden scenario `add-dependency-scope-unknown`, and the three scenarios with Keycloak show the new
+  variable. By hand on Docker Compose (Keycloak 26.7.3, router 0.372.0, two throwaway subgraphs): the consumer that lists
+  `catalog:price` and `catalog:cost` read the protected fields with a plain token request, was refused a mutation whose scope
+  it did not list; the consumer that lists none was refused every protected field; a second `up` changed nothing.
+- **Not tested.** Kubernetes. No automated end-to-end test with Keycloak for the scopes. A scope that already exists in the
+  realm without `include.in.token.scope` (its tokens would lack it).
+- **Limits.** **A scope is never taken back** (like a grant, D22): remove it in Keycloak. **Two APIs that name the same scope
+  share it**: a consumer given it for one holds it for both; name scopes after the API (`catalog:price`). The admin does not
+  show the scopes. Tokens of people are not covered. A platform that already runs the `keycloak` brick gets the new script
+  by `remove` then `add`.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

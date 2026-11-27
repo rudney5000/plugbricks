@@ -56,7 +56,8 @@
           "CLIENT_SECRET": "${secrets.client_secret}",
           "AUDIENCE": "plugbricks-router",
           "ROLES": "${consumer.roles}",
-          "GRANTS": "${consumer.grants}"
+          "GRANTS": "${consumer.grants}",
+          "SCOPES": "${consumer.scopes}"
         }
       },
       "inject": {
