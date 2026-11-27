@@ -2548,6 +2548,32 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   show the scopes. Tokens of people are not covered. A platform that already runs the `keycloak` brick gets the new script
   by `remove` then `add`.
 
+## D45. The example APIs apply the rules per field themselves
+
+- **Status:** implemented (2026-11-27). The third of what D42 proposed (option A: in the APIs).
+- **Context:** the router applies `@authenticated` and `@requiresScopes`, and a call that goes past it did not meet them (D42).
+  D20 and D22 already settled that an API checks the token itself.
+- **Decision.** `enforceFieldRules` in `auth.ts` (the same file in `apis/orders-api` and `apis/shipping-api`) wraps the resolver
+  of every field that a rule concerns, and `createApp` always applies it. A field is resolved only for a caller that
+  satisfies **every** rule among: its own, that of the type it returns, that of the type it belongs to (an entity reached
+  through `_entities` has no field above it), and that of the same field on an interface its type implements. The caller's
+  scopes are the `scope` claim of the verified token. A refused field is a `FORBIDDEN` error at its place: null where the field
+  allows it, the nearest nullable parent where it does not, as the router does; a mutation that is refused does not run.
+  Without a token check there is no caller, and a protected field is refused (the router does the same without an identity
+  provider). A rule that cannot be read refuses.
+- **Why per field and not for the whole operation:** behind the router, a request can ask a subgraph for fields the caller will
+  not see (D42: it fetches them and removes them); refusing the whole request would turn a null into a lost response.
+- **Tested.** `apis/orders-api/test/field-rules.test.ts` (13 cases, no database): scopes as sets, `@authenticated`, a type, an
+  entity, an interface, an interface returned, an unreadable rule, a mutation; removing each of the six parts made a test fail.
+  The scope claim read from a signed token. The two APIs keep the same `auth.ts` (a test). Their own suites still pass (45 and 17).
+- **Not tested.** A real router and Keycloak against an API that declares such a rule: the example schemas declare none, so the
+  code is exercised only on schemas of the tests. `execute` is called directly, not through the HTTP server of `createApp`
+  (whose context carries the caller, which the `createdBy` test already shows). The published images `0.1.0` do not have it: it
+  needs `0.1.1`.
+- **Limits.** Only the two Node examples. The `create` templates (Node, Python, Go) check no token at all (D28), so they check no
+  rule either; a service in another language has to do the same by itself. The check is per field and does not see a
+  `@requires` read by another subgraph: that is D43's refusal. Subscriptions are not covered.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

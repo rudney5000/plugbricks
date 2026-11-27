@@ -122,7 +122,8 @@ plugbricks builds nothing for this yet, but the directives of Apollo Federation 
   interface, a field that returns a union or an interface which can be a protected type, a type that implements a
   protected interface, a field computed from a protected one (`@requires`). The message says which rule to write, and
   where (D43).
-- The rule is **the router's only**: a call that goes to your API directly is not checked unless your code checks it.
+- **Your API should apply the rule too**, or a call that goes to it directly past the router gets the field. `orders-api` and
+  `shipping-api` do (`apis/orders-api/src/auth.ts`, `enforceFieldRules`, D45); the services `create` writes check no token yet.
 - **A consumer says which scopes it needs**, and the `keycloak` brick creates them and gives them to its client:
 
   ```jsonc
