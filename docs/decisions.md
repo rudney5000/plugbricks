@@ -2409,6 +2409,52 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Limit.** The screenshot of the admin's dependencies was from an earlier version when the site was written, and the
   page said so; the admin's screenshots were taken again on 2026-11-27.
 
+## D41. `cache` and `object-storage`: Redis and SeaweedFS, and `args` for a service
+
+- **Status:** implemented (2026-11-27). Two of the bricks of section 7 of `docs/roadmap.md` (chantier 12).
+- **Context:** a platform often needs a cache and a place for files. Both servers are configured by their command line, which a
+  manifest could not give (D11 and D13 recorded it).
+- **Decision.**
+  - **`services[].args`**: the arguments of the image's entrypoint, in place of its default command (Compose `command`,
+    Kubernetes `args`). The entrypoint is kept, so an image still drops its privileges itself. Nothing is substituted and
+    `${...}` is refused (`TEMPLATE_UNKNOWN`): a command line is visible to anyone who lists processes, and a script reads its
+    values from `env` as `$NAME`.
+  - **`cache` is `redis`** (`redis:8.8.4-alpine`). The server's start script writes the `default` user, with the sha256 of the
+    administrator password, into an ACL file on the data volume, so the server never runs without a password and keeps the
+    consumers' users across restarts. The provision task creates, per consumer, a user limited to the keys and channels
+    `<consumer>:*`, with every command but `@admin`, `@dangerous`, `@search`, `FUNCTION`, `SCRIPT FLUSH` and `SCRIPT KILL`,
+    and with `INFO`, which client libraries call. `@search` is removed because an index covers a prefix of keys. It gets
+    `REDIS_URL` and `REDIS_PREFIX`.
+  - **`object-storage` is `seaweedfs`** (`chrislusf/seaweedfs:4.55`, Apache-2.0), `weed server` with the filer and the S3
+    gateway. It was chosen instead of the MinIO the roadmap named, at the owner's request. **Only the S3 port listens on the
+    platform network**: master, volume and filer ask for no credentials by default, and are bound to the loopback address of
+    the container (`-ip.bind=127.0.0.1`, `-s3.ip.bind=0.0.0.0`). The usage statistics the master sends by default are off
+    (`-master.telemetry=false`). The administrator is the pair of keys in the server's environment. The provision task uses the
+    S3 port only: it creates the bucket, the user, its policy (objects of that bucket; not the bucket's policy or ACL, not its
+    deletion) and the consumer's key, chosen by plugbricks through SeaweedFS's IAM API (AWS gives no such choice), and deletes
+    any other key of the user. A user cannot create keys of its own (`-s3.iam.selfServiceRequiresGrant=true`). The consumer
+    gets the variable names of the AWS tools, and `S3_BUCKET`.
+  - A new project ships both bricks in `bricks/`, next to `postgres`, `rabbitmq` and `nats` (D25).
+- **Why Redis and not Valkey:** the roadmap and the owner named Redis. Redis 8 is under RSALv2, SSPLv1 or AGPLv3 (checked in the
+  `LICENSE.txt` of 8.8.4); plugbricks does not distribute it, the platform pulls its official image. Valkey (BSD) would be the
+  replacement if that licence is a problem; not tried here.
+- **Tested.** On Docker Compose (`e2e-compose`, two consumers): own keys and objects read; the other consumer's refused, an
+  anonymous request refused, connections to the internal ports refused; the same after a second `up`, after a restart of Redis
+  alone, and after every secret was generated again (the old S3 key refused, the data kept). Removing the prefix limit of
+  Redis, widening the S3 policy, or binding the internal servers to every address, each made that test fail. On a local k3d
+  cluster (k3s v1.37.2, `e2e-k8s`): the same reads and refusals, the internal ports tried on the pod's own address (the
+  Service forwards the S3 port only), and the data after `down` then `up`. By hand: boto3 (multipart upload, presigned link),
+  the AWS SDK for JavaScript (with `forcePathStyle`; without it the name does not resolve), ioredis and node-redis, with the
+  injected variables only. A capture of the traffic of each server for about 150 s from its start showed no name looked up and
+  no address outside the machine's private ranges (Redis was started plainly for the capture, without the brick's script).
+  Golden scenario `generate-stores`.
+- **Not tested.** `arm64`. A large volume of data. An upgrade of either image over existing data. On Kubernetes, a change of
+  the secrets and a restart of one server alone.
+- **Limits.** A consumer can list the names of other consumers' Redis keys (`SCAN`) and channels, not read them; no memory
+  quota. SeaweedFS: one server, no replication; its internal servers trust anything inside its own container; requests can wait
+  about 20 s after a restart of the server alone while it is reported healthy (seen: 16 and 23 s); a consumer's name must be a
+  bucket name (3 to 63 characters); its image is large. The users and buckets of a removed consumer stay, like a PostgreSQL role.
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:

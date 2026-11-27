@@ -20,6 +20,8 @@ export type TemplateVar =
 
 /** What each templated field may use. Secrets only in environment maps, never in a command line (visible in ps). */
 export const TEMPLATE_CONTEXTS = {
+  /** A command line is visible in ps, and nothing is substituted in it: a script reads env as $NAME (D41). */
+  serviceArgs: [],
   serviceEnv: ["secrets"],
   /** The env of the service that serves a web brick's pages: also where the browser reaches it (D18). */
   webServiceEnv: ["secrets", "web.origin"],
@@ -44,7 +46,9 @@ const TEMPLATE = /\$\{([^}]*)\}/g;
 
 /** How the allowed templates of a context are shown in an error message. */
 export function allowedList(context: TemplateContext): string {
-  return TEMPLATE_CONTEXTS[context].map((v) => (v === "secrets" ? "${secrets.<name>}" : `\${${v}}`)).join(", ");
+  const allowed: readonly TemplateVar[] = TEMPLATE_CONTEXTS[context];
+  if (allowed.length === 0) return "none (put the value in env, and read it as $NAME in a shell script)";
+  return allowed.map((v) => (v === "secrets" ? "${secrets.<name>}" : `\${${v}}`)).join(", ");
 }
 
 /**

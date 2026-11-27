@@ -193,6 +193,8 @@ function deployment(s: PlanService, plan: Plan): Yaml {
             {
               name: s.service,
               image: s.image,
+              // Kubernetes "args": what the image's entrypoint receives (D41). "$$" is a literal "$".
+              args: s.args?.map(escapeDollars),
               ports: [{ containerPort: s.port }, ...s.extraPorts.map((p) => ({ containerPort: p.port }))],
               env: envList(serviceEnv(s, plan, `http://${ROUTER_NAME}:${plan.router?.port}/graphql`)),
               // Readiness only, never liveness: a slow dependency must not get the pod killed.

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
+  "bricks": {
+    "consumer": {
+      "integrity": "sha256-b3e0854fcdfe5c00e9b5b9f893c886c53da3d06c7f56d9efcdcfc45f9a5f98cf",
+      "provides": [],
+      "requires": {
+        "cache": {
+          "provider": "redis",
+          "timeoutSeconds": 120,
+          "wait": "healthy"
+        },
+        "object-storage": {
+          "provider": "seaweedfs",
+          "timeoutSeconds": 120,
+          "wait": "healthy"
+        }
+      },
+      "source": "bricks/consumer",
+      "version": "0.1.0",
+      "volumes": []
+    },
+    "redis": {
+      "integrity": "sha256-b0687308851494904221e05281e28d7b1e141aeb8e8be999dc5bd904eebb8c52",
+      "provides": [
+        "cache"
+      ],
+      "requires": {},
+      "source": "examples/redis",
+      "tags": [
+        "cache"
+      ],
+      "version": "0.1.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "retain",
+          "service": "server"
+        }
+      ]
+    },
+    "seaweedfs": {
+      "integrity": "sha256-74518e464567cfd0a5492e9dfea666dd92af1e665fab3b1bd14517a416df00d1",
+      "provides": [
+        "object-storage"
+      ],
+      "requires": {},
+      "source": "examples/seaweedfs",
+      "tags": [
+        "storage"
+      ],
+      "version": "0.1.0",
+      "volumes": [
+        {
+          "name": "data",
+          "retention": "retain",
+          "service": "s3"
+        }
+      ]
+    }
+  },
+  "capabilities": {
+    "cache": "redis",
+    "object-storage": "seaweedfs"
+  },
+  "lockfileVersion": 1,
+  "pendingDeletion": [],
+  "retainedVolumes": []
+}

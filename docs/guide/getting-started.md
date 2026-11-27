@@ -79,7 +79,7 @@ curl -s -H 'content-type: application/json' -d '{"query":"{ hello }"}' http://12
 
 ## 5. Add a ready-made brick
 
-A new project ships three bricks in `bricks/`: `postgres`, `rabbitmq` and `nats`.
+A new project ships five bricks in `bricks/`: `postgres`, `rabbitmq`, `nats`, `redis` and `seaweedfs`.
 
 ```bash
 npx plugbricks add postgres

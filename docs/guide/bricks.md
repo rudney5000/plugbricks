@@ -61,6 +61,9 @@ Each service needs a `name`, an `image` and a `port`.
   `16` and `alpine` are refused.
 - **`healthcheck.exec`** is a command run inside the container; the platform waits for it. Without one the service is
   reported as running, with unknown health.
+- **`args`** are the arguments given to the image's entrypoint, in place of its default command: `["server", "-s3"]`.
+  No shell runs them unless they name one, and nothing is substituted: a value goes in `env`, which a shell script reads
+  as `$NAME` (`${...}` is refused).
 - **`env`** holds fixed variables. The only templates are `${secrets.<name>}`, a secret plugbricks generates for this
   brick, and, on a web brick's own web service, `${web.origin}`. Never write a secret in clear.
 - **`volumes`** are kept by default when the brick is removed (`retention: "retain"`); `"delete"` marks them for

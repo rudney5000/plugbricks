@@ -1,0 +1,35 @@
+{
+  "name": "store-b",
+  "version": "0.1.0",
+  "description": "End-to-end test consumer of the cache and object-storage capabilities (D41): two idle services with the tools to use them, one with redis-cli, one with curl. (store-b)",
+  "services": [
+    {
+      "name": "cli",
+      "image": "redis:8.8.4-alpine",
+      "port": 9000,
+      "args": [
+        "sleep",
+        "infinity"
+      ]
+    },
+    {
+      "name": "curl",
+      "image": "curlimages/curl:8.11.1",
+      "port": 9001,
+      "args": [
+        "sleep",
+        "infinity"
+      ]
+    }
+  ],
+  "requires": {
+    "cache": {
+      "wait": "healthy",
+      "timeoutSeconds": 180
+    },
+    "object-storage": {
+      "wait": "healthy",
+      "timeoutSeconds": 180
+    }
+  }
+}

@@ -33,7 +33,7 @@ The guide is in [`docs/guide/`](docs/guide/getting-started.md), and the same fil
 | [A project and its bricks](docs/guide/project.md)             | `add`, `remove`, `disable`, the files of a project, refusals        |
 | [Writing a service](docs/guide/services.md)                   | `create` (TypeScript, Python, Go), `dev`, `logs`, `exec`            |
 | [Writing a brick](docs/guide/bricks.md)                       | the manifest, field by field; web pages                             |
-| [Databases, queues and tokens](docs/guide/capabilities.md)    | `postgres`, `rabbitmq`, `nats`, `keycloak`, roles                   |
+| [Databases, queues and tokens](docs/guide/capabilities.md)    | `postgres`, `rabbitmq`, `nats`, `redis`, `seaweedfs`, `keycloak`     |
 | [Existing services](docs/guide/existing-services.md)          | a subgraph that runs elsewhere, gRPC, REST                          |
 | [Running a platform](docs/guide/running.md)                   | `up`, `status --runtime`, `doctor`, Kubernetes, `export`            |
 | [The admin](docs/guide/admin.md)                              | the local web interface                                             |
@@ -55,6 +55,8 @@ An npm workspaces monorepo. The root `package.json` runs `build`, `test` and `ty
   - `examples/orders-api/` — an API that requires `database` (waits until it is healthy) and exposes a federation v2 subgraph.
   - `examples/rabbitmq/` — a base brick that provides the `queue` capability: one RabbitMQ broker shared by every consumer, each getting its own vhost, user and `QUEUE_NAME` (D11, D12); its provision script creates them through the management API.
   - `examples/nats/` — a second `queue` provider: a NATS server (core publish/subscribe), `NATS_URL` and `SUBJECT` per consumer, no accounts or JetStream (D13).
+  - `examples/redis/` — a base brick that provides the `cache` capability: one Redis server, a user per consumer limited to the keys that start with its name (D41).
+  - `examples/seaweedfs/` — a base brick that provides the `object-storage` capability: SeaweedFS behind the S3 protocol, a bucket and a key per consumer, only the S3 port open in the platform (D41).
   - `examples/queue-consumer/` — an API that requires `queue`: it declares its queue, publishes one message, consumes it, and exposes the round-trip on `/health` (`apis/queue-consumer`).
   - `src/manifest.ts` — `validateManifest()`: schema validation plus cross-field rules (unique service names, pinned images, referenced services exist). Every issue has a stable `code`, a JSON Pointer `path`, a `message` and its `params`.
   - `src/messages.ts` — the error code catalog. Tools match on `code`, never on the message text.

@@ -201,6 +201,11 @@ API (an `extraPorts` port of the Service). Each consumer gets `AMQP_URL` with it
 of the same capability, with core NATS only: `NATS_URL` and `SUBJECT=<its brick name>`, no accounts and
 no JetStream.
 
+It also carries `cache` and `object-storage` (D41). `examples/redis` creates one user per consumer, limited to
+the keys and channels `<brick>:*` (`REDIS_URL`, `REDIS_PREFIX`). `examples/seaweedfs` creates one bucket and one
+S3 key per consumer through its S3 port, the only one open in the platform (the names of the AWS tools, and
+`S3_BUCKET`). Both servers are configured by `services[].args`, the arguments of their image's entrypoint.
+
 **Optional requirements, and `oidc` (D19).** A requirement may say `"optional": true`: without a
 provider the brick runs as it is; when a provider is added (or enabled) later, the plan wires it. This is
 how `orders-web`, `orders-api` and `shipping-api` run with or without Keycloak. `examples/keycloak` provides

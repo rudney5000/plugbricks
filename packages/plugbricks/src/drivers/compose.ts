@@ -65,6 +65,8 @@ function service(s: PlanService, plan: Plan, o: RenderOptions): Yaml {
   const reqs = s.requires.map((cap) => plan.requirements.find((r) => r.consumer === s.brick && r.capability === cap)!);
   return {
     image: s.image,
+    // Compose "command": what the image's entrypoint receives (D41). "$$" is a literal "$".
+    command: s.args?.map(escapeDollars),
     environment: envMap(serviceEnv(s, plan, `http://${ROUTER_NAME}:${ROUTER_CONTAINER_PORT}/graphql`), o),
     healthcheck: s.healthcheck && {
       test: ["CMD", ...s.healthcheck.exec.map(escapeDollars)],

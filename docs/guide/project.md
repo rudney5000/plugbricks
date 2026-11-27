@@ -11,8 +11,8 @@ npx plugbricks enable shipping-api       # deploy it again
 npx plugbricks remove orders-api
 ```
 
-A name (`postgres`) adds the brick of the project's `bricks/` folder; a new project has `postgres`, `rabbitmq` and
-`nats` there, the bricks whose images are public. Without such a brick, a name still adds the folder of that name
+A name (`postgres`) adds the brick of the project's `bricks/` folder; a new project has `postgres`, `rabbitmq`, `nats`,
+`redis` and `seaweedfs` there, the bricks whose images are public. Without such a brick, a name still adds the folder of that name
 where you typed the command; when both exist, `add` refuses and asks for a path (`./postgres` or `bricks/postgres`).
 Anything with a `/` is a path.
 

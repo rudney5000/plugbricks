@@ -1,0 +1,72 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
+  "name": "redis",
+  "version": "0.1.0",
+  "description": "Base brick: a Redis server that provides the \"cache\" capability. Each consumer gets its own user, limited to the keys and channels that start with its name and a colon (REDIS_PREFIX); the administration commands and the search commands are not given to it (D41). Redis 8 is licensed under RSALv2, SSPLv1 or AGPLv3, at your choice: read it before you run it for others.",
+  "services": [
+    {
+      "name": "server",
+      "image": "redis:8.8.4-alpine",
+      "port": 6379,
+      "args": [
+        "sh",
+        "-c",
+        "set -eu; umask 077; acl=/data/users.acl; touch \"$acl\"; hash=$(printf %s \"$REDIS_PASSWORD\" | sha256sum | cut -c1-64); { echo \"user default on sanitize-payload #$hash ~* &* +@all\"; grep -v \"^user default \" \"$acl\" || true; } > \"$acl.new\"; mv \"$acl.new\" \"$acl\"; chown -R redis:redis /data; exec docker-entrypoint.sh redis-server --dir /data --aclfile \"$acl\""
+      ],
+      "volumes": [
+        {
+          "name": "data",
+          "mountPath": "/data",
+          "retention": "retain"
+        }
+      ],
+      "healthcheck": {
+        "exec": [
+          "sh",
+          "-c",
+          "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"
+        ]
+      },
+      "env": {
+        "REDIS_PASSWORD": "${secrets.admin_password}"
+      }
+    }
+  ],
+  "provides": {
+    "cache": {
+      "service": "server",
+      "ready": {
+        "exec": [
+          "nc",
+          "-z",
+          "-w",
+          "2",
+          "${provider.host}",
+          "${provider.port}"
+        ]
+      },
+      "provision": {
+        "image": "redis:8.8.4-alpine",
+        "command": [
+          "/bin/sh",
+          "/provision/create-user.sh"
+        ],
+        "scripts": "provision",
+        "env": {
+          "REDIS_HOST": "${provider.host}",
+          "REDIS_PORT": "${provider.port}",
+          "REDIS_ADMIN_PASSWORD": "${secrets.admin_password}",
+          "APP_USER": "${consumer.name}",
+          "APP_PASSWORD": "${secrets.consumer_password}"
+        }
+      },
+      "inject": {
+        "REDIS_URL": "redis://${consumer.name}:${secrets.consumer_password}@${provider.host}:${provider.port}",
+        "REDIS_PREFIX": "${consumer.name}:"
+      }
+    }
+  },
+  "tags": [
+    "cache"
+  ]
+}

@@ -15,7 +15,9 @@ The documentation is the guide in [`docs/guide/`](docs/guide/getting-started.md)
 ### A project
 
 - `npm create plugbricks <name>` creates a project: `platform.json`, `platform.lock`, the bricks `postgres`,
-  `rabbitmq` and `nats` in `bricks/`, a README that explains every folder (D25).
+  `rabbitmq`, `nats`, `redis` and `seaweedfs` in `bricks/`, a README that explains every folder (D25, D41).
+- `redis` provides `cache` (a user and a key prefix per consumer) and `seaweedfs` provides `object-storage`, over the
+  S3 protocol (a bucket and a key per consumer); a service of a manifest may give `args` to its image (D41).
 - `npm create plugbricks <name> -- --starter demo` creates the example shop, ready to `up`: PostgreSQL, the
   `orders-api` and `shipping-api` subgraphs behind the router, and the `orders-web` page (D30).
 

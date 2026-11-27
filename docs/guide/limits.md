@@ -21,6 +21,7 @@ What plugbricks does not do today. The reasons are in the [decisions](../decisio
 ## Bricks
 
 - One provider per capability. No Kafka.
+- Redis and SeaweedFS run as one server each, without replication or quotas ([their limits](./capabilities.md#cache)).
 - NATS: core publish and subscribe only, no accounts, no JetStream.
 - A change to the manifest of an installed brick needs `remove` then `add`.
 - A subgraph over gRPC: no subscriptions and no nested keys (per the documentation of Cosmo, not tried here); a gRPC

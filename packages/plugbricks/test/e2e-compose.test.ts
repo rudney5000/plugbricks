@@ -9,6 +9,7 @@ import type { LiveStatus } from "../src/live.js";
 import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
 import { exampleImage } from "./helpers/images.js";
+import { checkIsolation, readStores, writeStores, type Exec } from "./helpers/stores.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
 // down. Skipped, with the reason in the title, where no Linux Docker engine answers (macOS and
@@ -999,6 +1000,82 @@ describe("the queue capability with NATS", () => {
       expect(cli(work, ["down"]).code).toBe(0);
     },
     300_000,
+  );
+});
+
+// Redis and SeaweedFS (D41): each consumer its own user, key prefix, bucket and key, which survive a second up, a
+// restart of a server alone and a change of every secret.
+describe("the cache and object-storage capabilities (D41)", () => {
+  const name = "pbtest-stores";
+
+  it.skipIf(!ready)(
+    `gives each consumer its own keys and bucket, and keeps its data when the secrets change${why}`,
+    () => {
+      const work = project(name, ["store-a", "store-b"]);
+      for (const brick of ["redis", "seaweedfs"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", name],
+        ["add", "redis"],
+        ["add", "seaweedfs"],
+        ["add", "store-a"],
+        ["add", "store-b"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+      const up = () => {
+        const r = cli(work, ["up"]);
+        expect(r.code, `${r.out}\n${r.err}`).toBe(0);
+      };
+      const compose = (...args: string[]) =>
+        spawnSync("docker", ["compose", "--project-name", name, ...args], { encoding: "utf8", cwd: work });
+      const exec: Exec = (consumer, service, script) => {
+        const r = compose("exec", "-T", `${consumer}-${service}`, "sh", "-c", script);
+        expect(r.status, r.stderr).toBe(0);
+        return r.stdout.trim();
+      };
+
+      up();
+      writeStores(exec);
+      readStores(exec);
+      checkIsolation(exec, "seaweedfs-s3");
+      expect(containersOf(name, "--format", "{{.Ports}}")).not.toContain("->");
+
+      // A second up runs the provision tasks again.
+      up();
+      readStores(exec);
+
+      // The users are written on Redis's volume: they are there after a restart of the server alone, without any
+      // provision task running again.
+      const restart = compose("restart", "redis-server");
+      expect(restart.status, restart.stderr).toBe(0);
+      for (const c of ["store-a", "store-b"] as const) {
+        exec(
+          c,
+          "cli",
+          'i=0; until redis-cli -u "$REDIS_URL" --no-auth-warning -e ping >/dev/null 2>&1; do i=$((i+1)); [ $i -lt 30 ] || exit 1; sleep 1; done',
+        );
+      }
+      readStores(exec);
+
+      // Every secret generated again, the administrators' included: the same data, the old key refused.
+      const secrets = join(work, ".secrets/secrets.env");
+      const value = (key: string) => new RegExp(`^${key}=(.+)$`, "m").exec(readFileSync(secrets, "utf8"))![1];
+      const oldKey = `${value("PB_SEAWEEDFS__STORE_A__CONSUMER_ACCESS_KEY")}:${value("PB_SEAWEEDFS__STORE_A__CONSUMER_SECRET_KEY")}`;
+      expect(cli(work, ["down"]).code).toBe(0);
+      writeFileSync(secrets, readFileSync(secrets, "utf8").replace(/^PB_.*\n/gm, ""), { mode: 0o600 });
+      up();
+      readStores(exec);
+      expect(
+        exec(
+          "store-a",
+          "curl",
+          `curl -sS -o /dev/null -w '%{http_code}' --aws-sigv4 aws:amz:us-east-1:s3 --user '${oldKey}' ` +
+            `-H 'x-amz-content-sha256: UNSIGNED-PAYLOAD' "$AWS_ENDPOINT_URL_S3/store-a/hello.txt"`,
+        ),
+      ).toBe("403");
+
+      expect(cli(work, ["down"]).code).toBe(0);
+    },
+    600_000,
   );
 });
 
