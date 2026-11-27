@@ -2,7 +2,7 @@
 name: demo
 services:
   orders-api-app:
-    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/orders-api:0.1.1
     environment:
       DATABASE_URL: "postgres://orders-api:${PB_POSTGRES__ORDERS_API__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/orders-api"
     healthcheck:
@@ -119,7 +119,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
   shipping-api-app:
-    image: ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0
+    image: ghcr.io/rudney5000/plugbricks/shipping-api:0.1.1
     environment:
       DATABASE_URL: "postgres://shipping-api:${PB_POSTGRES__SHIPPING_API__CONSUMER_PASSWORD:?missing secret; run plugbricks generate}@postgres-db:5432/shipping-api"
     healthcheck:

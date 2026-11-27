@@ -9,7 +9,7 @@
       "run": ["add", "orders-web", "--yes"],
       "stdout": [
         "orders-web needs:\n  postgres (bricks/postgres): provides \"database\" to orders-api\n  orders-api (bricks/orders-api): declared in the dependencies of orders-web",
-        "Added postgres 1.0.0 (provides \"database\" to orders-api)\nAdded orders-api 0.1.0 (declared in the dependencies of orders-web)\nAdded orders-web"
+        "Added postgres 1.0.0 (provides \"database\" to orders-api)\nAdded orders-api 0.1.1 (declared in the dependencies of orders-web)\nAdded orders-web"
       ],
       "notStdout": "is not installed"
     },

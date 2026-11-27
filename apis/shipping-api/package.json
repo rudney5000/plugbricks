@@ -1,7 +1,7 @@
 {
   "name": "plugbricks-example-shipping-api",
-  "version": "0.1.0",
-  "description": "Example subgraph for plugbricks: shipments stored in PostgreSQL, extending the Order entity of the orders API, federation v2. Built as the image ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0.",
+  "version": "0.1.1",
+  "description": "Example subgraph for plugbricks: shipments stored in PostgreSQL, extending the Order entity of the orders API, federation v2. Built as the image ghcr.io/rudney5000/plugbricks/shipping-api:0.1.1.",
   "type": "module",
   "private": true,
   "license": "UNLICENSED",

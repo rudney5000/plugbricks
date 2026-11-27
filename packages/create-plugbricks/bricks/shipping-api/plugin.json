@@ -1,12 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/plugin-manifest.schema.json",
   "name": "shipping-api",
-  "version": "0.1.0",
-  "description": "Example API: a GraphQL subgraph that adds shipment data to the orders. It extends the Order entity of the orders-api brick and keeps its own data in PostgreSQL. With an oidc provider it asks every request for a token that carries the client role shipping:read (queries) or shipping:write (mutations) (D22). Its source is apis/shipping-api; build the image with: docker build -t ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0 apis/shipping-api",
+  "version": "0.1.1",
+  "description": "Example API: a GraphQL subgraph that adds shipment data to the orders. It extends the Order entity of the orders-api brick and keeps its own data in PostgreSQL. With an oidc provider it asks every request for a token that carries the client role shipping:read (queries) or shipping:write (mutations) (D22). Its source is apis/shipping-api; build the image with: docker build -t ghcr.io/rudney5000/plugbricks/shipping-api:0.1.1 apis/shipping-api",
   "services": [
     {
       "name": "app",
-      "image": "ghcr.io/rudney5000/plugbricks/shipping-api:0.1.0",
+      "image": "ghcr.io/rudney5000/plugbricks/shipping-api:0.1.1",
       "port": 4000,
       "healthcheck": {
         "exec": [

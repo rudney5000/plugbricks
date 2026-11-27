@@ -41,8 +41,8 @@
         "--yes"
       ],
       "stdout": [
-        "Added orders-api 0.1.0 (declared in the dependencies of orders-web)",
-        "orders-web 0.1.0 is already installed; nothing changed"
+        "Added orders-api 0.1.1 (declared in the dependencies of orders-web)",
+        "orders-web 0.1.1 is already installed; nothing changed"
       ],
       "notStdout": "is not installed"
     },

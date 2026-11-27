@@ -253,7 +253,7 @@ describe("npm create plugbricks <name> -- --starter <starter> (D30)", () => {
   it("demo: the shop, with the addresses of its router and its page", () => {
     const r = run(["shop", "--starter=demo"], cwd);
     expect(r.code, r.stderr).toBe(0);
-    expect(r.stdout).toContain("Added postgres 1.0.0, orders-api 0.1.0, shipping-api 0.1.0, orders-web 0.1.0");
+    expect(r.stdout).toContain("Added postgres 1.0.0, orders-api 0.1.1, shipping-api 0.1.1, orders-web 0.1.1");
     expect(r.stdout).toContain("Once it is up, the GraphQL router answers at http://127.0.0.1:4000/graphql");
     expect(r.stdout).toContain("and the page of orders-web at http://127.0.0.1:8080/orders");
     expect(r.stdout).toContain("  npx plugbricks up");
