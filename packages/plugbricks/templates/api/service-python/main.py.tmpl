@@ -12,11 +12,12 @@ from pathlib import Path
 import uvicorn
 from ariadne import QueryType, format_error
 from ariadne.asgi import GraphQL
+from ariadne.asgi.handlers import GraphQLHTTPHandler
 from ariadne.contrib.federation import FederatedObjectType, make_federated_schema
 from ariadne.explorer import ExplorerHttp405
 from graphql import GraphQLError
 
-from auth import token_check_from_env
+from auth import authorization_from_env, forbidden_message, may_run, token_check_from_env
 
 ITEMS = [{"id": "1", "name": "first"}, {"id": "2", "name": "second"}]
 
@@ -55,12 +56,39 @@ if check_token:
     print(f"{{name}}: requests need a token from {os.environ['OIDC_ISSUER']}", flush=True)
 
 
+# With roles (the manifest's "authorization" block, D22): an operation whose class the token has no role for stops before
+# any resolver runs. See auth.py.
+try:
+    authorization = authorization_from_env(os.environ)
+except ValueError as e:
+    print(f"{{name}}: {e}", file=sys.stderr, flush=True)
+    sys.exit(1)
+
+
+def authorize(next_, obj, info, **kwargs):
+    """Middleware: each root field of the operation passes only for a caller whose token has the role of its class."""
+    if info.path.prev is None:
+        caller = info.context["caller"]
+        operation = info.operation.operation.value
+        if caller is None or not may_run(caller, authorization, operation):
+            # The HTTP status is 403, as the examples: the answer is rewritten in app() once the flag is set.
+            info.context["request"].scope["forbidden"] = True
+            raise GraphQLError(forbidden_message(authorization, operation), extensions={"code": "FORBIDDEN"})
+    return next_(obj, info, **kwargs)
+
+
 def context_value(request, _data):
     """A resolver finds the caller in its context: info.context["caller"], None without a token check."""
     return {"request": request, "caller": request.scope.get("caller")}
 
 
-graphql = GraphQL(schema, context_value=context_value, explorer=ExplorerHttp405(), error_formatter=format_masked)
+graphql = GraphQL(
+    schema,
+    context_value=context_value,
+    explorer=ExplorerHttp405(),
+    error_formatter=format_masked,
+    http_handler=GraphQLHTTPHandler(middleware=[authorize] if authorization else None),
+)
 
 
 async def app(scope, receive, send):
@@ -79,7 +107,15 @@ async def app(scope, receive, send):
                 await send({"type": "http.response.body", "body": body})
                 return
             scope["caller"] = caller
-        await graphql(scope, receive, send)
+
+        async def answer(message):
+            # A refused operation answers 403 (the token is valid, the caller is not allowed), whatever status ariadne chose
+            # for a result with no data (it says 400).
+            if message["type"] == "http.response.start" and scope.get("forbidden"):
+                message = {**message, "status": 403}
+            await send(message)
+
+        await graphql(scope, receive, answer)
         return
     status, body = (200, b"ok\n") if scope["path"] == "/health" else (404, b"not found\n")
     await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"text/plain")]})

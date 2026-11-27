@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import { parse } from "graphql";
 import { createYoga } from "graphql-yoga";
-import { tokenCheckFromEnv, type Caller } from "./auth.js";
+import { authorizationFromEnv, authorizationPlugin, tokenCheckFromEnv, type Caller } from "./auth.js";
 
 interface {{Type}} {
   id: string;
@@ -39,8 +39,20 @@ const checkToken = (() => {
 })();
 if (checkToken) console.log(`{{name}}: requests need a token from ${process.env.OIDC_ISSUER}`);
 
+// With roles (the manifest's "authorization" block, D22): an operation whose class the token has no role for stops before
+// any resolver runs. See auth.ts.
+const authorization = (() => {
+  try {
+    return authorizationFromEnv(process.env);
+  } catch (e) {
+    console.error(`{{name}}: ${(e as Error).message}`);
+    process.exit(1);
+  }
+})();
+const plugins = authorization ? [authorizationPlugin(authorization)] : [];
+
 // A resolver finds the caller in its context (the third argument): `context.caller`, undefined without a token check.
-const yoga = createYoga<{ caller?: Caller }>({ schema: buildSubgraphSchema([{ typeDefs, resolvers }]), graphiql: false, landingPage: false });
+const yoga = createYoga<{ caller?: Caller }>({ schema: buildSubgraphSchema([{ typeDefs, resolvers }]), graphiql: false, landingPage: false, plugins });
 
 const server = createServer((req, res) => {
   if (req.url === "/health") {

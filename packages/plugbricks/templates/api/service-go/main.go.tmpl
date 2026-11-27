@@ -38,6 +38,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("{{name}}: %v", err)
 	}
+	// With roles (the manifest's "authorization" block, D22): an operation whose class the token has no role for stops before
+	// any resolver runs. See auth.go.
+	rules, err := AuthorizationFromEnv()
+	if err != nil {
+		log.Fatalf("{{name}}: %v", err)
+	}
+	if rules != nil {
+		RequireRoles(api, rules)
+	}
 	var graphqlHandler http.Handler = api
 	if requireToken != nil {
 		graphqlHandler = requireToken(api)
