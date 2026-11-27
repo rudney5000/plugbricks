@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { buildSubgraphSchema } from "@apollo/subgraph";
 import { parse } from "graphql";
 import { createYoga } from "graphql-yoga";
+import { tokenCheckFromEnv, type Caller } from "./auth.js";
 
 interface {{Type}} {
   id: string;
@@ -27,14 +28,35 @@ const resolvers = {
   },
 };
 
-const yoga = createYoga({ schema: buildSubgraphSchema([{ typeDefs, resolvers }]), graphiql: false, landingPage: false });
+// With the platform's oidc provider (OIDC_* set): no valid token, no GraphQL, even past the router. See auth.ts.
+const checkToken = (() => {
+  try {
+    return tokenCheckFromEnv(process.env);
+  } catch (e) {
+    console.error(`{{name}}: ${(e as Error).message}`);
+    process.exit(1);
+  }
+})();
+if (checkToken) console.log(`{{name}}: requests need a token from ${process.env.OIDC_ISSUER}`);
+
+// A resolver finds the caller in its context (the third argument): `context.caller`, undefined without a token check.
+const yoga = createYoga<{ caller?: Caller }>({ schema: buildSubgraphSchema([{ typeDefs, resolvers }]), graphiql: false, landingPage: false });
 
 const server = createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;
   }
-  yoga(req, res);
+  if (!checkToken) return yoga(req, res);
+  void checkToken(req.headers.authorization).then((caller) => {
+    if (!caller) {
+      res
+        .writeHead(401, { "content-type": "application/json", "www-authenticate": 'Bearer realm="plugbricks"' })
+        .end(JSON.stringify({ errors: [{ message: "unauthorized" }] }));
+      return;
+    }
+    void yoga(req, res, { caller });
+  });
 });
 
 const port = Number(process.env.PORT ?? 4000);

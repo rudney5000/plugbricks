@@ -2,9 +2,15 @@
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
   "bricks": {
     "user-url-api": {
-      "integrity": "sha256-16d159a3edf4e4a0ff66a794af9507265f39f0f5c8b5338bc7b592bc716659e9",
+      "integrity": "sha256-9fa2ef02e7562f6ba089cfc8ae7f1dae9e3a7ccd7977bd7a14d2a5f7671d9421",
       "provides": [],
-      "requires": {},
+      "requires": {
+        "oidc": {
+          "optional": true,
+          "timeoutSeconds": 300,
+          "wait": "healthy"
+        }
+      },
       "source": "bricks/user-url-api",
       "tags": [
         "api",
@@ -14,9 +20,15 @@
       "volumes": []
     },
     "x-id-api": {
-      "integrity": "sha256-e33b9be14c7ddbc3919ee26aa8f5c02c915dd49e1a62ba0bc2a1406a84fecf37",
+      "integrity": "sha256-cf01041c63b45baa9decdc30cd398d4df443547990f4f2c883583cc28226e093",
       "provides": [],
-      "requires": {},
+      "requires": {
+        "oidc": {
+          "optional": true,
+          "timeoutSeconds": 300,
+          "wait": "healthy"
+        }
+      },
       "source": "bricks/x-id-api",
       "tags": [
         "api",

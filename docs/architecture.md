@@ -292,7 +292,7 @@ without listing it in `extends` is not detected.
 |---|---|---|
 | Exposure | only the router and the web bricks' pages, loopback / ClusterIP | D9, D17 |
 | Browser origins | the router accepts only the origins it lists (`CORS_ALLOW_ORIGINS`); any other gets 403 and nothing runs | D17 |
-| Authentication | with an `oidc` provider, the router requires a JWT (issuer, audience, RS256, keys from the provider) and each API checks it again; without one, no token | D19, D20 |
+| Authentication | with an `oidc` provider, the router requires a JWT (issuer, audience, RS256, keys from the provider) and each API checks it again (the example APIs and the services `create` writes); without one, no token | D19, D20, D46 |
 | Service identity | one confidential OIDC client per consumer, its own secret, injected by `oidc`; the router forwards the caller's token, and APIs never trust an identity header | D19, D20 |
 | Authorization | with an `oidc` provider and an `authorization` block, each API requires the client role of the operation class (queries, mutations): `FORBIDDEN` / 403 without it; without a block, any valid token; no field-level rule | D20, D22 |
 | Images | pinned to `MAJOR.MINOR` at least, or a digest; the router by digest | `src/image.ts`, `tools.json` |
