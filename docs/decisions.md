@@ -2658,8 +2658,37 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   of any client (Python), reading roles under the token's own `azp` (Go) each made the test fail.
 - **Not tested.** With the router and Keycloak (the role names come from the manifest, as for the examples, D22); a subscription
   (the templates serve none); Kubernetes.
-- **Limits.** The class of operation only: no role per field and no rule per field (`@requiresScopes`), which D45 did in the
-  example APIs. A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
+- **Limits.** The class of operation only; the rules per field came with D49. A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
+
+## D49. The services `create` writes apply the rules of their schema per field (Node, Python, Go)
+
+- **Status:** implemented (2026-11-27). Stage 3, the last of what D45 left for the templates.
+- **Context:** the router applies `@authenticated` and `@requiresScopes` (D42), the example APIs apply them for a call that goes
+  past it (D45); a service made by `create` answered every field to any valid token.
+- **Decision.** The three templates apply the same rules as D45, for every call:
+  a field is resolved only for a caller that satisfies the rule of the field, the rule of the type it returns, the rule of the type
+  it belongs to (a type reached through `_entities` has no field above it) and the rule of the same field on an interface the type
+  implements. A refused field is an error `FORBIDDEN` at its place (`forbidden: this token lacks what <Type>.<field> asks for`),
+  null where the field allows it and the nearest nullable parent where it does not; the status stays 200. With no token check
+  there is no caller, and a protected field is refused (`not authenticated`), as the router does without a provider.
+  - Node: the resolvers of the schema are wrapped (`enforceFieldRules`). Python: a second middleware of ariadne
+    (`field_rules_middleware`), with the status of a result with no data brought back from 400 to 200. Go: `AroundFields` of
+    gqlgen (`RequireFieldRules`), the rules read from the schema the generated code carries.
+  - Nothing is on by default: the schema `create` writes has no rule and imports `@key` only. The author adds
+    `"@authenticated", "@requiresScopes"` to the `@link` import and writes the rules (`docs/guide/capabilities.md`).
+- **Tested.** `e2e-compose` ("the services written by create check the token and the roles"): the three services built from what
+  `create` writes, an item with a rule on its type (`items:read`), and fields asking for `items:secret` or `admin` (OR), for `a`
+  and `b` (AND) and for a verified token: six combinations of scopes, each with the data it allows and one error for each refused
+  field of each item; a token without the scope of the type (the field that returns it is refused, also for `__typename`);
+  the type through `_entities` with and without its scope; no token check: `not authenticated`. The same answers in the three.
+  Removing the rule of the type it belongs to (Node), making the rules of a field "any of them" (Python) and removing the rule of
+  the type a field returns (Go) each made the test fail.
+- **Not tested.** The rule inherited from an interface, in the templates (the example APIs test it, D45), and `@authenticated`
+  refused on its own (a caller always held a token in the test); the router with Keycloak in front of a created service;
+  `@interfaceObject`, subscriptions, Kubernetes. The check in `plugbricks add` that refuses a schema where a rule can be gone around (D43)
+  applies to a created brick as to any.
+- **Limits.** A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
+  What a schema that uses a rule without importing its directive does was not tried in the three languages.
 
 ## Already applied (milestone 2)
 
