@@ -2439,14 +2439,17 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   `LICENSE.txt` of 8.8.4); plugbricks does not distribute it, the platform pulls its official image. Valkey (BSD) would be the
   replacement if that licence is a problem; not tried here.
 - **Tested.** On Docker Compose (`e2e-compose`, two consumers): own keys and objects read; the other consumer's refused, an
-  anonymous request refused, the internal ports closed; the same after a second `up`, after a restart of Redis alone, and after
-  every secret was generated again (the old S3 key refused, the data kept). Removing the prefix limit of Redis, or widening the
-  S3 policy, each made that test fail. By hand: boto3 (multipart upload, presigned link), the AWS SDK for JavaScript (with
-  `forcePathStyle`; without it the name does not resolve), ioredis and node-redis, with the injected variables only. A capture of
-  the traffic of each server for about 150 s from its start showed no name looked up and no address outside the machine's
-  private ranges (Redis was started plainly for the capture, without the brick's script). Golden scenario `generate-stores`.
-- **Not tested here.** Kubernetes: the scenario is in `e2e-k8s`, which only the CI runs. `arm64`. A large volume of data. An
-  upgrade of either image over existing data.
+  anonymous request refused, connections to the internal ports refused; the same after a second `up`, after a restart of Redis
+  alone, and after every secret was generated again (the old S3 key refused, the data kept). Removing the prefix limit of
+  Redis, widening the S3 policy, or binding the internal servers to every address, each made that test fail. On a local k3d
+  cluster (k3s v1.37.2, `e2e-k8s`): the same reads and refusals, the internal ports tried on the pod's own address (the
+  Service forwards the S3 port only), and the data after `down` then `up`. By hand: boto3 (multipart upload, presigned link),
+  the AWS SDK for JavaScript (with `forcePathStyle`; without it the name does not resolve), ioredis and node-redis, with the
+  injected variables only. A capture of the traffic of each server for about 150 s from its start showed no name looked up and
+  no address outside the machine's private ranges (Redis was started plainly for the capture, without the brick's script).
+  Golden scenario `generate-stores`.
+- **Not tested.** `arm64`. A large volume of data. An upgrade of either image over existing data. On Kubernetes, a change of
+  the secrets and a restart of one server alone.
 - **Limits.** A consumer can list the names of other consumers' Redis keys (`SCAN`) and channels, not read them; no memory
   quota. SeaweedFS: one server, no replication; its internal servers trust anything inside its own container; requests can wait
   about 20 s after a restart of the server alone while it is reported healthy (seen: 16 and 23 s); a consumer's name must be a

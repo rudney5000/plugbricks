@@ -592,7 +592,19 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       };
       writeStores(exec);
       readStores(exec);
-      checkIsolation(exec);
+      const address = kc([
+        "--namespace",
+        ns,
+        "get",
+        "pods",
+        "--selector",
+        "plugbricks/service=seaweedfs-s3",
+        "--output",
+        "jsonpath={.items[0].status.podIP}",
+      ]);
+      expect(address.status, address.stderr).toBe(0);
+      expect(address.stdout).toMatch(/^\d+(\.\d+){3}$/);
+      checkIsolation(exec, address.stdout);
 
       // down keeps both volumes; up finds the data again.
       expect(cli(work, ["down"]).code).toBe(0);

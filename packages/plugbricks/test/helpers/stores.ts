@@ -31,8 +31,12 @@ export function readStores(exec: Exec): void {
   }
 }
 
-/** store-a reaches nothing of store-b, administers nothing, and nothing answers a request without credentials. */
-export function checkIsolation(exec: Exec): void {
+/**
+ * store-a reaches nothing of store-b, administers nothing, and nothing answers a request without credentials.
+ * `server` is the address of the SeaweedFS container itself on the platform network: the service name on Compose, the
+ * pod's IP on Kubernetes (its Service forwards the S3 port only, so it would hide what the container listens on).
+ */
+export function checkIsolation(exec: Exec, server: string): void {
   const a = (script: string) => exec("store-a", "cli", script);
   for (const refused of [
     "GET store-b:greeting",
@@ -58,8 +62,10 @@ export function checkIsolation(exec: Exec): void {
   expect(exec("store-a", "curl", `curl -sS -m 10 -o /dev/null -w '%{http_code}' ${object("store-a")}`)).toBe("403");
   // The list of buckets holds its own only.
   expect(exec("store-a", "curl", `${signed('"$AWS_ENDPOINT_URL_S3/"')} >/dev/null; grep -o '<Name>[^<]*' /tmp/body`)).toBe("<Name>store-a");
-  // The master, volume and filer servers, which ask for no key, listen inside the container only.
-  for (const port of [9333, 8080, 8888, 18888]) {
-    expect(exec("store-a", "curl", `curl -sS -m 5 -o /dev/null http://seaweedfs-s3:${port}/ 2>/dev/null; echo $?`), `${port}`).toBe("7");
-  }
+  // The master, volume and filer servers, which ask for no key, listen inside the container only: connections to them
+  // are refused (curl exit 7), while the S3 port of the same address answers.
+  const connect = (port: number) =>
+    exec("store-a", "curl", `curl -sS -m 5 -o /dev/null http://${server}:${port}/healthz 2>/dev/null; echo $?`);
+  expect(connect(8333), "the S3 port, to prove the address is the server's").toBe("0");
+  for (const port of [9333, 19333, 8080, 18080, 8888, 18888]) expect(connect(port), `${port}`).toBe("7");
 }

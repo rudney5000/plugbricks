@@ -1036,7 +1036,7 @@ describe("the cache and object-storage capabilities (D41)", () => {
       up();
       writeStores(exec);
       readStores(exec);
-      checkIsolation(exec);
+      checkIsolation(exec, "seaweedfs-s3");
       expect(containersOf(name, "--format", "{{.Ports}}")).not.toContain("->");
 
       // A second up runs the provision tasks again.
