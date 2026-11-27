@@ -44,7 +44,7 @@
       ]
     },
     "shipping-api": {
-      "integrity": "sha256-fbcd803cde29a3ee90a5412c3d81bc3b3a93b5725d2df3bfe4c065c693dce090",
+      "integrity": "sha256-ddeb1bb33d7eaf62885283bebeb364d635860eb269b317afffc977c90897f6b2",
       "provides": [],
       "requires": {
         "database": {
@@ -76,7 +76,7 @@
       "version": "0.68.2"
     },
     "routerCompatibilityVersion": "1",
-    "schemaSha256": "0ae549a35f5e03d034469210f8cf3f69416bd08c72871c65d161778fe2d77b4c",
+    "schemaSha256": "07d7b1beb7e62e6b4a6ec9a36c40a7e1a5afbf25bde3a98815484902729eb0c6",
     "subgraphs": [
       "orders-api",
       "shipping-api"

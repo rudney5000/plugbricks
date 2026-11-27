@@ -142,7 +142,7 @@ footer{margin-top:16px;font-size:13px;color:var(--muted);line-height:1.6}
 <button id="refresh" type="button">Refresh</button>
 <footer>
 <div id="status">Rendered by the server through the router (GRAPHQL_URL), with its own token when the platform checks tokens.</div>
-<div>Served by the <b>orders-web</b> brick. Its data comes from the router${publicGraphql ? ` at <code>${escapeHtml(publicGraphql)}</code>` : ""}: the order fields from <b>orders</b>, the shipment from <b>shipping</b>.</div>
+<div>Served by the <b>orders-web</b> brick. Its data comes from the router${publicGraphql ? ` at <code>${escapeHtml(publicGraphql)}</code>` : ""}: the order fields from <b>orders-api</b>, the shipment from <b>shipping-api</b>.</div>
 </footer>
 </main>
 <script>${BROWSER_SCRIPT}</script>

@@ -278,7 +278,7 @@ describe("the router in front of orders and shipping", () => {
   const ORDER = "query($id: ID!) { order(id: $id) { id total status shipment { carrier trackingNumber status } } }";
 
   it.skipIf(!ready)(
-    `serves one graph from two services: the order from orders and its shipment from shipping, in a single request${why}`,
+    `serves one graph from two services: the order from orders-api and its shipment from shipping-api, in a single request${why}`,
     async () => {
       buildExampleApis();
       work = project(name, []);
