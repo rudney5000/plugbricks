@@ -33,9 +33,20 @@ func main() {
 	api.Use(extension.Introspection{})
 	api.SetErrorPresenter(graph.MaskErrors)
 
+	// With the platform's oidc provider (OIDC_* set): no valid token, no GraphQL, even past the router. See auth.go.
+	requireToken, err := RequireToken()
+	if err != nil {
+		log.Fatalf("{{name}}: %v", err)
+	}
+	var graphqlHandler http.Handler = api
+	if requireToken != nil {
+		graphqlHandler = requireToken(api)
+		log.Printf("{{name}}: requests need a token from %s", os.Getenv("OIDC_ISSUER"))
+	}
+
 	// GraphQL on /graphql, and /health, which the brick's health check calls. Nothing else is served.
 	mux := http.NewServeMux()
-	mux.Handle("/graphql", api)
+	mux.Handle("/graphql", graphqlHandler)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("content-type", "text/plain")
 		_, _ = w.Write([]byte("ok\n"))

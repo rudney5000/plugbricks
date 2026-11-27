@@ -10,6 +10,7 @@ import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
 import { exampleImage } from "./helpers/images.js";
 import { checkIsolation, readStores, writeStores, type Exec } from "./helpers/stores.js";
+import { AUDIENCE, cases, ISSUER, makeKeys, post, startLab, startService, untilHealthy } from "./helpers/token-lab.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
 // down. Skipped, with the reason in the title, where no Linux Docker engine answers (macOS and
@@ -1164,6 +1165,84 @@ describe("bricks written by create", () => {
       expect(cli(work, ["down"]).code).toBe(0);
     },
     600_000,
+  );
+});
+
+// The services create writes check the token themselves (D46), in Node, Python and Go: the same answers to the same
+// tokens, made here and published as a JWKS by a busybox of the container network, with no router and no Keycloak.
+describe("the services written by create check the token (D46)", () => {
+  const name = "pbtest-token";
+
+  it.skipIf(!ready)(
+    `answer alike in Node, Python and Go: 401 without a valid token, 200 with one, /health open${why}`,
+    async () => {
+      const work = project(name, []);
+      expect(cli(work, ["init", "--name", name]).code).toBe(0);
+      const images: Record<string, string> = {};
+      for (const [brick, lang] of [
+        ["tnode", "node"],
+        ["tpython", "python"],
+        ["tgo", "go"],
+      ]) {
+        const r = cli(work, ["create", brick, "--kind", "api", "--lang", lang]);
+        expect(r.code, r.err).toBe(0);
+        const line = /^ {2}(docker build .*)$/m.exec(r.out)![1];
+        const [cmd, ...args] = line.split(" ");
+        const b = spawnSync(cmd, args, { cwd: work, encoding: "utf8" });
+        expect(b.status, `${line}\n${b.stderr}`).toBe(0);
+        images[lang] = `${name}/${brick}-api:0.1.0`;
+      }
+      // A created brick asks for oidc when there is a provider, and works as before when there is none (D19).
+      expect(JSON.parse(readFileSync(join(work, "bricks/tnode-api/plugin.json"), "utf8")).requires).toEqual({
+        oidc: { optional: true, timeoutSeconds: 300 },
+      });
+
+      const keys = makeKeys("k1");
+      const lab = startLab(name, join(workRoot, `${name}-jwks`), keys.jwks);
+      const running: { stop(): void }[] = [];
+      try {
+        const env = { OIDC_ISSUER: ISSUER, OIDC_JWKS_URL: lab.jwksUrl, OIDC_AUDIENCE: AUDIENCE };
+        for (const [lang, image] of Object.entries(images)) {
+          // Without a provider (none of OIDC_* set): no check, as before.
+          const open = startService(lab, `${name}-${lang}-open`, image, {});
+          running.push(open);
+          await untilHealthy(open);
+          expect((await post(open.base)).status, `${lang} without a provider`).toBe(200);
+          open.stop();
+
+          // Some of OIDC_* and not all: it refuses to start, and names what is missing, never a value.
+          const partial = startService(lab, `${name}-${lang}-partial`, image, { OIDC_ISSUER: ISSUER });
+          running.push(partial);
+          let logs = "";
+          for (let i = 0; i < 60 && !/missing/.test(logs); i++) {
+            await new Promise((r) => setTimeout(r, 500));
+            logs = partial.logs();
+          }
+          expect(logs, `${lang} with a partial configuration`).toContain("missing OIDC_JWKS_URL, OIDC_AUDIENCE");
+          expect(logs).not.toContain(ISSUER.replace("http://", "")); // the issuer was set: it is not what the message says
+          partial.stop();
+
+          const svc = startService(lab, `${name}-${lang}`, image, env);
+          running.push(svc);
+          await untilHealthy(svc);
+          expect((await fetch(`${svc.base}/health`)).status, `${lang} /health`).toBe(200);
+          for (const [what, authorization, status] of cases(keys)) {
+            const r = await post(svc.base, authorization);
+            expect(r.status, `${lang}: ${what}`).toBe(status);
+            if (status === 401) {
+              expect(r.body, `${lang}: ${what}`).toBe('{"errors":[{"message":"unauthorized"}]}');
+              expect(r.challenge).toBe('Bearer realm="plugbricks"');
+            } else expect(JSON.parse(r.body), `${lang}: ${what}`).toEqual({ data: { __typename: "Query" } });
+          }
+          svc.stop();
+        }
+        console.log("created services: Node, Python and Go give the same answers to 15 kinds of token");
+      } finally {
+        for (const s of running) s.stop();
+        lab.stop();
+      }
+    },
+    900_000,
   );
 });
 

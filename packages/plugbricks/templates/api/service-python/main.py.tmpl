@@ -4,7 +4,9 @@ Its schema is bricks/{{name}}/schema.graphql, the one the platform composes; the
 Dockerfile). Replace the items below with your own data.
 """
 
+import asyncio
 import os
+import sys
 from pathlib import Path
 
 import uvicorn
@@ -13,6 +15,8 @@ from ariadne.asgi import GraphQL
 from ariadne.contrib.federation import FederatedObjectType, make_federated_schema
 from ariadne.explorer import ExplorerHttp405
 from graphql import GraphQLError
+
+from auth import token_check_from_env
 
 ITEMS = [{"id": "1", "name": "first"}, {"id": "2", "name": "second"}]
 
@@ -40,7 +44,23 @@ def format_masked(error, debug=False):
 
 
 schema = make_federated_schema((Path(__file__).parent / "schema.graphql").read_text(), query, item)
-graphql = GraphQL(schema, explorer=ExplorerHttp405(), error_formatter=format_masked)
+
+# With the platform's oidc provider (OIDC_* set): no valid token, no GraphQL, even past the router. See auth.py.
+try:
+    check_token = token_check_from_env(os.environ)
+except ValueError as e:
+    print(f"{{name}}: {e}", file=sys.stderr, flush=True)
+    sys.exit(1)
+if check_token:
+    print(f"{{name}}: requests need a token from {os.environ['OIDC_ISSUER']}", flush=True)
+
+
+def context_value(request, _data):
+    """A resolver finds the caller in its context: info.context["caller"], None without a token check."""
+    return {"request": request, "caller": request.scope.get("caller")}
+
+
+graphql = GraphQL(schema, context_value=context_value, explorer=ExplorerHttp405(), error_formatter=format_masked)
 
 
 async def app(scope, receive, send):
@@ -48,6 +68,17 @@ async def app(scope, receive, send):
     if scope["type"] != "http":
         return
     if scope["path"] == "/graphql":
+        if check_token:
+            header = next((v.decode("latin-1") for k, v in scope["headers"] if k == b"authorization"), None)
+            # The keys are fetched over the network, which blocks: off the event loop.
+            caller = await asyncio.to_thread(check_token, header)
+            if caller is None:
+                body = b'{"errors":[{"message":"unauthorized"}]}'
+                headers = [(b"content-type", b"application/json"), (b"www-authenticate", b'Bearer realm="plugbricks"')]
+                await send({"type": "http.response.start", "status": 401, "headers": headers})
+                await send({"type": "http.response.body", "body": body})
+                return
+            scope["caller"] = caller
         await graphql(scope, receive, send)
         return
     status, body = (200, b"ok\n") if scope["path"] == "/health" else (404, b"not found\n")
