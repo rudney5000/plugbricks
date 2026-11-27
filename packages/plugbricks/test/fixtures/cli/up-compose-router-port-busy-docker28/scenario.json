@@ -1,0 +1,46 @@
+{
+  "description": "Docker 28 words a busy port differently; the container that could not bind is removed, so that the next up does not start it with no port (D47)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "exit": 1,
+      "codes": [
+        "HOST_PORT_BUSY"
+      ],
+      "stderr": "change router.port in platform.json",
+      "fake": [
+        {
+          "match": " up --detach",
+          "status": 1,
+          "stderr": "Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint demo-router-1 (aa11): failed to bind host port 127.0.0.1:4000/tcp: address already in use"
+        }
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env rm --stop --force router"
+      ]
+    }
+  ]
+}

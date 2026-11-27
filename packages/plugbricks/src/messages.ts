@@ -37,6 +37,8 @@ export const MESSAGES = {
   // Runtime (generate, up, down).
   HOST_PORT_BUSY:
     "port {port} on 127.0.0.1, where this platform publishes {what}, is already used by another program or platform; change {field} in platform.json, then run up again",
+  HOST_PORT_NOT_PUBLISHED:
+    "{what} runs, but port {port} on 127.0.0.1 is not published: another program or platform holds it, or held it when the container started. The container was removed; free the port or change {field} in platform.json, then run up again",
   WAIT_TIMEOUT: '"{consumer}" gave up waiting for capability "{capability}" from "{provider}" after {timeoutSeconds}s',
   RUNTIME_NAME_CONFLICT:
     'the {first} and the {second} would both be named "{name}" in the runtime; rename one of the bricks, services, volumes or capabilities',

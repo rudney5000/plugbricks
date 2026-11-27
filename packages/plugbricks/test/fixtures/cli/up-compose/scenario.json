@@ -26,7 +26,8 @@
       ],
       "commands": [
         "docker compose version",
-        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420"
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env ps --format json"
       ],
       "stdout": "Platform demo is up (compose): 2 service(s)"
     }
