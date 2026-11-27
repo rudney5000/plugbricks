@@ -143,15 +143,28 @@ export async function untilHealthy(svc: Running, seconds = 60): Promise<void> {
   throw new Error(`the service did not answer /health in ${seconds}s:\n${svc.logs()}`);
 }
 
-/** POSTs a query to /graphql, with an Authorization header or without. */
-export async function post(base: string, authorization?: string): Promise<{ status: number; body: string; challenge: string | null }> {
+/** POSTs a query to /graphql (a trivial one by default), with an Authorization header or without. */
+export async function post(
+  base: string,
+  authorization?: string,
+  o: { query?: string; operationName?: string } = {},
+): Promise<{ status: number; body: string; challenge: string | null }> {
   const r = await fetch(`${base}/graphql`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(authorization ? { authorization } : {}) },
-    body: JSON.stringify({ query: "{ __typename }" }),
+    body: JSON.stringify({ query: o.query ?? "{ __typename }", ...(o.operationName ? { operationName: o.operationName } : {}) }),
     signal: AbortSignal.timeout(15_000),
   });
   return { status: r.status, body: await r.text(), challenge: r.headers.get("www-authenticate") };
+}
+
+/** GETs a query from /graphql: what a service that reads queries from the URL must not let past its roles. */
+export async function getQuery(base: string, authorization: string, query: string): Promise<{ status: number; body: string }> {
+  const r = await fetch(`${base}/graphql?query=${encodeURIComponent(query)}`, {
+    headers: { authorization },
+    signal: AbortSignal.timeout(15_000),
+  });
+  return { status: r.status, body: await r.text() };
 }
 
 /** What a service must answer to each token: [what it is, the Authorization header, the HTTP status]. */

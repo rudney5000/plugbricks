@@ -10,7 +10,7 @@ import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { get, through, until } from "./helpers/graphql.js";
 import { exampleImage } from "./helpers/images.js";
 import { checkIsolation, readStores, writeStores, type Exec } from "./helpers/stores.js";
-import { AUDIENCE, cases, ISSUER, makeKeys, post, startLab, startService, untilHealthy } from "./helpers/token-lab.js";
+import { AUDIENCE, cases, claims, getQuery, ISSUER, makeKeys, post, startLab, startService, untilHealthy } from "./helpers/token-lab.js";
 
 // Runs the Compose driver against the real Docker: provisioning, secret injection, WAIT_TIMEOUT,
 // down. Skipped, with the reason in the title, where no Linux Docker engine answers (macOS and
@@ -1168,9 +1168,46 @@ describe("bricks written by create", () => {
   );
 });
 
-// The services create writes check the token themselves (D46), in Node, Python and Go: the same answers to the same
-// tokens, made here and published as a JWKS by a busybox of the container network, with no router and no Keycloak.
-describe("the services written by create check the token (D46)", () => {
+// What a service gets added to answer a mutation: the template has none, and the roles of a class need one to be tried.
+function addMutation(work: string, brick: string, lang: string): void {
+  const schema = join(work, "bricks", brick, "schema.graphql");
+  writeFileSync(schema, `${readFileSync(schema, "utf8")}\ntype Mutation {\n  touch: Boolean!\n}\n`);
+  const edit = (file: string, change: (text: string) => string) => {
+    const path = join(work, "services", brick, file);
+    const before = readFileSync(path, "utf8");
+    const after = change(before);
+    expect(after, `${file} must change`).not.toBe(before);
+    writeFileSync(path, after);
+  };
+  if (lang === "node") edit("src/main.ts", (t) => t.replace("  Query: {", "  Mutation: { touch: () => true },\n  Query: {"));
+  if (lang === "python")
+    edit("main.py", (t) =>
+      t
+        .replace("import QueryType,", "import MutationType, QueryType,")
+        .replace(
+          "query = QueryType()",
+          'query = QueryType()\nmutation = MutationType()\n\n\n@mutation.field("touch")\ndef resolve_touch(*_):\n    return True\n',
+        )
+        .replace("query, item)", "query, mutation, item)"),
+    );
+  if (lang === "go")
+    edit(
+      "graph/resolver.go",
+      (t) =>
+        `${t}
+func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
+
+type mutationResolver struct{ *Resolver }
+
+func (r *mutationResolver) Touch(_ context.Context) (bool, error) { return true, nil }
+`,
+    );
+}
+
+// The services create writes check the token themselves (D46) and the roles of a class of operation (D22, stage 2), in
+// Node, Python and Go: the same answers to the same tokens, made here and published as a JWKS by a busybox of the container
+// network, with no router and no Keycloak.
+describe("the services written by create check the token (D46) and the roles (D22)", () => {
   const name = "pbtest-token";
 
   it.skipIf(!ready)(
@@ -1186,6 +1223,7 @@ describe("the services written by create check the token (D46)", () => {
       ]) {
         const r = cli(work, ["create", brick, "--kind", "api", "--lang", lang]);
         expect(r.code, r.err).toBe(0);
+        addMutation(work, `${brick}-api`, lang);
         const line = /^ {2}(docker build .*)$/m.exec(r.out)![1];
         const [cmd, ...args] = line.split(" ");
         const b = spawnSync(cmd, args, { cwd: work, encoding: "utf8" });
@@ -1193,9 +1231,10 @@ describe("the services written by create check the token (D46)", () => {
         images[lang] = `${name}/${brick}-api:0.1.0`;
       }
       // A created brick asks for oidc when there is a provider, and works as before when there is none (D19).
-      expect(JSON.parse(readFileSync(join(work, "bricks/tnode-api/plugin.json"), "utf8")).requires).toEqual({
-        oidc: { optional: true, timeoutSeconds: 300 },
-      });
+      const manifest = JSON.parse(readFileSync(join(work, "bricks/tnode-api/plugin.json"), "utf8"));
+      expect(manifest.requires).toEqual({ oidc: { optional: true, timeoutSeconds: 300 } });
+      // No role by default: a created brick answers to any valid token until its author writes an "authorization" block.
+      expect(manifest.authorization).toBeUndefined();
 
       const keys = makeKeys("k1");
       const lab = startLab(name, join(workRoot, `${name}-jwks`), keys.jwks);
@@ -1235,8 +1274,91 @@ describe("the services written by create check the token (D46)", () => {
             } else expect(JSON.parse(r.body), `${lang}: ${what}`).toEqual({ data: { __typename: "Query" } });
           }
           svc.stop();
+
+          // Roles (D22): the platform gives AUTHORIZATION_*_ROLE and OIDC_CLIENT_ID; the service reads them.
+          const bad = (extra: Record<string, string>) => startService(lab, `${name}-${lang}-bad`, image, { ...env, ...extra });
+          for (const [what, extra, said] of [
+            [
+              "roles without the token check",
+              { OIDC_ISSUER: "", OIDC_JWKS_URL: "", OIDC_AUDIENCE: "", AUTHORIZATION_QUERIES_ROLE: "read" },
+              "there is no token check",
+            ],
+            ["roles without their client", { AUTHORIZATION_QUERIES_ROLE: "read" }, "OIDC_CLIENT_ID"],
+          ] as const) {
+            const refused = bad(extra);
+            running.push(refused);
+            let said_ = "";
+            for (let i = 0; i < 60 && !said_.includes(said); i++) {
+              await new Promise((r) => setTimeout(r, 500));
+              said_ = refused.logs();
+            }
+            expect(said_, `${lang}: ${what}`).toContain(said);
+            expect(said_).toContain("incomplete authorization configuration");
+            refused.stop();
+          }
+
+          const client = "svc";
+          const guarded = startService(lab, `${name}-${lang}-roles`, image, {
+            ...env,
+            OIDC_CLIENT_ID: client,
+            AUTHORIZATION_QUERIES_ROLE: "read",
+            AUTHORIZATION_MUTATIONS_ROLE: "write",
+          });
+          running.push(guarded);
+          await untilHealthy(guarded);
+          const token = (extra: Record<string, unknown>) => `Bearer ${keys.sign(claims(extra))}`;
+          const holding = (...roles: string[]) => token({ resource_access: { [client]: { roles } } });
+          const query = "{ __typename }";
+          const mutation = "mutation { touch }";
+          const both = "query Q { __typename } mutation M { touch }";
+          const forbidden = (class_: string) => `forbidden: this token does not carry the role "${class_}" of client "${client}"`;
+          const refusedWith = async (what: string, authorization: string, o: { query: string; operationName?: string }, role: string) => {
+            const r = await post(guarded.base, authorization, o);
+            expect(r.status, `${lang}: ${what}`).toBe(403);
+            const body = JSON.parse(r.body);
+            expect(body.errors, `${lang}: ${what}`).toHaveLength(1);
+            expect(body.errors[0].message, `${lang}: ${what}`).toBe(forbidden(role));
+            expect(body.errors[0].extensions.code, `${lang}: ${what}`).toBe("FORBIDDEN");
+            expect(body.data ?? null, `${lang}: ${what}`).toBeNull();
+          };
+          const allowed = async (what: string, authorization: string, o: { query: string; operationName?: string }, data: object) => {
+            const r = await post(guarded.base, authorization, o);
+            expect(r.status, `${lang}: ${what}`).toBe(200);
+            expect(JSON.parse(r.body), `${lang}: ${what}`).toEqual({ data });
+          };
+
+          // Not a valid token is still 401, with or without roles.
+          expect((await post(guarded.base)).status, `${lang}: no token, with roles`).toBe(401);
+          // The role of the class, and only that one.
+          await refusedWith("no role: a query", holding(), { query }, "read");
+          await refusedWith("no role: a mutation", holding(), { query: mutation }, "write");
+          await refusedWith("no resource_access at all", token({}), { query }, "read");
+          await allowed("read: a query", holding("read"), { query }, { __typename: "Query" });
+          await refusedWith("read: a mutation", holding("read"), { query: mutation }, "write");
+          await refusedWith("write: a query", holding("write"), { query }, "read");
+          await allowed("write: a mutation", holding("write"), { query: mutation }, { touch: true });
+          await allowed("both: a query", holding("read", "write"), { query }, { __typename: "Query" });
+          await allowed("both: a mutation", holding("read", "write"), { query: mutation }, { touch: true });
+          // What does not count: the role of another client, a realm role, a claim that is not a list of strings.
+          await refusedWith(
+            "the role of another client",
+            token({ resource_access: { other: { roles: ["read", "write"] } } }),
+            { query },
+            "read",
+          );
+          await refusedWith("a realm role", token({ realm_access: { roles: ["read", "write"] } }), { query }, "read");
+          await refusedWith("roles that are a string", token({ resource_access: { [client]: { roles: "read" } } }), { query }, "read");
+          await refusedWith("roles that are numbers", token({ resource_access: { [client]: { roles: [1, 2] } } }), { query }, "read");
+          // The operation that runs decides, not the document: two operations, one chosen.
+          await allowed("two operations, the query chosen", holding("read"), { query: both, operationName: "Q" }, { __typename: "Query" });
+          await refusedWith("two operations, the mutation chosen", holding("read"), { query: both, operationName: "M" }, "write");
+          // A query read from the URL goes through the same rule.
+          const viaUrl = await getQuery(guarded.base, holding(), query);
+          expect(viaUrl.body, `${lang}: a query in the URL without the role`).not.toContain("Query");
+          expect(viaUrl.status, `${lang}: a query in the URL without the role`).not.toBe(200);
+          guarded.stop();
         }
-        console.log("created services: Node, Python and Go give the same answers to 15 kinds of token");
+        console.log("created services: Node, Python and Go give the same answers to 15 kinds of token and to the roles of each class");
       } finally {
         for (const s of running) s.stop();
         lab.stop();
