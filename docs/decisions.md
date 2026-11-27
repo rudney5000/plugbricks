@@ -2683,12 +2683,35 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   the type through `_entities` with and without its scope; no token check: `not authenticated`. The same answers in the three.
   Removing the rule of the type it belongs to (Node), making the rules of a field "any of them" (Python) and removing the rule of
   the type a field returns (Go) each made the test fail.
-- **Not tested.** The rule inherited from an interface, in the templates (the example APIs test it, D45), and `@authenticated`
-  refused on its own (a caller always held a token in the test); the router with Keycloak in front of a created service;
-  `@interfaceObject`, subscriptions, Kubernetes. The check in `plugbricks add` that refuses a schema where a rule can be gone around (D43)
-  applies to a created brick as to any.
+- **Not tested.** `@authenticated` refused on its own (a caller always held a token in the test); `@interfaceObject`,
+  subscriptions. The rule of an interface, the router with Keycloak and Kubernetes: since covered, see D50. The check in
+  `plugbricks add` that refuses a schema where a rule can be gone around (D43) applies to a created brick as to any.
 - **Limits.** A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
   What a schema that uses a rule without importing its directive does was not tried in the three languages.
+
+## D50. The created services, tried with an interface, behind the router and Keycloak, and on k3d
+
+- **Status:** tests added (2026-11-27). No change to the product.
+- **Context:** D46 to D49 were tried on the services alone, with a JWKS and made-up tokens, on Docker Compose.
+- **Decision.** Three tests close the gaps:
+  - `e2e-compose` (the created services, D46 to D49): the item now implements an interface whose field has a rule of its own
+    (`@requiresScopes` on the interface, none on the type's field): refused without that scope, given with it, in the three
+    languages. Removing the interface rule in each language made the test fail.
+  - `e2e-oidc`: a Node service written by `create`, given roles and rules, behind the router and the `keycloak` brick, with a
+    caller brick of its own. The caller's token holds the role of the queries on the service's client and the two scopes its
+    dependency lists (D22, D44), and no other; the router gives and redacts the fields; the service applies the same rules
+    to a call from its own container; a mutation is refused until the operator grants the role with `kcadm`, then passes with a
+    token asked afterwards. Letting every role through, or protecting no field in the service, made the test fail.
+  - `e2e-k8s`: the same scenario on k3d, the service's image imported into the cluster, the router and Keycloak reached
+    through port-forwards. Letting every role through made it fail.
+- **Observed.** The router asks the subgraph for a protected field and then redacts it: with a service that applies the rules,
+  the answer carries the router's `UNAUTHORIZED_FIELD_OR_TYPE` errors and, inside its `Failed to fetch from Subgraph` error, the
+  service's `FORBIDDEN` ones. The data is the same with or without the second.
+- **Not tested.** The Python and Go services behind the router, Keycloak or on k3d (their token check, roles and rules are
+  tried alone, on Docker Compose); a rule on an interface behind the router (`plugbricks add` refuses the schema of the first
+  test, D43); `@authenticated` refused on its own.
+- **Limit.** On the first run of one mutation on k3d, `up` failed for a reason that was not kept; the same run, and the healthy
+  one, passed or failed as expected afterwards.
 
 ## Already applied (milestone 2)
 

@@ -9,6 +9,7 @@ import { schemaIssues, statusRuntimeSchema } from "../src/schemas.js";
 import { ask, get, through, until, type Answer } from "./helpers/graphql.js";
 import { k8sTestTarget } from "./helpers/k8s-guard.js";
 import { freePort, portForward, stopAllForwards } from "./helpers/port-forward.js";
+import { shape } from "./helpers/created-service.js";
 import { exampleImage } from "./helpers/images.js";
 import { checkIsolation, readStores, writeStores, type Exec } from "./helpers/stores.js";
 
@@ -1231,5 +1232,228 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(names(ns, "deployment")).toEqual([]);
     },
     900_000,
+  );
+  // D46 to D49 on a cluster: a service written by create, in front of which the router and Keycloak are, with the roles of its
+  // manifest and the rules of its schema. The same checks as on Docker Compose (e2e-oidc.test.ts), through port-forwards.
+  it.skipIf(!ready)(
+    `a service written by create applies the roles and the rules of its schema behind the router and Keycloak (D46 to D49)${why}`,
+    async () => {
+      loadImage("keycloak");
+      const ns = "pbtest-k8s-stock";
+      const work = project(ns, []);
+      cpSync(join(pkg, "examples", "keycloak"), join(work, "keycloak"), { recursive: true });
+      expect(cli(work, ["init", "--name", ns]).code).toBe(0);
+      const created = cli(work, ["create", "stock", "--kind", "api", "--lang", "node"]);
+      expect(created.code, created.err).toBe(0);
+      // create installed it as written; it is added again below, once its schema and its manifest are changed.
+      expect(cli(work, ["remove", "stock-api"]).code).toBe(0);
+      const { field } = shape(work, "stock-api", "node", { withInterface: false });
+      const image = `${ns}/stock-api:0.1.0`;
+      const build = spawnSync("docker", ["build", "--quiet", "-t", image, "-f", "services/stock-api/Dockerfile", "."], {
+        cwd: work,
+        encoding: "utf8",
+      });
+      expect(build.status, build.stderr).toBe(0);
+      const imported = spawnSync(k3d, ["image", "import", image, "--cluster", target.ok ? target.cluster : ""], { encoding: "utf8" });
+      expect(imported.status, imported.stderr).toBe(0);
+      const manifestFile = join(work, "bricks/stock-api/plugin.json");
+      const manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
+      manifest.authorization = { queries: "stock:read", mutations: "stock:write" };
+      writeFileSync(manifestFile, JSON.stringify(manifest, null, 2) + "\n");
+      // A caller that holds a client of its own in Keycloak, the role of the queries and two scopes of the schema.
+      mkdirSync(join(work, "bricks/caller"), { recursive: true });
+      writeFileSync(
+        join(work, "bricks/caller/plugin.json"),
+        JSON.stringify({
+          name: "caller",
+          version: "0.1.0",
+          description: "Holds a client of its own in Keycloak, for the test.",
+          services: [{ name: "app", image: "busybox:1.36", port: 8080, args: ["sleep", "86400"], healthcheck: { exec: ["true"] } }],
+          requires: { oidc: {} },
+          dependencies: [{ plugin: "stock-api", operations: ["queries"], scopes: ["items:read", "items:secret"] }],
+        }),
+      );
+      for (const args of [
+        ["add", "postgres"],
+        ["add", "keycloak"],
+        ["add", "stock-api"],
+        ["add", "caller"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+      // The issuer the tokens carry is Keycloak's web origin: the local port of its forward must be its webPort.
+      const kcPort = await freePort();
+      const file = join(work, "platform.json");
+      const platform = JSON.parse(readFileSync(file, "utf8"));
+      platform.bricks.keycloak.webPort = kcPort;
+      writeFileSync(file, JSON.stringify(platform, null, 2) + "\n");
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+
+      const secretOf = (key: string) => {
+        const line = readFileSync(join(work, ".secrets/secrets.env"), "utf8")
+          .split("\n")
+          .find((l) => l.startsWith(`${key}=`));
+        expect(line, key).toBeDefined();
+        return line!.slice(key.length + 1);
+      };
+      const keycloak = await portForward({
+        kubectl: "kubectl",
+        clusterArgs: ["--kubeconfig", kubeconfig, "--context", context, "--namespace", ns],
+        service: "keycloak-app",
+        servicePort: 8080,
+        localPort: kcPort,
+      });
+      const router = await forward(ns, "router", 4000);
+      try {
+        const callerToken = async () => {
+          const asked = await fetch(`http://127.0.0.1:${kcPort}/realms/plugbricks/protocol/openid-connect/token`, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "client_credentials",
+              client_id: "caller",
+              client_secret: secretOf("PB_KEYCLOAK__CALLER__CLIENT_SECRET"),
+            }),
+          });
+          expect(asked.status).toBe(200);
+          return ((await asked.json()) as { access_token: string }).access_token;
+        };
+        const graphql = async (query: string, bearer?: string) => {
+          const r = await fetch(`http://127.0.0.1:${router.port}/graphql`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
+            body: JSON.stringify({ query }),
+          });
+          const text = await r.text();
+          return {
+            status: r.status,
+            text,
+            body: JSON.parse(text) as {
+              data?: Record<string, unknown> | null;
+              errors?: { path?: unknown[]; extensions?: { code?: string } }[];
+            },
+          };
+        };
+        const token = await callerToken();
+        const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+        // D22 and D44: the role of the queries on the client of the service, and the scopes the dependency lists.
+        expect(claims.resource_access["stock-api"]).toEqual({ roles: ["stock:read"] });
+        expect(String(claims.scope).split(" ")).toEqual(expect.arrayContaining(["items:read", "items:secret"]));
+        for (const other of ["admin", "a", "b", "items:tag"]) expect(String(claims.scope).split(" ")).not.toContain(other);
+
+        await until("the router through the forward", async () => (await get(router.port, "/health/ready")) === 200);
+        await until(
+          "the router to answer with a token",
+          async () => {
+            const r = await graphql(`{ ${field} { id } }`, token);
+            return r.status === 200 && !r.body?.errors?.length;
+          },
+          120_000,
+        );
+        expect((await graphql(`{ ${field} { id } }`)).status).toBe(401);
+
+        // The rules per field, through the router: items:read and items:secret are held, a and b (pair) are not.
+        const ask = `{ ${field} { id name secret pair known } }`;
+        const answer = await graphql(ask, token);
+        expect(answer.status, answer.text).toBe(200);
+        const items = answer.body.data?.[field] as {
+          id: string;
+          name: string;
+          secret: string | null;
+          pair: string | null;
+          known: string;
+        }[];
+        expect(
+          items.map((i) => [i.id, i.name, i.secret, i.pair, i.known]),
+          answer.text,
+        ).toEqual([
+          ["1", "first", "s1", null, "k1"],
+          ["2", "second", "s2", null, "k2"],
+        ]);
+        const redacted = (answer.body.errors ?? []).filter((e) => e.extensions?.code === "UNAUTHORIZED_FIELD_OR_TYPE");
+        expect(
+          redacted.map((e) => e.path),
+          answer.text,
+        ).toEqual([
+          [field, 0, "pair"],
+          [field, 1, "pair"],
+        ]);
+        expect(answer.text).toContain("forbidden: this token lacks what StockItem.pair asks for");
+
+        // Past the router, from inside the pod of the service: the same rules, applied by the service itself.
+        const pod = podsOf(ns, "--selector", "plugbricks/service=stock-api-app").find((p) => !p.metadata.deletionTimestamp)!;
+        const direct = (query: string, bearer?: string) => {
+          const r = kc([
+            "--namespace",
+            ns,
+            "exec",
+            pod.metadata.name,
+            "--",
+            "node",
+            "-e",
+            `const h = { "content-type": "application/json" };
+             if (process.argv[2]) h.authorization = "Bearer " + process.argv[2];
+             const r = await fetch("http://127.0.0.1:4000/graphql", { method: "POST", headers: h, body: JSON.stringify({ query: process.argv[1] }) });
+             console.log(JSON.stringify({ status: r.status, text: await r.text() }));`,
+            query,
+            bearer ?? "",
+          ]);
+          expect(r.status, r.stderr).toBe(0);
+          return JSON.parse(r.stdout.trim().split("\n").pop()!) as { status: number; text: string };
+        };
+        const past = direct(ask, token);
+        expect(past.status, past.text).toBe(200);
+        const pastBody = JSON.parse(past.text);
+        expect(pastBody.data[field].map((i: { secret: string | null; pair: string | null }) => [i.secret, i.pair])).toEqual([
+          ["s1", null],
+          ["s2", null],
+        ]);
+        expect(pastBody.errors.map((e: { path: unknown[]; extensions: { code: string } }) => [e.path.at(-1), e.extensions.code])).toEqual([
+          ["pair", "FORBIDDEN"],
+          ["pair", "FORBIDDEN"],
+        ]);
+        expect(direct(`{ ${field} { id } }`).status).toBe(401);
+
+        // The roles: the token has no write role, so the mutation is refused, by the service, through the router and past it.
+        const refused = await graphql("mutation { touch }", token);
+        expect(refused.body.data?.touch ?? null, refused.text).toBeNull();
+        expect(refused.text).toMatch(/FORBIDDEN|forbidden/);
+        expect(direct("mutation { touch }", token).status).toBe(403);
+
+        // The operator grants the role in Keycloak, with kcadm inside its pod. A token asked afterwards has it.
+        const keycloakPod = podsOf(ns, "--selector", "plugbricks/service=keycloak-app").find((p) => !p.metadata.deletionTimestamp)!;
+        const grant = kc([
+          "--namespace",
+          ns,
+          "exec",
+          keycloakPod.metadata.name,
+          "--",
+          "env",
+          `KC_CLI_PASSWORD=${secretOf("PB_KEYCLOAK__ADMIN_PASSWORD")}`,
+          "bash",
+          "-c",
+          [
+            "set -e",
+            "k=/opt/keycloak/bin/kcadm.sh; c=$(mktemp -d)",
+            'login() { "$k" "$@" --config "$c/kcadm.config"; }',
+            "login config credentials --server http://127.0.0.1:8080 --realm master --user admin >/dev/null",
+            "login add-roles -r plugbricks --uusername service-account-caller --cclientid stock-api --rolename stock:write",
+          ].join("; "),
+        ]);
+        expect(grant.status, grant.stderr).toBe(0);
+        expect(direct("mutation { touch }", token).status).toBe(403);
+        const writer = await callerToken();
+        const done = await graphql("mutation { touch }", writer);
+        expect(done.body, done.text).toEqual({ data: { touch: true } });
+        expect(JSON.parse(direct("mutation { touch }", writer).text)).toEqual({ data: { touch: true } });
+        console.log("k8s: a service written by create applied its roles and the rules of its schema, through the router and past it");
+      } finally {
+        router.stop();
+        keycloak.stop();
+      }
+
+      expect(cli(work, ["down"]).code).toBe(0);
+    },
+    1_200_000,
   );
 });
