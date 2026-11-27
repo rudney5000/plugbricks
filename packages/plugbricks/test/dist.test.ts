@@ -58,9 +58,12 @@ describe("published package", () => {
         // The templates of "create" (D28), with the lock file of the API service.
         "templates/api/brick/plugin.json.tmpl",
         "templates/api/service/package-lock.json",
+        "templates/api/service/src/auth.ts",
         "templates/api/service/src/main.ts.tmpl",
+        "templates/api/service-python/auth.py",
         "templates/api/service-python/main.py.tmpl",
         "templates/api/service-python/requirements.txt",
+        "templates/api/service-go/auth.go",
         "templates/api/service-go/go.sum",
         "templates/api/service-go/graph/resolver.go.tmpl",
         "templates/web/service/server.mjs.tmpl",

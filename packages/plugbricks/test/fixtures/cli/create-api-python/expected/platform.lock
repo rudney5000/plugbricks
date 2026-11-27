@@ -2,9 +2,15 @@
   "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform-lock.schema.json",
   "bricks": {
     "inventory-api": {
-      "integrity": "sha256-7fbf0d25fe94071912c795709b22956985e245ba07897d34a9c07a91701754f6",
+      "integrity": "sha256-4d0dd3ecaa6d469591dcce20ed078f0e69e85cd805b09ee5e8fcded7733ccd7e",
       "provides": [],
-      "requires": {},
+      "requires": {
+        "oidc": {
+          "optional": true,
+          "timeoutSeconds": 300,
+          "wait": "healthy"
+        }
+      },
       "source": "bricks/inventory-api",
       "tags": [
         "api",
@@ -14,9 +20,15 @@
       "volumes": []
     },
     "orders-api": {
-      "integrity": "sha256-87f102a5c742cf983e0bf586146d6c78ac2482d986254382411a8a0ce95c1ef8",
+      "integrity": "sha256-f34e3b0491ddca11ec8a50383aee6ec76ea3ceacc473b328a41b546be1929ce0",
       "provides": [],
-      "requires": {},
+      "requires": {
+        "oidc": {
+          "optional": true,
+          "timeoutSeconds": 300,
+          "wait": "healthy"
+        }
+      },
       "source": "bricks/orders-api",
       "tags": [
         "api",

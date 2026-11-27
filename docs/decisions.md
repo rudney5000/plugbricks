@@ -2574,6 +2574,39 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   rule either; a service in another language has to do the same by itself. The check is per field and does not see a
   `@requires` read by another subgraph: that is D43's refusal. Subscriptions are not covered.
 
+## D46. The services `create` writes check the token (Node, Python, Go)
+
+- **Status:** implemented (2026-11-27). Stage 1 of what D45 left: the roles (D22) and the rules per field (D45) are not in the
+  templates.
+- **Context:** the example APIs check the token themselves (D20), so that a call past the router gets nothing; a service made
+  by `create` did not, and an API written from it was open to any service of the platform.
+- **Decision.**
+  - The manifest `create` writes asks for `oidc` as an option (`optional`, 300 s, as the examples): without a provider nothing
+    changes, with one the platform gives the service `OIDC_ISSUER`, `OIDC_JWKS_URL` and `OIDC_AUDIENCE` and the router
+    requires the token.
+  - Each template carries the same check in its own file (`src/auth.ts` with `jose`, `auth.py` with PyJWT, `auth.go` with
+    `golang-jwt` and `keyfunc`): `Authorization: Bearer <jwt>`, RS256 only, the issuer, the audience (a list holding it is
+    fine), `exp` and `sub` required. A request without a valid token gets `401`, `{"errors":[{"message":"unauthorized"}]}` and
+    `WWW-Authenticate: Bearer realm="plugbricks"`; `/health` is open. None of the three variables set: no check. Some set and
+    not all: the service stops and names what is missing, never a value.
+  - A resolver gets the verified caller (subject, name, scopes), the same fields as the example APIs.
+  - The new dependencies are pinned: `jose` 6.2.18, PyJWT 2.15.1 with `cryptography` (the lock file with hashes was compiled again
+    with pip-tools), `golang-jwt/v5` 5.3.1 and `keyfunc/v3` 3.9.2 (`go.sum`).
+- **Tested.** `e2e-compose` ("the services written by create check the token"): the three services built from what `create`
+  writes, a JWKS served by a busybox of the network, 15 kinds of token (valid, scheme in capitals, audience as a list, garbage,
+  not a bearer, other audience, other issuer, expired, no expiry, no subject, other key, `alg: none`, HS256 with the public key
+  as the secret, a key id nobody published): the same answers in all three; no provider: 200; a partial configuration: the
+  service stops and names what is missing. Removing the audience, the expiry or the subject check in a language made the test
+  fail. Golden scenarios `create-api*` show the new `requires`.
+  By hand, on Docker Compose with the `keycloak` brick and the router: a caller's token gave `200` through the router on the
+  three services, no token `401`, and a call past the router answered `401` without the token and `200` with it.
+- **Not tested.** A key that rotates, and an identity provider that is not up when the service starts. **Go refetches the keys for an unknown key id at most every 5
+  minutes** (the default of `keyfunc`): after a rotation, or a start before the provider, a valid token can be refused for up to
+  5 minutes; the platform makes a consumer wait for its provider (`requires.oidc`), which avoids the second. Kubernetes.
+- **Limits.** Only the token: no role per operation (D22), no rule per field (D45): a created service answers every field to
+  any valid token. A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
+  An image of a created service gets bigger in Python (`cryptography`).
+
 ## D47. `up` no longer says "up" for a router that has no port
 
 - **Status:** implemented (2026-11-27). A bug found while testing D43, older than it.
@@ -2593,6 +2626,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   two `up` gave `HOST_PORT_BUSY`, and once the port was free the next `up` published it and the router answered 200.
 - **Not tested.** `HOST_PORT_NOT_PUBLISHED` against a real container in that state (the fix prevents making one). Docker
   Desktop, Podman, a web brick's port. Kubernetes (a port-forward, not a published port).
+
 
 ## Already applied (milestone 2)
 
