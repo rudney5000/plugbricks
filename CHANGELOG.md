@@ -42,6 +42,8 @@ The documentation is the guide in [`docs/guide/`](docs/guide/getting-started.md)
 
 ### Running a platform
 
+- A router port that another program holds is reported as such by `up`, every time, and never as "up" (D47).
+
 - `generate`, `up` and `down` on Docker Compose and on Kubernetes, from files plugbricks writes itself (D5), with
   generated secrets kept in `.secrets/` and restricted to the user (D6). `up --prune-volumes` deletes only the volumes
   listed for deletion (D3).

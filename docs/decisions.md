@@ -2574,6 +2574,26 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
   rule either; a service in another language has to do the same by itself. The check is per field and does not see a
   `@requires` read by another subgraph: that is D43's refusal. Subscriptions are not covered.
 
+## D47. `up` no longer says "up" for a router that has no port
+
+- **Status:** implemented (2026-11-27). A bug found while testing D43, older than it.
+- **Context:** with the router port held by another program or container, the first `up` failed, and the router container stayed
+  *created*. The second `up` started it: it ran with **no published port** (`docker inspect`: no port bound), and plugbricks said
+  "Platform is up". Seen on Docker 28, which also words the refusal differently ("failed to bind host port 127.0.0.1:4000/tcp:
+  address already in use"), so the first `up` printed Docker's raw error instead of `HOST_PORT_BUSY`.
+- **Decision.**
+  - `HOST_PORT_BUSY` knows the Docker 28 wording.
+  - When a refusal names the router's port or a web brick's, plugbricks removes that container (stopped first, its volumes
+    kept), so the next `up` creates it again with its port, once the port is free.
+  - After a Compose `up` that succeeds, the router and the services of web bricks must run with the port the plan gives them;
+    otherwise `HOST_PORT_NOT_PUBLISHED`, and the container is removed in the same way. It is a net for a container left by an
+    earlier version or by anything else.
+- **Tested.** Golden scenarios `up-compose-router-port-busy-docker28` and `up-compose-router-not-published` (the commands run);
+  removing any of the four parts made one fail. On Docker 28 with a host program, then another container, holding port 4000: the
+  two `up` gave `HOST_PORT_BUSY`, and once the port was free the next `up` published it and the router answered 200.
+- **Not tested.** `HOST_PORT_NOT_PUBLISHED` against a real container in that state (the fix prevents making one). Docker
+  Desktop, Podman, a web brick's port. Kubernetes (a port-forward, not a published port).
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
