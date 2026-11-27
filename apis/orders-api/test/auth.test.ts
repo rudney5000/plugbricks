@@ -50,9 +50,20 @@ describe("the API's token check (D20)", () => {
       name: "service-account-orders-web",
       client: "orders-web",
       roles: {},
+      scopes: [],
     });
     // Without preferred_username the name is the subject.
     expect(await check(`Bearer ${await sign({ ...valid, preferred_username: undefined })}`)).toMatchObject({ name: "f2c1-uuid" });
+  });
+
+  it("reads the scopes of the token from its scope claim, as Keycloak writes it: one string, space-separated (D45)", async () => {
+    expect((await check(`Bearer ${await sign({ ...valid, scope: "catalog:price email  profile" })}`))?.scopes).toEqual([
+      "catalog:price",
+      "email",
+      "profile",
+    ]);
+    // Anything but a string is no scope: a list in another claim must not become one.
+    expect((await check(`Bearer ${await sign({ ...valid, scope: ["catalog:price"], scp: "catalog:price" })}`))?.scopes).toEqual([]);
   });
 
   it("refuses a missing, malformed, expired, foreign or unsigned token", async () => {
@@ -116,7 +127,7 @@ describe("the API behind a token check (D20)", () => {
   let close = () => {};
   beforeAll(async () => {
     // A check that knows one token only: the server's behaviour, not the check, is under test here.
-    const server = createApp(pool, async (h) => (h === "Bearer good.to.ken" ? { subject: "s", name: "n", roles: {} } : null));
+    const server = createApp(pool, async (h) => (h === "Bearer good.to.ken" ? { subject: "s", name: "n", roles: {}, scopes: [] } : null));
     await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     close = () => server.close();
@@ -189,10 +200,10 @@ describe("the API with roles: 401 for no token, 403 for a token without the role
     },
   } as never;
   const tokens: Record<string, Caller> = {
-    "Bearer reader.to.ken": { subject: "s", name: "reader", roles: { orders: ["orders:read"] } },
-    "Bearer writer.to.ken": { subject: "s", name: "writer", roles: { orders: ["orders:read", "orders:write"] } },
-    "Bearer none.to.ken": { subject: "s", name: "norole", roles: {} },
-    "Bearer other.to.ken": { subject: "s", name: "other", roles: { shipping: ["orders:read", "orders:write"] } },
+    "Bearer reader.to.ken": { subject: "s", name: "reader", roles: { orders: ["orders:read"] }, scopes: [] },
+    "Bearer writer.to.ken": { subject: "s", name: "writer", roles: { orders: ["orders:read", "orders:write"] }, scopes: [] },
+    "Bearer none.to.ken": { subject: "s", name: "norole", roles: {}, scopes: [] },
+    "Bearer other.to.ken": { subject: "s", name: "other", roles: { shipping: ["orders:read", "orders:write"] }, scopes: [] },
   };
   let base = "";
   let close = () => {};

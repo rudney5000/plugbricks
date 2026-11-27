@@ -1,8 +1,20 @@
 // The token check of this API (D20). Behind the router, every request carries the caller's token (the router passes it
 // on); this API checks it again itself, so that a service of the platform calling it directly, past the router, gets
 // nothing without a valid token. Authorization (D22) is here too: which roles that token must carry for a query and for
-// a mutation. The same file is in apis/orders-api and apis/shipping-api.
-import { getOperationAST, GraphQLError, type OperationTypeNode } from "graphql";
+// a mutation. Rules per field (D45) are here too: what the router refuses for a field, this API refuses for a direct call.
+// The same file is in apis/orders-api and apis/shipping-api.
+import {
+  getNamedType,
+  getOperationAST,
+  GraphQLError,
+  isObjectType,
+  Kind,
+  defaultFieldResolver,
+  valueFromASTUntyped,
+  type ConstDirectiveNode,
+  type GraphQLSchema,
+  type OperationTypeNode,
+} from "graphql";
 import type { Plugin } from "graphql-yoga";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 
@@ -16,6 +28,8 @@ export interface Caller {
   client?: string;
   /** The client roles of the token (`resource_access.<client>.roles`), by client; empty when it carries none. */
   roles: Record<string, string[]>;
+  /** The scopes of the token (its `scope` claim, space-separated); empty when it has none. */
+  scopes: string[];
 }
 
 /** The client roles a token carries, from its `resource_access` claim. Anything that is not a list of strings is ignored. */
@@ -48,7 +62,8 @@ export function tokenCheck(o: { issuer: string; audience: string; keys: JWTVerif
       const subject = payload.sub!;
       const username = typeof payload.preferred_username === "string" ? payload.preferred_username : undefined;
       const client = typeof payload.azp === "string" ? payload.azp : undefined;
-      return { subject, name: username ?? subject, ...(client ? { client } : {}), roles: clientRoles(payload.resource_access) };
+      const scopes = typeof payload.scope === "string" ? payload.scope.split(/\s+/).filter(Boolean) : [];
+      return { subject, name: username ?? subject, ...(client ? { client } : {}), roles: clientRoles(payload.resource_access), scopes };
     } catch {
       return null;
     }
@@ -121,4 +136,64 @@ export function authorizationPlugin(rules: Authorization): Plugin<{ caller?: Cal
       setResultAndStopExecution({ errors: [new GraphQLError(message, { extensions: { code: "FORBIDDEN", http: { status: 403 } } })] });
     },
   };
+}
+
+/**
+ * A rule of the schema (@authenticated, @requiresScopes): the caller needs every scope of one of these sets. The empty
+ * set, @authenticated, asks for a verified token only; no set at all, a rule that cannot be read, lets nobody in.
+ */
+type Rule = string[][];
+
+function rulesOf(directives: readonly ConstDirectiveNode[] | undefined): Rule[] {
+  const rules: Rule[] = [];
+  for (const d of directives ?? []) {
+    if (d.name.value === "authenticated") rules.push([[]]);
+    if (d.name.value !== "requiresScopes") continue;
+    const value = valueFromASTUntyped(d.arguments?.find((x) => x.name.value === "scopes")?.value ?? { kind: Kind.NULL });
+    const sets = Array.isArray(value) && value.every((s) => Array.isArray(s)) ? (value as unknown[][]).map((s) => s.map(String)) : [];
+    rules.push(sets);
+  }
+  return rules;
+}
+
+/** Whether the caller satisfies the rule. Without a verified caller, none does, @authenticated included. */
+export function satisfies(caller: Caller | undefined, rule: Rule): boolean {
+  return caller !== undefined && rule.some((set) => set.every((scope) => caller.scopes.includes(scope)));
+}
+
+/**
+ * Applies the rules the schema of this API declares (D45), the same ones the router applies (D42): a field is resolved only
+ * for a caller that satisfies the rule of the field, the rule of the type it returns, the rule of the type it belongs to
+ * (a type reached through _entities has no field above it), and the rule of the same field on an interface it implements.
+ * A refused field is an error (FORBIDDEN) at its place, as with the router: null where the field allows it, and the
+ * nearest nullable parent where it does not. Without a token check there is no caller: a protected field is refused, as
+ * the router does without an identity provider. Changes the schema it is given.
+ */
+export function enforceFieldRules(schema: GraphQLSchema): GraphQLSchema {
+  const ofType = (type: {
+    astNode?: { directives?: readonly ConstDirectiveNode[] } | null;
+    extensionASTNodes?: readonly { directives?: readonly ConstDirectiveNode[] }[];
+  }) => rulesOf([...(type.astNode?.directives ?? []), ...(type.extensionASTNodes ?? []).flatMap((n) => n.directives ?? [])]);
+  for (const type of Object.values(schema.getTypeMap())) {
+    if (!isObjectType(type) || type.name.startsWith("__")) continue;
+    for (const field of Object.values(type.getFields())) {
+      const rules = [
+        ...rulesOf(field.astNode?.directives),
+        ...ofType(getNamedType(field.type) as Parameters<typeof ofType>[0]),
+        ...ofType(type),
+        ...type.getInterfaces().flatMap((i) => rulesOf(i.getFields()[field.name]?.astNode?.directives)),
+      ];
+      if (rules.length === 0) continue;
+      const resolve = field.resolve ?? defaultFieldResolver;
+      field.resolve = (source, args, context, info) => {
+        const caller = (context as { caller?: Caller } | undefined)?.caller;
+        if (!rules.every((rule) => satisfies(caller, rule))) {
+          const message = caller ? `forbidden: this token lacks what ${type.name}.${field.name} asks for` : "not authenticated";
+          throw new GraphQLError(message, { extensions: { code: "FORBIDDEN" } });
+        }
+        return resolve(source, args, context, info);
+      };
+    }
+  }
+  return schema;
 }
