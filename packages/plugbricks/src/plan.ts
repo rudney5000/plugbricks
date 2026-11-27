@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { dependencyScopes } from "./authorization.js";
 import { buildRouterConfigFile, type SubgraphInput } from "./federation.js";
 import { ROUTER_IMAGE, ROUTER_NAME } from "./drivers/common.js";
 import { issue, type Issue } from "./issues.js";
@@ -66,7 +67,14 @@ export interface BrickManifest {
   oidc?: { issuerPath: string; jwksPath: string; audience: string };
   extends?: { plugin: string; entities: string[] }[];
   /** Plugins this one needs besides its capabilities (the admin shows them; `remove` refuses their target). */
-  dependencies?: { plugin: string; description?: string; optional?: boolean; operations?: ("queries" | "mutations")[] }[];
+  dependencies?: {
+    plugin: string;
+    description?: string;
+    optional?: boolean;
+    operations?: ("queries" | "mutations")[];
+    /** Scopes of the target's protected fields this brick's tokens need (D44). */
+    scopes?: string[];
+  }[];
   /** The client roles that the tokens of the oidc provider need for this API (D22). */
   authorization?: { queries?: string; mutations?: string };
   provides?: Record<
@@ -330,6 +338,7 @@ function resolveValue(
     "consumer.name"?: string;
     "consumer.roles"?: string;
     "consumer.grants"?: string;
+    "consumer.scopes"?: string;
     "web.origin"?: string;
   },
   secret: (name: string) => string,
@@ -421,6 +430,17 @@ export function buildPlan(
     const roles = providers.has("oidc")
       ? authorizationRoles(brick, m, manifests, (b) => wiredProviders(b, manifests.get(b)!).has("oidc"))
       : undefined;
+    // D44: the scopes of its dependencies' protected fields. Read from their schemas, which a plan without a router
+    // (a check of the web ports) does not open, and gives none.
+    let scopes: string[] = [];
+    if (providers.has("oidc") && router) {
+      const found = dependencyScopes(brick, m.dependencies, (target) => {
+        const t = manifests.get(target);
+        return t && (t.subgraph ? router.readSchema(target, t.subgraph.schema) : null);
+      });
+      if (found.issues.length) throw new PlugbricksError(found.issues);
+      scopes = found.given;
+    }
     if (roles && (m.authorization || roles.granted.length > 0)) {
       authorization.push({ brick, ...m.authorization, grants: roles.granted });
     }
@@ -438,6 +458,7 @@ export function buildPlan(
         "consumer.name": brick,
         "consumer.roles": roles?.defined.join(" ") ?? "",
         "consumer.grants": roles?.granted.join(" ") ?? "",
+        "consumer.scopes": scopes.join(" "),
       };
       const providerOwn = brickSecrets(pm);
       const secret = (name: string) =>

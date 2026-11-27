@@ -1,0 +1,6 @@
+{
+  "name": "catalog",
+  "version": "0.1.0",
+  "services": [{ "name": "app", "image": "busybox:1.36", "port": 4000 }],
+  "subgraph": { "service": "app", "schema": "schema.graphql", "path": "/graphql" }
+}

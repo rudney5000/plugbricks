@@ -10,6 +10,9 @@
 # A role that a brick no longer declares, or a grant that a brick no longer asks for, is left as it is: this script never
 # removes one. Take it away in the Keycloak console; tokens already issued keep it until they expire.
 #
+# Scopes (D44): the client gets, as default scopes, those its dependencies' protected fields ask for (SCOPES), so that its
+# tokens carry them in their "scope" claim. A scope the realm does not have is created. None is ever taken away.
+#
 # Inputs (from plugin.json provides.oidc.provision.env):
 #   KEYCLOAK_URL     the provider inside the platform, http://<host>:<port>
 #   REALM            the realm the clients live in
@@ -20,6 +23,7 @@
 #   ROLES            optional: space-separated roles to create on the consumer's own client
 #   GRANTS           optional: space-separated <client>/<role> to give to the consumer's service account; a client that
 #                    does not exist yet is created by this script (its own provision task sets its secret later)
+#   SCOPES           optional: space-separated client scopes the consumer's tokens must carry
 # No secret goes on a command line (D6): kcadm.sh reads the password from KC_CLI_PASSWORD and the client,
 # with its secret, from standard input.
 set -euo pipefail
@@ -152,4 +156,30 @@ for grant in ${GRANTS:-}; do
   ensure_role "$target_id" "$role"
   "$kcadm" add-roles -r "$REALM" --uusername "service-account-$CLIENT_ID" --cclientid "$target" --rolename "$role" "${config[@]}"
   echo "create-client: $CLIENT_ID holds $target/$role"
+done
+
+# D44. The internal id of a client scope of the realm, empty when it has none of that name.
+scope_id_of() {
+  local scope_id scope_name
+  "$kcadm" get client-scopes -r "$REALM" --fields id,name --format csv --noquotes "${config[@]}" |
+    while IFS=, read -r scope_id scope_name; do
+      if [ "$scope_name" = "$1" ]; then echo "$scope_id"; fi
+    done
+}
+
+# The scopes the consumer's tokens must carry: default scopes of its client, so a token request names none.
+for scope in ${SCOPES:-}; do
+  scope_id=$(scope_id_of "$scope")
+  if [ -z "$scope_id" ]; then
+    # Another consumer's task can create it at the same time: a creation that fails is fine when the scope exists after.
+    "$kcadm" create client-scopes -r "$REALM" -s "name=$scope" -s protocol=openid-connect \
+      -s 'attributes."include.in.token.scope"=true' "${config[@]}" >/dev/null || true
+    scope_id=$(scope_id_of "$scope")
+    [ -n "$scope_id" ] || {
+      echo "create-client: could not create the scope $scope" >&2
+      exit 1
+    }
+  fi
+  "$kcadm" update "clients/$id/default-client-scopes/$scope_id" -r "$REALM" "${config[@]}"
+  echo "create-client: the tokens of $CLIENT_ID carry the scope $scope"
 done

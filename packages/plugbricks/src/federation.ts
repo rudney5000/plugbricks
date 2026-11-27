@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import type { DocumentNode } from "graphql";
+import { authorizationBypasses } from "./authorization.js";
 import { issue, type Issue } from "./issues.js";
 
 // Checks that the subgraphs of the installed bricks compose into one federated schema, with
@@ -156,7 +157,7 @@ type FederationSuccess = Extract<ReturnType<Composition["federateSubgraphs"]>, {
 /**
  * The common steps of every use of the composer: 1. GraphQL syntax errors (nothing else is tried),
  * 2. the `extends` checks, 3. the composer's own errors, one issue each, identical ones once, with
- * the composer's text as it is. The subgraphs are sorted by brick name: the result must not depend
+ * the composer's text as it is, 4. the ways around a rule per field, which the composer accepts (D43). The subgraphs are sorted by brick name: the result must not depend
  * on the order the bricks were added in.
  */
 function federate(inputs: SubgraphInput[]): { ok: true; sorted: Parsed[]; result: FederationSuccess } | { ok: false; issues: Issue[] } {
@@ -179,6 +180,8 @@ function federate(inputs: SubgraphInput[]): { ok: true; sorted: Parsed[]; result
     }
     return { ok: false, issues };
   }
+  const bypasses = authorizationBypasses(result.federatedGraphAST, result.fieldConfigurations, sorted);
+  if (bypasses.length) return { ok: false, issues: bypasses };
   return { ok: true, sorted, result };
 }
 

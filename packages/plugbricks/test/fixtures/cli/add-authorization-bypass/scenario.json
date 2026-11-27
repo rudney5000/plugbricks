@@ -1,0 +1,13 @@
+{
+  "description": "a schema whose rule can be gone around through an interface is refused: nothing is written, the message says where the rule goes (D43)",
+  "steps": [
+    { "run": ["init", "--name", "demo"] },
+    {
+      "run": ["add", "bricks/catalog"],
+      "exit": 1,
+      "codes": ["AUTHORIZATION_BYPASS"],
+      "unchanged": true,
+      "stderr": "on \"Priced.price\" in bricks/catalog/schema.graphql"
+    }
+  ]
+}

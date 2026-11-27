@@ -1,0 +1,14 @@
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@requiresScopes"])
+
+interface Priced {
+  price: Float
+}
+
+type Product implements Priced {
+  price: Float @requiresScopes(scopes: [["catalog:price"]])
+}
+
+type Query {
+  priced: Priced
+  products: [Product!]!
+}

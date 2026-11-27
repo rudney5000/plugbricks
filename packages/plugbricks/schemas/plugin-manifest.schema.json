@@ -407,6 +407,15 @@
           },
           "default": ["queries"],
           "description": "What this plugin does to the target through its GraphQL API, when the target declares an \"authorization\" block (D22): the platform gives this plugin's service account the target's role for each operation class listed here, and only those. Reading is the default; write \"mutations\" to be allowed to change data. Nothing is granted for a class the target left open, and nothing at all without a provider of \"oidc\"."
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/roleName"
+          },
+          "description": "The scopes this plugin's tokens need to read or change the target's protected fields (@requiresScopes in the target's schema). The provider of \"oidc\" gives them to this plugin's client, so that its tokens carry them. Each one must appear in a rule of the target's schema: a scope is a name shared by the whole identity provider, and a dependency gives no other one (D44). Nothing is given without a provider of \"oidc\"."
         }
       }
     },

@@ -284,7 +284,7 @@ describe("authorization roles (D22)", () => {
           image: "ghcr.io/example/idp:1.0.0",
           command: ["/bin/sh", "/provision/x.sh"],
           scripts: "provision",
-          env: { CLIENT_ID: "${consumer.name}", ROLES: "${consumer.roles}", GRANTS: "${consumer.grants}" },
+          env: { CLIENT_ID: "${consumer.name}", ROLES: "${consumer.roles}", GRANTS: "${consumer.grants}", SCOPES: "${consumer.scopes}" },
         },
         inject: { OIDC_CLIENT_ID: "${consumer.name}" },
       },
@@ -318,7 +318,7 @@ describe("authorization roles (D22)", () => {
       AUTHORIZATION_MUTATIONS_ROLE: "orders:write",
       OIDC_CLIENT_ID: "orders",
     });
-    expect(provisionEnv(p, "orders")).toEqual({ CLIENT_ID: "orders", ROLES: "orders:read orders:write", GRANTS: "" });
+    expect(provisionEnv(p, "orders")).toEqual({ CLIENT_ID: "orders", ROLES: "orders:read orders:write", GRANTS: "", SCOPES: "" });
   });
 
   it("injects only the classes the block names, and nothing when it has no block (D20)", () => {
@@ -361,6 +361,52 @@ describe("authorization roles (D22)", () => {
       ).GRANTS;
     expect(grants(orders, open, noOidc)).toBe("orders/orders:read");
     expect(grants(open, noOidc)).toBe("");
+  });
+
+  describe("the scopes of a dependency's protected fields (D44)", () => {
+    const sdl = (field: string, ...scopes: string[]) =>
+      'extend schema @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@requiresScopes"])\n' +
+      `type Query { ${field}: Int @requiresScopes(scopes: ${JSON.stringify(scopes.map((s) => [s]))}) }`;
+    const schemas: Record<string, string> = {
+      catalog: sdl("price", "catalog:price", "catalog:cost"),
+      billing: sdl("invoices", "billing:read"),
+    };
+    /** A plan with its router, whose reader gives each API's schema: where the scopes are read. */
+    const planned = (...bricks: BrickManifest[]) => {
+      const all = [idp, ...bricks];
+      return buildPlan("demo", lockFor(all), new Map(all.map((m) => [m.name, m])), () => [SCRIPT], {
+        port: 4000,
+        readSchema: (brick) => schemas[brick],
+      });
+    };
+    const webScopes = (...bricks: BrickManifest[]) => provisionEnv(planned(...bricks), "web").SCOPES;
+
+    it("are given to the consumer's client, sorted, each once", () => {
+      const web = caller([
+        { plugin: "catalog", scopes: ["catalog:price", "catalog:cost"] },
+        { plugin: "billing", scopes: ["billing:read"] },
+      ]);
+      expect(webScopes(api("catalog"), api("billing"), web)).toBe("billing:read catalog:cost catalog:price");
+      expect(provisionEnv(planned(api("catalog"), api("billing"), web), "catalog").SCOPES).toBe("");
+    });
+
+    it("are only the ones asked for", () => {
+      expect(webScopes(api("catalog"), caller([{ plugin: "catalog", scopes: ["catalog:price"] }]))).toBe("catalog:price");
+      expect(webScopes(api("catalog"), caller([{ plugin: "catalog" }]))).toBe("");
+    });
+
+    it("are refused when no rule of that dependency asks for them: a dependency gives no other API's scope", () => {
+      const web = caller([{ plugin: "catalog", scopes: ["billing:read"] }]);
+      expect(codes(() => planned(api("catalog"), api("billing"), web))).toEqual(["DEPENDENCY_SCOPE_UNKNOWN"]);
+      const plain: BrickManifest = { ...consumer("plain"), requires: { oidc: { optional: true } } };
+      expect(codes(() => planned(plain, api("catalog"), caller([{ plugin: "plain", scopes: ["catalog:price"] }])))).toEqual([
+        "DEPENDENCY_SCOPE_UNKNOWN",
+      ]);
+    });
+
+    it("are not looked for while the dependency is not installed", () => {
+      expect(webScopes(api("billing"), caller([{ plugin: "catalog", scopes: ["catalog:price"], optional: true }]))).toBe("");
+    });
   });
 
   it("a brick that lists itself or a role twice gives each role once", () => {
