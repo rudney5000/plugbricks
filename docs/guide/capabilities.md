@@ -112,8 +112,11 @@ Without an identity provider, nothing is asked.
 A generated service (`create`, in Node, Python or Go) asks for `oidc` as an option and checks the token itself: with an
 identity provider in the platform it answers `401` to a request without a valid token, even one that goes past the router
 (`/health` stays open), and without one it answers as before (D46). It receives the verified caller in its resolvers
-(`context.caller` in Node, `info.context["caller"]` in Python, `CallerFrom(ctx)` in Go): who it is, and its scopes. It does
-not yet check roles or the rules of a schema, which you would write yourself.
+(`context.caller` in Node, `info.context["caller"]` in Python, `CallerFrom(ctx)` in Go): who it is, its scopes and its client
+roles. It also applies the roles above (D48): the manifest `create` writes has no `authorization` block, so any valid token
+passes until you add one, for example `"authorization": { "queries": "items:read", "mutations": "items:write" }`; the service
+then answers `403` with `FORBIDDEN` to an operation whose class the token has no role for, before any resolver runs. It does
+not yet apply the rules of a schema (`@requiresScopes`), which you would write yourself.
 
 ### A rule on one field
 

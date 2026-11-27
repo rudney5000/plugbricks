@@ -2603,7 +2603,7 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not tested.** A key that rotates, and an identity provider that is not up when the service starts. **Go refetches the keys for an unknown key id at most every 5
   minutes** (the default of `keyfunc`): after a rotation, or a start before the provider, a valid token can be refused for up to
   5 minutes; the platform makes a consumer wait for its provider (`requires.oidc`), which avoids the second. Kubernetes.
-- **Limits.** Only the token: no role per operation (D22), no rule per field (D45): a created service answers every field to
+- **Limits.** Only the token (the roles came with D48): no rule per field (D45): a created service answers every field to
   any valid token. A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
   An image of a created service gets bigger in Python (`cryptography`).
 
@@ -2627,6 +2627,39 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Not tested.** `HOST_PORT_NOT_PUBLISHED` against a real container in that state (the fix prevents making one). Docker
   Desktop, Podman, a web brick's port. Kubernetes (a port-forward, not a published port).
 
+
+## D48. The services `create` writes apply the roles of an operation (Node, Python, Go)
+
+- **Status:** implemented (2026-11-27). Stage 2 of what D45 left: the rules per field (D45) are still not in the templates.
+- **Context:** D22 gives an API the roles a token needs, per class of operation (`authorization` in the manifest); the example APIs
+  apply them (D22), the services `create` writes only checked the token (D46).
+- **Decision.**
+  - Each template reads `AUTHORIZATION_QUERIES_ROLE`, `AUTHORIZATION_MUTATIONS_ROLE` and `OIDC_CLIENT_ID`, which the platform
+    injects when the manifest has an `authorization` block, and the caller gets `client` (`azp`) and `roles`
+    (`resource_access.<client>.roles`, by client; anything that is not a list of strings is ignored). Only the roles of the
+    service's own client count: not another client's, not a realm role.
+  - An operation whose class asks for a role the caller lacks is refused before any resolver runs: `403`, the error code
+    `FORBIDDEN` and the message `forbidden: this token does not carry the role "<role>" of client "<client>"`, the same in the
+    three languages. The operation that runs decides (`operationName`), not the document; introspection and `__typename` are
+    part of the class; a class this service does not know (a subscription) is refused.
+  - Node: a Yoga plugin (`onExecute`), as the examples. Python: a middleware of ariadne on the root fields, and the answer's
+    status rewritten to 403 once one was refused (ariadne says 400 for a result with no data). Go: `AroundOperations` of gqlgen,
+    and a response writer that does the same.
+  - Roles set without the token check, or without `OIDC_CLIENT_ID`, stop the service and say so ("incomplete authorization
+    configuration"): serving with a rule that cannot be applied would open it.
+  - **The manifest `create` writes still has no `authorization` block**: declaring roles by default would lock out every caller
+    the moment a provider is installed. The author adds the block when they want it (`docs/guide/capabilities.md`).
+- **Tested.** `e2e-compose` ("the services written by create check the token and the roles"): the three services built from what
+  `create` writes, a `Mutation` added to each, with roles `read` and `write` on a client: no token 401; no role, one role, the
+  other, both, for a query and for a mutation (403 `FORBIDDEN`, no data; 200 with the data); the role of another client, a realm
+  role, roles that are a string or numbers, no `resource_access`: 403; two operations in one document with the first or the
+  second chosen; a query in the URL without the role is not answered with data; roles without the token check and without the
+  client stop the service. The same answers in the three. Taking the mutation role from the query role (Node), accepting the role
+  of any client (Python), reading roles under the token's own `azp` (Go) each made the test fail.
+- **Not tested.** With the router and Keycloak (the role names come from the manifest, as for the examples, D22); a subscription
+  (the templates serve none); Kubernetes.
+- **Limits.** The class of operation only: no role per field and no rule per field (`@requiresScopes`), which D45 did in the
+  example APIs. A service created before this change keeps its old code; copy `auth.*` and the lines of `main.*` by hand.
 
 ## Already applied (milestone 2)
 
