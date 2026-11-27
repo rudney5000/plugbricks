@@ -28,10 +28,13 @@ func main() {
 		port = "4000"
 	}
 
-	api := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}}))
+	executable := graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{}})
+	api := handler.New(executable)
 	api.AddTransport(transport.POST{})
 	api.Use(extension.Introspection{})
 	api.SetErrorPresenter(graph.MaskErrors)
+	// The rules of the schema (@authenticated, @requiresScopes) apply to every call, the router's or a direct one. See auth.go.
+	RequireFieldRules(api, executable.Schema())
 
 	// With the platform's oidc provider (OIDC_* set): no valid token, no GraphQL, even past the router. See auth.go.
 	requireToken, err := RequireToken()
