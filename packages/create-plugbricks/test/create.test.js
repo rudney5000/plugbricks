@@ -12,7 +12,7 @@ const pkgDir = fileURLToPath(new URL("../", import.meta.url));
 const work = join(pkgDir, ".test-work");
 const examplesDir = fileURLToPath(new URL("../../plugbricks/examples/", import.meta.url));
 /** The bricks a new project gets in bricks/ (D25): those whose images are public, on Docker Hub. */
-const SHIPPED_BRICKS = ["nats", "postgres", "rabbitmq"];
+const SHIPPED_BRICKS = ["nats", "postgres", "rabbitmq", "redis", "seaweedfs"];
 /** The catalogue of the generator (D30): the base bricks and the bricks of the starters. */
 const catalogueDir = fileURLToPath(new URL("../bricks/", import.meta.url));
 
@@ -51,6 +51,10 @@ const STRUCTURE = [
   "bricks/rabbitmq/plugin.json",
   "bricks/rabbitmq/provision/create-vhost.sh",
   "bricks/nats/plugin.json",
+  "bricks/redis/plugin.json",
+  "bricks/redis/provision/create-user.sh",
+  "bricks/seaweedfs/plugin.json",
+  "bricks/seaweedfs/provision/create-bucket.sh",
   ".platform/bricks/.gitkeep",
   ".generated",
   ".secrets",

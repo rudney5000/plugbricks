@@ -1,0 +1,89 @@
+{
+  "$schema": "../../schemas/plugin-manifest.schema.json",
+  "name": "seaweedfs",
+  "version": "0.1.0",
+  "description": "Base brick: SeaweedFS (Apache-2.0) as an S3-compatible store that provides the \"object-storage\" capability. Each consumer gets its own bucket, named after it, and a key limited to that bucket. Only the S3 port listens on the platform network: the master, volume and filer servers listen inside the container. One server, no replication (D41). A consumer's name must be a valid bucket name (3 to 63 characters).",
+  "services": [
+    {
+      "name": "s3",
+      "image": "chrislusf/seaweedfs:4.55",
+      "port": 8333,
+      "args": [
+        "server",
+        "-filer",
+        "-s3",
+        "-ip=127.0.0.1",
+        "-ip.bind=127.0.0.1",
+        "-s3.ip.bind=0.0.0.0",
+        "-s3.iam.readOnly=false",
+        "-s3.iam.selfServiceRequiresGrant=true",
+        "-s3.port.iceberg=0",
+        "-s3.port.lance=0",
+        "-master.telemetry=false"
+      ],
+      "volumes": [
+        {
+          "name": "data",
+          "mountPath": "/data",
+          "retention": "retain"
+        }
+      ],
+      "healthcheck": {
+        "exec": [
+          "curl",
+          "-fsS",
+          "-o",
+          "/dev/null",
+          "http://127.0.0.1:8333/healthz"
+        ],
+        "startPeriodSeconds": 10
+      },
+      "env": {
+        "AWS_ACCESS_KEY_ID": "${secrets.admin_access_key}",
+        "AWS_SECRET_ACCESS_KEY": "${secrets.admin_secret_key}"
+      }
+    }
+  ],
+  "provides": {
+    "object-storage": {
+      "service": "s3",
+      "ready": {
+        "exec": [
+          "curl",
+          "-fsS",
+          "-m",
+          "2",
+          "-o",
+          "/dev/null",
+          "http://${provider.host}:${provider.port}/healthz"
+        ]
+      },
+      "provision": {
+        "image": "chrislusf/seaweedfs:4.55",
+        "command": [
+          "/bin/sh",
+          "/provision/create-bucket.sh"
+        ],
+        "scripts": "provision",
+        "env": {
+          "S3_ENDPOINT": "http://${provider.host}:${provider.port}",
+          "ADMIN_ACCESS_KEY": "${secrets.admin_access_key}",
+          "ADMIN_SECRET_KEY": "${secrets.admin_secret_key}",
+          "APP_NAME": "${consumer.name}",
+          "APP_ACCESS_KEY": "${secrets.consumer_access_key}",
+          "APP_SECRET_KEY": "${secrets.consumer_secret_key}"
+        }
+      },
+      "inject": {
+        "AWS_ENDPOINT_URL_S3": "http://${provider.host}:${provider.port}",
+        "AWS_REGION": "us-east-1",
+        "AWS_ACCESS_KEY_ID": "${secrets.consumer_access_key}",
+        "AWS_SECRET_ACCESS_KEY": "${secrets.consumer_secret_key}",
+        "S3_BUCKET": "${consumer.name}"
+      }
+    }
+  },
+  "tags": [
+    "storage"
+  ]
+}

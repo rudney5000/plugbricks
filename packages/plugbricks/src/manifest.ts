@@ -122,7 +122,14 @@ export function validateManifest(manifest: unknown): ValidationResult {
   const m = manifest as {
     name: string;
     dependencies?: { plugin: string }[];
-    services: { name: string; image: string; port: number; extraPorts?: { name: string; port: number }[]; env?: Record<string, string> }[];
+    services: {
+      name: string;
+      image: string;
+      port: number;
+      args?: string[];
+      extraPorts?: { name: string; port: number }[];
+      env?: Record<string, string>;
+    }[];
     provides?: Record<
       string,
       {
@@ -148,6 +155,7 @@ export function validateManifest(manifest: unknown): ValidationResult {
     }
     names.add(s.name);
     checkImage(s.image, `/services/${i}/image`, issues);
+    checkTemplates(s.args, `/services/${i}/args`, "serviceArgs", issues);
     // ${web.origin} only in the env of the service that serves the brick's pages (D18).
     checkTemplates(s.env, `/services/${i}/env`, m.web?.service === s.name ? "webServiceEnv" : "serviceEnv", issues);
     // Extra ports: a Kubernetes Service cannot have two ports with the same name or number, and

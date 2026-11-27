@@ -43,6 +43,8 @@ export interface BrickManifest {
     name: string;
     image: string;
     port: number;
+    /** Arguments of the image's entrypoint (D41). */
+    args?: string[];
     /** Additional ports of the Service (Kubernetes), e.g. a management API (D12). */
     extraPorts?: { name: string; port: number }[];
     volumes?: { name: string; mountPath: string; retention?: "retain" | "delete" }[];
@@ -92,6 +94,8 @@ export interface PlanService {
   service: string;
   image: string;
   port: number;
+  /** Arguments of the image's entrypoint, as the manifest writes them (D41). */
+  args?: string[];
   /** Extra ports of the runtime Service, beyond the primary one (D12). */
   extraPorts: { name: string; port: number }[];
   env: Record<string, Value>;
@@ -528,6 +532,7 @@ export function buildPlan(
         service: s.name,
         image: s.image,
         port: s.port,
+        ...(s.args ? { args: [...s.args] } : {}),
         extraPorts: (s.extraPorts ?? []).map((p) => ({ name: p.name, port: p.port })),
         env: sortedRecord(env),
         volumes: vols,

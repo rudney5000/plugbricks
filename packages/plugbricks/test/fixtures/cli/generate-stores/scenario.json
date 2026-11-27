@@ -1,0 +1,28 @@
+{
+  "description": "Redis provides cache and SeaweedFS object-storage to one consumer: its own user and key prefix, its own bucket and key; the servers' arguments reach both runtimes, a dollar sign kept as written (D41)",
+  "steps": [
+    {
+      "run": ["init", "--name", "stores-demo"]
+    },
+    {
+      "run": ["add", "examples/redis"],
+      "stdout": "Added redis 0.1.0"
+    },
+    {
+      "run": ["add", "examples/seaweedfs"],
+      "stdout": "Added seaweedfs 0.1.0"
+    },
+    {
+      "run": ["add", "bricks/consumer"],
+      "stdout": "Added consumer 0.1.0"
+    },
+    {
+      "run": ["generate"],
+      "stdout": "Created 6 secret(s) in .secrets/: PB_REDIS__ADMIN_PASSWORD, PB_REDIS__CONSUMER__CONSUMER_PASSWORD, PB_SEAWEEDFS__ADMIN_ACCESS_KEY, PB_SEAWEEDFS__ADMIN_SECRET_KEY, PB_SEAWEEDFS__CONSUMER__CONSUMER_ACCESS_KEY, PB_SEAWEEDFS__CONSUMER__CONSUMER_SECRET_KEY"
+    },
+    {
+      "run": ["generate", "--runtime", "k8s"]
+    }
+  ],
+  "exists": [".secrets/secrets.env"]
+}

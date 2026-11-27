@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rudney5000/plugbricks/main/packages/plugbricks/schemas/platform.schema.json",
+  "bricks": {
+    "consumer": {
+      "source": "bricks/consumer"
+    },
+    "redis": {
+      "source": "examples/redis"
+    },
+    "seaweedfs": {
+      "source": "examples/seaweedfs"
+    }
+  },
+  "name": "stores-demo",
+  "router": {
+    "port": 4000
+  }
+}

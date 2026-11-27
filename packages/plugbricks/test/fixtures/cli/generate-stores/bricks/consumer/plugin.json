@@ -1,0 +1,6 @@
+{
+  "name": "consumer",
+  "version": "0.1.0",
+  "services": [{ "name": "app", "image": "busybox:1.36", "port": 9000, "args": ["sh", "-c", "echo \"$S3_BUCKET\" && sleep infinity"] }],
+  "requires": { "cache": {}, "object-storage": {} }
+}

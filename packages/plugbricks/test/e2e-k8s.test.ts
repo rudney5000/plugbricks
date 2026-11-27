@@ -10,6 +10,7 @@ import { ask, get, through, until, type Answer } from "./helpers/graphql.js";
 import { k8sTestTarget } from "./helpers/k8s-guard.js";
 import { freePort, portForward, stopAllForwards } from "./helpers/port-forward.js";
 import { exampleImage } from "./helpers/images.js";
+import { checkIsolation, readStores, writeStores, type Exec } from "./helpers/stores.js";
 
 // Runs the Kubernetes driver against a real, throwaway k3d cluster: up with postgres and orders, a
 // GraphQL call, down, remove + up --prune-volumes; the router in front of orders and shipping, with real requests
@@ -563,6 +564,47 @@ describe("Kubernetes driver against a real k3d cluster", () => {
       expect(names(ns, "deployment")).toEqual([]);
       expect(names(ns, "persistentvolumeclaim")).toEqual(["persistentvolumeclaim/rabbitmq-broker-data"]);
       expect(names(ns, "secret")).toContain("secret/plugbricks-secrets");
+    },
+    900_000,
+  );
+
+  it.skipIf(!ready)(
+    `Redis and SeaweedFS give each consumer its own keys and bucket${why}`,
+    () => {
+      const ns = "pbtest-k8s-stores";
+      const work = project(ns, ["store-a", "store-b"]);
+      for (const brick of ["redis", "seaweedfs"]) cpSync(join(pkg, "examples", brick), join(work, brick), { recursive: true });
+      for (const args of [
+        ["init", "--name", ns],
+        ["add", "redis"],
+        ["add", "seaweedfs"],
+        ["add", "store-a"],
+        ["add", "store-b"],
+      ])
+        expect(cli(work, args).code, args.join(" ")).toBe(0);
+
+      const up = cli(work, ["up"]);
+      expect(up.code, `${up.out}\n${up.err}`).toBe(0);
+      const exec: Exec = (consumer, service, script) => {
+        const r = kc(["--namespace", ns, "exec", `deployment/${consumer}-${service}`, "--", "sh", "-c", script]);
+        expect(r.status, r.stderr).toBe(0);
+        return r.stdout.trim();
+      };
+      writeStores(exec);
+      readStores(exec);
+      checkIsolation(exec);
+
+      // down keeps both volumes; up finds the data again.
+      expect(cli(work, ["down"]).code).toBe(0);
+      expect(names(ns, "deployment")).toEqual([]);
+      expect(names(ns, "persistentvolumeclaim")).toEqual([
+        "persistentvolumeclaim/redis-server-data",
+        "persistentvolumeclaim/seaweedfs-s3-data",
+      ]);
+      const again = cli(work, ["up"]);
+      expect(again.code, `${again.out}\n${again.err}`).toBe(0);
+      readStores(exec);
+      expect(cli(work, ["down"]).code).toBe(0);
     },
     900_000,
   );

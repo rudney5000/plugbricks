@@ -10,7 +10,7 @@ const root = new URL("../", import.meta.url);
 const read = (p: string) => readFileSync(new URL(p, root), "utf8");
 const load = (p: string) => JSON.parse(read(p));
 
-const EXAMPLES = ["postgres", "orders-api", "shipping-api", "rabbitmq", "queue-consumer", "nats"];
+const EXAMPLES = ["postgres", "orders-api", "shipping-api", "rabbitmq", "queue-consumer", "nats", "redis", "seaweedfs"];
 
 /**
  * Windows has no executable bit in the file system (mode & 0o111 is always 0), so there the mode
@@ -94,6 +94,39 @@ describe("example manifests (milestone 1 criterion)", () => {
     expect(m.provides.queue.provision.scripts).toBe("provision");
     expect(m.services[0].extraPorts).toEqual([{ name: "management", port: 15672 }]);
     expect(m.services[0].volumes[0]).toMatchObject({ mountPath: "/var/lib/rabbitmq", retention: "retain" });
+  });
+
+  it("redis gives every consumer its own user, key prefix and secret (D41)", () => {
+    const m = load("examples/redis/plugin.json");
+    expect(m.provides.cache.inject).toEqual({
+      REDIS_URL: "redis://${consumer.name}:${secrets.consumer_password}@${provider.host}:${provider.port}",
+      REDIS_PREFIX: "${consumer.name}:",
+    });
+    // The server asks for a password from its first start, and keeps its users on its volume.
+    expect(m.services[0].args.at(-1)).toContain("--aclfile");
+    expect(m.services[0].volumes[0]).toMatchObject({ mountPath: "/data", retention: "retain" });
+  });
+
+  it("seaweedfs opens only its S3 port and sends no statistics (D41)", () => {
+    const m = load("examples/seaweedfs/plugin.json");
+    for (const arg of ["-ip.bind=127.0.0.1", "-s3.ip.bind=0.0.0.0", "-master.telemetry=false", "-s3.iam.selfServiceRequiresGrant=true"]) {
+      expect(m.services[0].args).toContain(arg);
+    }
+    expect(m.services[0].extraPorts).toBeUndefined();
+    expect(m.provides["object-storage"].inject).toMatchObject({ S3_BUCKET: "${consumer.name}" });
+  });
+
+  it("takes any argument that holds no template, a shell variable included (D41)", () => {
+    const m = load("examples/postgres/plugin.json");
+    const withArgs = (args: unknown) => validateManifest({ ...m, services: [{ ...m.services[0], args }] });
+    expect(withArgs(["sh", "-c", 'echo "$HOME" $$'])).toEqual({ ok: true });
+    expect(withArgs([]).ok).toBe(false);
+    for (const template of ["${secrets.superuser_password}", "${provider.host}", "${HOME}"]) {
+      expect(withArgs(["sh", "-c", `echo ${template}`]), template).toMatchObject({
+        ok: false,
+        issues: [{ code: "TEMPLATE_UNKNOWN", path: "/services/0/args/2" }],
+      });
+    }
   });
 });
 

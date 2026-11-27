@@ -22,7 +22,7 @@ when the one before it that it depends on is merged.
 | 9   | ~~`logs` and `exec` (D32), a development loop (D37), Python (D38) and Go (D39) templates~~ (done)  | 5              | step 8 for the templates                      | code                              |
 | 10  | ~~`export`: leave plugbricks with plain Compose or Kubernetes files~~ (done, D34)     | 8, item 1      | nothing                                       | code                              |
 | 11  | Production confidence: observability, environments and secrets, breaking changes, upgrade | 6          | a decision for each                           | decision, then code               |
-| 12  | More ready-made bricks (Redis, MySQL or MariaDB, object storage, a test mail server)  | 7              | step 3                                        | code                              |
+| 12  | More ready-made bricks: ~~Redis, object storage~~ (D41); MySQL or MariaDB, a test mail server | 7              | step 3                                        | code                              |
 | 13  | ~~gRPC through Cosmo Connect (D35), a REST adapter example (D36)~~ (done)               | 4, items 2 and 3 | step 7                                      | study, then docs                  |
 | 14  | Signed images and an SBOM; a short demo video                                         | 8, items 2 and 3 | step 8 (public images)                      | code, then the owner              |
 | 15  | What was decided earlier and is not done                                              | 9              | nothing                                       | code or docs                      |
@@ -185,9 +185,10 @@ Each item needs a written decision before code, like D22.
 
 ## 7. More ready-made bricks
 
-Each is small because the capability model exists (`postgres` is the pattern): Redis (cache), MySQL or MariaDB, an
-object store (MinIO), a test mail server (Mailpit). Kafka stays deferred (section 9). A brick needs a public image
-(Docker Hub) to work for a newcomer; this is why these come after step 3.
+Each is small because the capability model exists (`postgres` is the pattern). **Done (D41):** Redis (`cache`) and
+SeaweedFS (`object-storage`, S3; chosen instead of MinIO). **Left:** MySQL or MariaDB, a test mail server (Mailpit).
+Kafka stays deferred (section 9). A brick needs a public image (Docker Hub) to work for a newcomer; this is why these
+come after step 3.
 
 ## 8. Trust, and the way out
 

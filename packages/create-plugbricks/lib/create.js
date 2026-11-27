@@ -16,7 +16,7 @@ const templateDir = new URL("../template/", import.meta.url);
 /** The bricks this generator ships (D25, D30): copies of the examples of plugbricks, kept equal by a test. */
 const bricksDir = new URL("../bricks/", import.meta.url);
 /** What every new project gets in bricks/: the bricks whose images come from Docker Hub (D25). */
-export const BASE_BRICKS = ["nats", "postgres", "rabbitmq"];
+export const BASE_BRICKS = ["nats", "postgres", "rabbitmq", "redis", "seaweedfs"];
 /** The starters (D30): a name, what it is, and the bricks it adds, in the order they are added. */
 export const STARTERS = JSON.parse(readFileSync(new URL("../starters.json", import.meta.url), "utf8"));
 
