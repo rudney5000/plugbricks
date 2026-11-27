@@ -17,7 +17,7 @@ from ariadne.contrib.federation import FederatedObjectType, make_federated_schem
 from ariadne.explorer import ExplorerHttp405
 from graphql import GraphQLError
 
-from auth import authorization_from_env, forbidden_message, may_run, token_check_from_env
+from auth import authorization_from_env, field_rules_middleware, forbidden_message, may_run, token_check_from_env
 
 ITEMS = [{"id": "1", "name": "first"}, {"id": "2", "name": "second"}]
 
@@ -87,7 +87,8 @@ graphql = GraphQL(
     context_value=context_value,
     explorer=ExplorerHttp405(),
     error_formatter=format_masked,
-    http_handler=GraphQLHTTPHandler(middleware=[authorize] if authorization else None),
+    # The rules of the schema (@authenticated, @requiresScopes) apply to every call, the router's or a direct one. See auth.py.
+    http_handler=GraphQLHTTPHandler(middleware=[*([authorize] if authorization else []), field_rules_middleware(schema)]),
 )
 
 
@@ -113,6 +114,8 @@ async def app(scope, receive, send):
             # for a result with no data (it says 400).
             if message["type"] == "http.response.start" and scope.get("forbidden"):
                 message = {**message, "status": 403}
+            elif message["type"] == "http.response.start" and scope.get("refused_field") and message["status"] == 400:
+                message = {**message, "status": 200}
             await send(message)
 
         await graphql(scope, receive, answer)

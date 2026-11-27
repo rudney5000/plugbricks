@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 
 import jwt
+from graphql import GraphQLError, get_named_type, value_from_ast_untyped
 
 BEARER = re.compile(r"^Bearer ([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$", re.IGNORECASE)
 
@@ -130,3 +131,69 @@ def may_run(caller, rules, operation):
 def forbidden_message(rules, operation):
     role = role_for(rules, operation)
     return f'forbidden: this token does not carry the role "{role}" of client "{rules.client}"' if role else "forbidden"
+
+
+def rules_of(directives):
+    """The rules of a list of directives (@authenticated, @requiresScopes): each is a list of sets of scopes, and the caller
+    needs every scope of one of the sets. The empty set, @authenticated, asks for a verified token only; no set at all, a rule
+    that cannot be read, lets nobody in."""
+    rules = []
+    for directive in directives or []:
+        name = directive.name.value
+        if name == "authenticated":
+            rules.append([[]])
+        if name != "requiresScopes":
+            continue
+        argument = next((a for a in directive.arguments or [] if a.name.value == "scopes"), None)
+        value = value_from_ast_untyped(argument.value) if argument else None
+        ok = isinstance(value, list) and all(isinstance(group, list) for group in value)
+        rules.append([[str(scope) for scope in group] for group in value] if ok else [])
+    return rules
+
+
+def satisfies(caller, rule):
+    """Whether the caller satisfies the rule. Without a verified caller, none does, @authenticated included."""
+    return caller is not None and any(all(scope in caller.scopes for scope in group) for group in rule)
+
+
+def field_rules_middleware(schema):
+    """A middleware that applies the rules the schema declares (@authenticated, @requiresScopes), the same ones the router
+    applies: a field is resolved only for a caller that satisfies the rule of the field, the rule of the type it returns, the
+    rule of the type it belongs to (a type reached through _entities has no field above it), and the rule of the same field on
+    an interface it implements. A refused field is an error (FORBIDDEN) at its place: null where the field allows it, and the
+    nearest nullable parent where it does not. Without a token check there is no caller: a protected field is refused, as the
+    router does without an identity provider. To use them, import the directives in the schema:
+    @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key", "@authenticated", "@requiresScopes"])."""
+    cache = {}
+
+    def of_type(type_):
+        nodes = [n for n in [type_.ast_node, *(type_.extension_ast_nodes or [])] if n is not None]
+        return rules_of([d for n in nodes for d in n.directives or []])
+
+    def rules_for(parent, name):
+        key = (parent.name, name)
+        if key not in cache:
+            field = getattr(parent, "fields", {}).get(name)
+            if field is None:  # __typename, __schema: not a field of the schema
+                cache[key] = []
+            else:
+                rules = rules_of(field.ast_node.directives if field.ast_node else None)
+                rules += of_type(get_named_type(field.type)) + of_type(parent)
+                for interface in getattr(parent, "interfaces", []):
+                    inherited = interface.fields.get(name)
+                    rules += rules_of(inherited.ast_node.directives if inherited and inherited.ast_node else None)
+                cache[key] = rules
+        return cache[key]
+
+    def enforce(next_, obj, info, **kwargs):
+        rules = rules_for(info.parent_type, info.field_name)
+        if rules:
+            caller = info.context.get("caller")
+            if not all(satisfies(caller, rule) for rule in rules):
+                # ariadne answers 400 to a result with no data; a refused field is a GraphQL error: 200 (see app()).
+                info.context["request"].scope["refused_field"] = True
+                message = f"forbidden: this token lacks what {info.parent_type.name}.{info.field_name} asks for" if caller else "not authenticated"
+                raise GraphQLError(message, extensions={"code": "FORBIDDEN"})
+        return next_(obj, info, **kwargs)
+
+    return enforce

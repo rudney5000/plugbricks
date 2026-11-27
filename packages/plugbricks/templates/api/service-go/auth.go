@@ -12,7 +12,9 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -254,4 +256,128 @@ func (w *statusWriter) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// fieldRule is a rule of the schema (@authenticated, @requiresScopes): the caller needs every scope of one of these sets.
+// The empty set, @authenticated, asks for a verified token only; no set at all, a rule that cannot be read, lets nobody in.
+type fieldRule [][]string
+
+func rulesOf(directives ast.DirectiveList) []fieldRule {
+	var rules []fieldRule
+	for _, d := range directives {
+		switch d.Name {
+		case "authenticated":
+			rules = append(rules, fieldRule{{}})
+		case "requiresScopes":
+			rule := fieldRule{}
+			if arg := d.Arguments.ForName("scopes"); arg != nil && arg.Value != nil {
+				if groups, err := arg.Value.Value(nil); err == nil {
+					rule = scopeSets(groups)
+				}
+			}
+			rules = append(rules, rule)
+		}
+	}
+	return rules
+}
+
+// scopeSets reads the value of `scopes: [[...]]`; anything else is a rule that cannot be read: no set at all.
+func scopeSets(value any) fieldRule {
+	groups, isList := value.([]any)
+	if !isList {
+		return fieldRule{}
+	}
+	rule := fieldRule{}
+	for _, g := range groups {
+		list, isList := g.([]any)
+		if !isList {
+			return fieldRule{}
+		}
+		set := []string{}
+		for _, scope := range list {
+			set = append(set, fmt.Sprint(scope))
+		}
+		rule = append(rule, set)
+	}
+	return rule
+}
+
+// satisfies is whether the caller satisfies the rule. Without a verified caller, none does, @authenticated included.
+func (rule fieldRule) satisfies(caller *Caller) bool {
+	if caller == nil {
+		return false
+	}
+	for _, set := range rule {
+		all := true
+		for _, scope := range set {
+			if !slices.Contains(caller.Scopes, scope) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}
+
+// rulesOfField is every rule that applies to a field: its own, the one of the type it returns, the one of the type it
+// belongs to (a type reached through _entities has no field above it), and the one of the same field on an interface the
+// type implements.
+func rulesOfField(schema *ast.Schema, typeName, fieldName string) []fieldRule {
+	def := schema.Types[typeName]
+	if def == nil {
+		return nil
+	}
+	field := def.Fields.ForName(fieldName)
+	if field == nil { // __typename: not a field of the schema
+		return nil
+	}
+	rules := rulesOf(field.Directives)
+	if returned := schema.Types[field.Type.Name()]; returned != nil {
+		rules = append(rules, rulesOf(returned.Directives)...)
+	}
+	rules = append(rules, rulesOf(def.Directives)...)
+	for _, name := range def.Interfaces {
+		if iface := schema.Types[name]; iface != nil {
+			if inherited := iface.Fields.ForName(fieldName); inherited != nil {
+				rules = append(rules, rulesOf(inherited.Directives)...)
+			}
+		}
+	}
+	return rules
+}
+
+// RequireFieldRules makes the server apply the rules the schema declares (@authenticated, @requiresScopes), the same ones
+// the router applies: a field is resolved only for a caller that satisfies every rule of rulesOfField. A refused field is an
+// error (FORBIDDEN) at its place: null where the field allows it, and the nearest nullable parent where it does not. Without
+// a token check there is no caller: a protected field is refused, as the router does without an identity provider. To use
+// them, import the directives in the schema:
+// @link(url: "https://specs.apollo.dev/federation/v2.5", import: ["@key", "@authenticated", "@requiresScopes"]).
+func RequireFieldRules(api *handler.Server, schema *ast.Schema) {
+	var cache sync.Map
+	api.AroundFields(func(ctx context.Context, next graphql.Resolver) (any, error) {
+		field := graphql.GetFieldContext(ctx)
+		key := field.Object + "." + field.Field.Name
+		cached, found := cache.Load(key)
+		if !found {
+			cached, _ = cache.LoadOrStore(key, rulesOfField(schema, field.Object, field.Field.Name))
+		}
+		rules := cached.([]fieldRule)
+		if len(rules) == 0 {
+			return next(ctx)
+		}
+		caller, _ := CallerFrom(ctx)
+		for _, rule := range rules {
+			if !rule.satisfies(caller) {
+				message := "not authenticated"
+				if caller != nil {
+					message = fmt.Sprintf("forbidden: this token lacks what %s asks for", key)
+				}
+				return nil, &gqlerror.Error{Message: message, Extensions: map[string]any{"code": "FORBIDDEN"}}
+			}
+		}
+		return next(ctx)
+	})
 }
