@@ -22,22 +22,23 @@ through the router, a web brick's page on its own loopback port.
 
 ![The Bricks page: four healthy bricks, their tags, ports, subgraphs and router endpoint](../screenshots/admin-bricks.png)
 
-**What a brick needs** (the screenshot is from an earlier version, without the optional links): a click on a brick opens a panel under the table. *Dependencies* draws everything the brick
+**What a brick needs**: a click on a brick opens a panel under the table. *Dependencies* draws everything the brick
 needs, transitively: the capabilities it requires, the entities it extends, and the plugins its manifest lists in
-`dependencies`. Here `orders-web` needs `orders-api`, which needs `postgres`; the arrow says why. Below it, the
-bricks needed first, in order, and who requires this one. A brick that is needed but not installed is flagged. *Details*
+`dependencies`. Here `orders-web` needs `orders-api`, which needs `postgres`, and can use `shipping-api` (the dashed
+arrow); the label on an arrow says why. Below it, the bricks needed first, in order, and who
+requires this one. A brick that is needed but not installed is flagged. *Details*
 gathers status, restarts, port, `provides`, `requires`, `extends` and what would refuse its removal. A declared
 dependency protects its target from `remove` (`DEPENDENCY_IN_USE`), here `orders-api` while `orders-web` is installed,
 and from `disable` while the declaring brick is enabled; `add` warns when the declared brick is not installed, and `enable` when it is disabled;
 `up` waits only for the capabilities a brick requires. A dependency marked `optional` (here `shipping-api`, which
 `orders-web` can run without) is shown as optional and protects nothing.
 
-![The Dependencies panel of orders-web: orders-web needs orders, which needs postgres](../screenshots/admin-dependencies.png)
+![The Dependencies panel of orders-web: it needs orders-api, which needs postgres, and optionally shipping-api](../screenshots/admin-dependencies.png)
 
 **Removing a brick**: the dialog shows the CLI's refusal before anything runs, here `orders-api`, whose
 `Order` entity `shipping-api` extends.
 
-![The removal dialog for orders, blocked with EXTENDS_IN_USE](../screenshots/admin-remove-blocked.png)
+![The removal dialog for orders-api, blocked with EXTENDS_IN_USE](../screenshots/admin-remove-blocked.png)
 
 **Router**: the configuration, the subgraphs it calls and the composed schema, read-only.
 

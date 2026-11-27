@@ -202,8 +202,7 @@ object store (MinIO), a test mail server (Mailpit). Kafka stays deferred (sectio
 
 ## 9. Decided earlier, not done
 
-- **README screenshot** (`docs/screenshots/admin-dependencies.png`) is out of date: no optional links, no
-  Authorization rows.
+- ~~**Admin screenshots** out of date (the old brick names, no optional links)~~: taken again on 2026-11-27.
 - **Sign-in to the admin on k3d.** The sign-in is tested end to end on Docker Compose only; the k3d job covers the
   tokens through the router (D18).
 - **D22 step B**: a rule per field (`@requiresScopes`) and the router enforcing it too. Only if a real field asks for it.
