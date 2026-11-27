@@ -24,6 +24,7 @@ import {
   k8sLiveInput,
   MANAGED_SELECTOR,
   parseComposePs,
+  type ComposeRow,
   type LiveStatus,
 } from "./live.js";
 import { initContainerName, loadInstalledBricks, planProject, serviceName, volumeName, type Plan } from "./plan.js";
@@ -203,9 +204,11 @@ export function composeBusyPorts(plan: Plan, failure: string): Issue[] {
   // Two wordings: another container holds the port ("port is already allocated"), or a program of the host does
   // ("listen tcp4 127.0.0.1:<port>: bind: address already in use").
   const host = String.raw`(?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\])`;
+  // The third is Docker 28 and later, which no longer goes through "listen tcp".
   const patterns = [
     new RegExp(String.raw`Bind for ${host}:(\d+) failed: port is already allocated`, "g"),
     new RegExp(String.raw`listen tcp[46]? ${host}:(\d+): bind: address already in use`, "g"),
+    new RegExp(String.raw`failed to bind host port ${host}:(\d+)/tcp: address already in use`, "g"),
   ];
   const ports = new Set(patterns.flatMap((re) => [...failure.matchAll(re)].map((m) => Number(m[1]))));
   return [...ports]
@@ -219,6 +222,48 @@ export function composeBusyPorts(plan: Plan, failure: string): Issue[] {
         field: field ?? "the port in platform.json",
       });
     });
+}
+
+/** The services of the plan that publish one of these ports on the host: the router, and the service of a web brick. */
+function servicesPublishing(plan: Plan, ports: number[]): string[] {
+  return [
+    ...(plan.router && ports.includes(plan.router.port) ? [plan.router.name] : []),
+    ...plan.services.filter((s) => s.web && ports.includes(s.web.port)).map((s) => s.name),
+  ];
+}
+
+/**
+ * The services that run without the host port the plan gives them (the router, a web brick's service). Docker can start a
+ * container whose first start failed to bind its port, after which it runs with no published port and `up` would say
+ * the platform is up (seen on Docker 28: the router "Up", `bound = {}`). `rows` are the running containers of the project.
+ */
+export function composeUnpublished(plan: Plan, rows: ComposeRow[]): { service: string; issue: Issue }[] {
+  const expected = [
+    ...(plan.router ? [{ service: plan.router.name, port: plan.router.port, what: "the router", field: "router.port" }] : []),
+    ...plan.services.flatMap((s) =>
+      s.web ? [{ service: s.name, port: s.web.port, what: `the pages of "${s.brick}"`, field: `bricks.${s.brick}.webPort` }] : [],
+    ),
+  ];
+  return expected.flatMap((e) => {
+    const row = rows.find((r) => r.Service === e.service);
+    if (!row || row.State !== "running") return [];
+    if ((row.Publishers ?? []).some((p) => p.PublishedPort === e.port)) return [];
+    return [
+      {
+        service: e.service,
+        issue: issue("HOST_PORT_NOT_PUBLISHED", `platform.json#/${e.field.replaceAll(".", "/")}`, {
+          port: String(e.port),
+          what: e.what,
+          field: e.field,
+        }),
+      },
+    ];
+  });
+}
+
+/** Removes (stopped first) these containers of the project, so that the next `up` creates them again with their port. */
+function composeRemove(deps: RuntimeDeps, root: string, plan: Plan, services: string[]): void {
+  if (services.length) run(deps, root, "docker", [...composeBase(plan), "rm", "--stop", "--force", ...services]);
 }
 
 function composeWaitTimeouts(deps: RuntimeDeps, root: string, plan: Plan, failure: string): Issue[] {
@@ -451,7 +496,39 @@ export function up(root: string, runtime: Runtime, opts: { pruneVolumes?: boolea
     if (r.status !== 0) {
       const timeouts = composeWaitTimeouts(deps, dir, plan, r.stderr + r.stdout);
       const busy = composeBusyPorts(plan, r.stderr + r.stdout);
+      // A container that failed to bind its port stays created: left there, the next `up` would start it with no port.
+      if (!timeouts.length && busy.length)
+        composeRemove(
+          deps,
+          dir,
+          plan,
+          servicesPublishing(
+            plan,
+            busy.map((i) => Number(i.params!.port)),
+          ),
+        );
       throw new PlugbricksError(timeouts.length ? timeouts : busy.length ? busy : [failed("docker", args, r)]);
+    }
+    if (plan.router || plan.services.some((s) => s.web)) {
+      const listed = run(deps, dir, "docker", [...composeBase(plan), "ps", "--format", "json"]);
+      if (listed.status === 0) {
+        let rows: ComposeRow[] = [];
+        try {
+          rows = parseComposePs(listed.stdout);
+        } catch {
+          // a listing that cannot be read says nothing: the check is only made on one that can
+        }
+        const missing = composeUnpublished(plan, rows);
+        if (missing.length) {
+          composeRemove(
+            deps,
+            dir,
+            plan,
+            missing.map((m) => m.service),
+          );
+          throw new PlugbricksError(missing.map((m) => m.issue));
+        }
+      }
     }
   } else {
     requireKubectl(deps, dir, target);

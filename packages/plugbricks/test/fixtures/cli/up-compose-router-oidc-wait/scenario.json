@@ -17,7 +17,8 @@
       "run": ["up"],
       "commands": [
         "docker compose version",
-        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 720"
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 720",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env ps --format json"
       ]
     }
   ]

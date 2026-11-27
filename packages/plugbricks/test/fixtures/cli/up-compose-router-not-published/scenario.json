@@ -1,0 +1,63 @@
+{
+  "description": "an up that succeeds with the router running and no published port is refused, and the router removed so that the next up creates it again (D47)",
+  "steps": [
+    {
+      "run": [
+        "init",
+        "--name",
+        "demo"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/postgres"
+      ]
+    },
+    {
+      "run": [
+        "add",
+        "examples/orders-api"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "exit": 1,
+      "codes": [
+        "HOST_PORT_NOT_PUBLISHED"
+      ],
+      "stderr": "change router.port in platform.json",
+      "fake": [
+        {
+          "match": " ps --format json",
+          "stdout": "{\"Service\": \"router\", \"State\": \"running\", \"Publishers\": [{\"URL\": \"\", \"TargetPort\": 3002, \"PublishedPort\": 0, \"Protocol\": \"tcp\"}]}"
+        }
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env ps --format json",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env rm --stop --force router"
+      ]
+    },
+    {
+      "run": [
+        "up"
+      ],
+      "stdout": "Platform demo is up (compose)",
+      "fake": [
+        {
+          "match": " ps --format json",
+          "stdout": "{\"Service\": \"router\", \"State\": \"running\", \"Publishers\": [{\"URL\": \"127.0.0.1\", \"TargetPort\": 3002, \"PublishedPort\": 4000, \"Protocol\": \"tcp\"}]}"
+        }
+      ],
+      "commands": [
+        "docker compose version",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env up --detach --remove-orphans --wait --wait-timeout 420",
+        "docker compose --project-name demo --file .generated/compose/compose.yaml --env-file .secrets/secrets.env ps --format json"
+      ]
+    }
+  ]
+}
