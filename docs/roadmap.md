@@ -26,6 +26,7 @@ when the one before it that it depends on is merged.
 | 13  | ~~gRPC through Cosmo Connect (D35), a REST adapter example (D36)~~ (done)               | 4, items 2 and 3 | step 7                                      | study, then docs                  |
 | 14  | Signed images and an SBOM; a short demo video                                         | 8, items 2 and 3 | step 8 (public images)                      | code, then the owner              |
 | 15  | What was decided earlier and is not done                                              | 9              | nothing                                       | code or docs                      |
+| 16  | **An enterprise product**: phases E1 to E4 and EA (D51 to D67), each decision accepted first | 10             | step 1 for E4's 1.0 contract                  | decisions by the owner, then code |
 
 The newcomer's test (`npm create plugbricks`, then `npm install`) resumes after steps 1 and 3.
 
@@ -147,7 +148,9 @@ themselves). What it federates today is a **GraphQL service in Federation v2 tha
    example. **Done (D36):** `examples/stock-api` in front of `examples/stock-rest`. Not shown: an adapter that checks
    tokens or sends a credential to the REST API.
 
-Not covered: a federation already run by Apollo (Router or Gateway): plugbricks replaces it, it does not join it.
+A federation already run by Apollo (Router or Gateway): plugbricks replaces it today, it does not join it. Three
+proposed decisions change that, in section 10: Apollo Router as the platform's router (D65), importing a federation
+and moving it at one's own pace (D66), and plugbricks without its router, behind a team's own (D67).
 
 ## 5. For people who write services
 
@@ -168,7 +171,8 @@ Aim: the daily gesture of someone who creates `order-api`, once the first minute
 
 ## 6. Confidence for production
 
-Each item needs a written decision before code, like D22.
+Each item needs a written decision before code, like D22. They are now proposed, with the rest of what a company
+needs, in section 10: observability (D58), environments (D53) and secrets (D54), breaking changes and upgrades (D60).
 
 1. **An observability brick** (Prometheus, Grafana, a trace viewer) that provides `metrics` and `tracing` in the
    model of `database` and `oidc`. D9 turned them off on purpose: the router starts with `TRACING_ENABLED`,
@@ -197,7 +201,7 @@ come after step 3.
    [--runtime] [--with-secrets]`, no secret value unless asked, nothing of the platform changed; run with plain
    `docker compose` by hand. Not run: the Kubernetes files on a cluster.
 2. **Signed images and an SBOM** (a list of the components of each image), next to the provenance npm already gets
-   (D24). After the images are public.
+   (D24). After the images are public. Proposed in D61 (section 10).
 3. **A demo of about 60 seconds**: `npm create plugbricks` to the admin. It needs the public images (section 2,
    step 5) and the starter.
 
@@ -214,3 +218,52 @@ come after step 3.
 - **Taking grants back** in Keycloak when a dependency is removed (D22 limit).
 - **The newcomer's test** (`npm create plugbricks`, then `npm install`) resumes when the packages are published; the
   frictions found so far are the two 404s and the missing bricks (sections 1 and 2).
+
+## 10. An enterprise product
+
+What plugbricks needs so that a company runs it, not only a developer on a laptop. Written on 2026-11-28 from what the
+code does today (each decision says where it was checked): every item is a **proposed** decision, D51 to D64, with its
+recommendation and the questions that are the owner's. None is accepted yet, and none starts before its decision is.
+
+Today plugbricks is good for starting, developing and demonstrating a federated platform: one command gives the
+services, the router, tokens and roles, and checks between them. What a company asks in addition, and what is missing:
+
+| Need | Today | Decision |
+| --- | --- | --- |
+| Pull from its own registry, through its mirror | any registry in a manifest; credentials only on Compose; Docker Hub and a fixed router image | D51 |
+| Run with the rights of one namespace | `up` creates the namespace | D52 |
+| Run behind its proxy and its certificate authority | no proxy variables, no extra authority | D63 |
+| One platform for development, staging and production | one set of values | D53 |
+| Secrets in a vault, rotated | generated into `.secrets/` | D54 |
+| Its own database, object storage, cache, identity provider | a provider must run a service | D55 |
+| TLS and an entry point for clients | loopback or `ClusterIP`, no TLS | D56 |
+| Kubernetes fit for production | one replica, no resources, no NetworkPolicy, 1Gi volumes | D57 |
+| Metrics, traces, logs | none (the router's are off, D9) | D58 |
+| Backups that are restored | volumes kept, never backed up | D59 |
+| Changes reviewed: breaking schema changes, upgrades, a CI check | composition only; `remove` then `add` | D60 |
+| Images it can trust | npm provenance; images neither signed nor described | D61 |
+| A catalogue of validated bricks for every team | folders copied into each project | D62 |
+| A contract, a compatibility matrix, support, no Node prerequisite | 0.x, one maintainer, Node 22 | D64 |
+| Come from Apollo, or keep Apollo Router | plugbricks replaces an Apollo federation, the router is Cosmo's | D65, D66, D67 |
+
+### Order of work
+
+A phase starts when the decisions of the one before are accepted; inside a phase the items are independent.
+
+| Phase | What it gives | Decisions | Why in this order |
+| --- | --- | --- | --- |
+| **E1. Unblock** | It installs and pulls inside a company network | D51 registries, D52 namespace, D63 proxies and authorities | Small, and without them nothing else can be tried there |
+| **E2. Run in production** | A platform a company can put in front of users | D53 environments, D54 secrets, D55 external providers, D56 TLS and entry point, D57 Kubernetes, D59 backups | D53 first: the others are values per environment |
+| **E3. Operate it** | Seeing it run, and changing it safely | D58 observability, D60 schema evolution and the CI check | Needs E2's environments to be worth it |
+| **E4. Scale and trust** | Many teams, an audited supply chain, a stable product | D61 signatures and SBOM, D62 brick catalogue, D64 product contract | 1.0 (D64) closes the phase |
+| **EA. Coming from Apollo** | A team on Apollo Federation adopts plugbricks without starting over | D66 import, D65 Apollo Router as the router (a study first), D67 no router | Beside E1 to E4, not after them: D66 builds on D33 and can come first; D65 starts with its study; D67 needs D53's addresses |
+
+### What stays out
+
+- Running a service mesh, or mutual TLS between services: a mesh's job; D56 says how to put one in.
+- Multi-region or multi-cluster platforms, and an operator that reconciles the cluster continuously: plugbricks applies
+  what it planned when asked (D5); a company that wants continuous reconciliation uses `export` (D34) with its GitOps
+  tool.
+- Running Apollo's composition or router code inside plugbricks: they are under the Elastic License v2, which is not
+  an open source licence. With D65 and D67, Rover and Apollo Router are tools and images the person chooses and
+  accepts, never part of plugbricks.

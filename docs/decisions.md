@@ -2713,6 +2713,322 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Limit.** On the first run of one mutation on k3d, `up` failed for a reason that was not kept; the same run, and the healthy
   one, passed or failed as expected afterwards.
 
+## D51. Private registries: credentials on Kubernetes, a mirror for third-party images, the router's image
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E1 of section 10 of `docs/roadmap.md`.
+- **Context:** a company keeps its images in its own registry (Harbor, GitLab, Artifactory), often as the only one its
+  machines and clusters may reach. A manifest may already name any registry (`harbor.example.com/library/postgres:16.4`)
+  as long as the image is pinned, and on Docker Compose the pull uses the credentials of the machine (`docker login`).
+  Three things stop it on the way: the Kubernetes driver renders no `imagePullSecrets`, so a private image cannot be
+  pulled by a cluster that does not already hold the credentials; the example bricks pull from Docker Hub
+  (`postgres`, `busybox`, `curlimages/curl`, `rabbitmq`, `nats`, `redis`, `chrislusf/seaweedfs`), which limits anonymous
+  pulls per address and which a closed network does not reach; and the router's image is a constant of the code
+  (`ROUTER_IMAGE` in `src/drivers/common.ts`, `ghcr.io/wundergraph/cosmo/router` pinned by digest).
+- **Proposal.**
+  - `registries` in `platform.json`: `{ "harbor.example.com": { "secret": "harbor" } }`. The credentials come from
+    `.secrets/` (or from D54's vault), never from `platform.json`. Kubernetes: one `kubernetes.io/dockerconfigjson`
+    Secret per registry and `imagePullSecrets` on every pod whose image is on it. Compose: nothing rendered; `doctor`
+    checks that the machine is logged in to each registry the images use.
+  - `images.mirror` in `platform.json`: a prefix that replaces the registry of every third-party image at render time
+    (`docker.io/library/postgres:16.4-alpine` becomes `harbor.example.com/dockerhub/library/postgres:16.4-alpine`), as
+    a Harbor proxy cache expects. The digest, when there is one, is kept: the mirror must serve the same bytes.
+  - `router.image` in `platform.json`, for a mirrored or a company-built router: accepted only with a digest, and
+    `doctor` warns when its version is not the pinned one (D9 checked one version).
+- **Questions for the owner.** One mirror prefix for all, or one per source registry? Should `add` refuse an image of a
+  registry that `platform.json` does not list (a company that allows only its own)?
+- **Verify before code:** the exact path a Harbor proxy cache gives to Docker Hub's official images (`library/`), and
+  that a digest pulled through it is the upstream one.
+
+## D52. Kubernetes with the rights of a namespace, not of the cluster
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E1.
+- **Context:** `up --runtime k8s` applies a Namespace named after the platform, then everything inside it. In a
+  company a developer, or a CI account, is usually given one namespace and the rights to use it, not the right to
+  create namespaces; the first `kubectl apply` is then refused and nothing runs.
+- **Proposal.** `kubernetes.namespace` in `platform.json`, and `--namespace` for one run: an existing namespace that
+  plugbricks uses as it is, without creating, labelling or deleting it. `down` removes only what carries plugbricks'
+  labels (as it already does), and several platforms may share a namespace when their runtime names do not collide
+  (the check of the plan extended to the names already there). `doctor` asks `kubectl auth can-i` for each kind it will
+  apply, and says which right is missing.
+- **Questions for the owner.** When the namespace is given, keep the name of the platform as a prefix of every object
+  (safer when shared), or not (shorter names)?
+
+## D53. Environments: one platform, its values for development, staging and production
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E2. Item 2 of section 6 of the roadmap.
+- **Context:** `platform.json` holds one set of values. A team runs the same platform on a laptop, in a test cluster and
+  in production, with other ports, addresses, image registries, sizes and identity providers; today that means three
+  platforms kept in step by hand.
+- **Proposal.** `environments/<name>.json` next to `platform.json`: an overlay of the fields that may differ (router
+  port and image, web ports, registries and mirror, namespace, the address of an external subgraph or provider,
+  replicas and resources of D57, volume sizes, the vault of D54). The bricks, their versions and the lock stay common:
+  the same platform, not three. `--env <name>` on every command that renders or runs, and `PLUGBRICKS_ENV`; `status`
+  and `doctor` say which environment they read. The values a manifest may take from the environment are named in the
+  manifest (`"env": { "LOG_LEVEL": "${platform.env.LOG_LEVEL}" }`), so that a value is never injected silently.
+- **Options considered.** One `platform.json` per environment (simple, but the bricks drift apart); Helm-style value
+  files on top of `export` (the bricks would no longer be checked per environment).
+- **Questions for the owner.** One lock for all environments (recommended: the same versions everywhere) or one per
+  environment? May an environment remove a brick (a mail catcher in development only)?
+
+## D54. Secrets from a vault, not only from a file
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E2. Item 2 of section 6 of the roadmap.
+- **Context:** the passwords plugbricks generates are written to `.secrets/secrets.env` and `.secrets/k8s-secret.yaml`,
+  restricted to the user (D6). This is right on a laptop; in production a company keeps secrets in a vault (HashiCorp
+  Vault, a cloud secret manager), rotates them, and does not let them sit in a file of a working copy.
+- **Proposal.** A `secrets` backend per environment (D53):
+  - `file`, today's behaviour, the default;
+  - `kubernetes-external`: plugbricks renders no Secret values but `ExternalSecret` objects (External Secrets Operator)
+    that point to the vault's keys, and the names it expects; generating a value becomes the vault's job, and
+    `plugbricks secrets list` prints what to create;
+  - `sops`: the secret file encrypted with SOPS, which may then be committed, decrypted at `up`.
+  A rotation command (`plugbricks secrets rotate <secret>`) changes a value, re-runs the provision task that sets it
+  (they are idempotent and already set the password again, D19) and restarts the consumers.
+- **Questions for the owner.** Which backends first? (Recommended: `kubernetes-external`, the common path in clusters,
+  then `sops` for Compose.)
+- **Verify before code:** the version of External Secrets to support, and how a provision task reads a value it no
+  longer generates.
+
+## D55. External providers: a company's own database, object storage, cache or identity provider
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E2.
+- **Context:** a brick that provides a capability must run a service (`provides.<cap>.service` is required). A company
+  already has its PostgreSQL (a managed database), its S3, its Redis, its Keycloak or another OIDC provider, and wants
+  the bricks that require `database` to be wired to it, not to a container. D33 did this for a subgraph.
+- **Proposal.** `provides.<cap>.external` instead of `service`: a brick without services whose capability is served
+  elsewhere. Its `inject` takes the address and the credentials from secrets the person gives (`${secrets.…}` declared
+  as given, not generated) or from D54's vault. Two modes, chosen by the brick: **provision** (plugbricks runs the
+  provision task against the external server with an administrator's credentials, one database and role per consumer,
+  as today) or **given** (each consumer gets credentials written by hand, nothing is created). `up` does not wait for
+  the server; `doctor` checks that it answers, from inside the platform where the router's rule of D33 applies
+  (`host.docker.internal`, no loopback).
+- **Questions for the owner.** Must the administrator's credentials of the provision mode ever reach the machine that
+  runs `up` (they do today, for the brick's own server), or only a task in the cluster? One bucket per consumer on an
+  external S3, or one shared bucket with a prefix?
+
+## D56. The router in front of clients: TLS and an entry point
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E2.
+- **Context:** the router is published on `127.0.0.1` only on Compose and as a `ClusterIP` Service on Kubernetes (D9),
+  and nothing is served over TLS; a company puts the platform behind its own proxy by hand.
+- **Proposal.** On Kubernetes, `router.ingress` in an environment (D53): a Gateway API `HTTPRoute`, or an `Ingress` for
+  older clusters, with a host name and a TLS secret (or a cert-manager issuer). On Compose, an optional TLS listener for
+  the router with a certificate from `.secrets/`, still on the loopback address unless an environment says otherwise.
+  The allowed origins (D17) take the public host name. Inside the platform services still talk in plain text: mutual
+  TLS between services is a service mesh's job, documented, not rendered.
+- **Questions for the owner.** Gateway API first, or Ingress first? Publish on another address than loopback on Compose
+  at all?
+
+## D57. Kubernetes for production: resources, replicas, network rules, storage, scheduling
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E2.
+- **Context:** the Deployments run one replica (`replicas: 1`), set no resource requests or limits, and no
+  `NetworkPolicy` exists; every volume claim asks for `1Gi` (`VOLUME_SIZE`) of the default storage class; only the
+  router's pod sets a `securityContext` (non-root, read-only root filesystem).
+- **Proposal.**
+  - `resources` per service in the manifest (the brick's author knows its needs), overridable per environment.
+  - `replicas` per service in an environment, refused for a service with a volume (a single-writer database) unless
+    the brick says it can scale; a `PodDisruptionBudget` when there are two or more.
+  - **NetworkPolicies derived from the plan**: deny by default in the namespace, then allow exactly the links the plan
+    knows (a consumer to its provider, the router to its subgraphs, the provision tasks to their provider). This is a
+    strength of the model: plugbricks knows the graph a hand-written policy would have to guess.
+  - `storage.size` and `storage.class` per volume (manifest default, environment override).
+  - The `securityContext` of the router for every service whose brick declares it can run so (non-root, no added
+    capabilities, read-only root filesystem when it writes only to its volumes).
+  - `nodeSelector` and `tolerations` per environment.
+- **Questions for the owner.** NetworkPolicies on by default, or opt-in for a first version (a cluster without a policy
+  engine ignores them)?
+- **Verify before code:** the NetworkPolicy rules on k3d's network plugin in CI, including DNS.
+
+## D58. Observability: metrics, traces and logs, by a brick
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E3. Item 1 of section 6 of the roadmap.
+- **Context:** the router starts with its metrics and tracing off and its usage tracking disabled (D9, after a capture
+  showed it reaching a third-party host). There is no metric, no trace and no log collection; `logs` reads one
+  container at a time (D32).
+- **Proposal.** Two capabilities, `metrics` and `tracing`, provided by an observability brick (Prometheus and Grafana,
+  and an OpenTelemetry collector with a trace viewer), or by a company's own system through an external provider
+  (D55). When one is provided, and only then, the router gets `PROMETHEUS_ENABLED` and an OTLP endpoint, and every
+  service that requires the capability (optionally, D19) gets `OTEL_EXPORTER_OTLP_ENDPOINT` and its service name. The
+  usage tracking stays off: the decision says that nothing else changes. Logs stay the runtime's (Docker, the cluster's
+  collector); the guide says how to read them.
+- **Questions for the owner.** One brick with all three tools, or one per tool?
+- **Verify before code:** the variables of the pinned router for its OTLP exporter, and that turning metrics on opens no
+  outbound connection.
+
+## D59. Backup and restore of what the bricks store
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E2.
+- **Context:** the volumes are kept across `down` and `remove` (D3) and deleted only on request, but there is no backup:
+  a disk lost, a wrong migration or a deleted volume loses the data of PostgreSQL, RabbitMQ, Redis or SeaweedFS.
+- **Proposal.** `provides.<cap>.backup` and `restore` in the manifest, tasks in the model of `provision`: the brick knows
+  how to dump itself (`pg_dump` per consumer database, a Redis snapshot, a copy of the buckets). `plugbricks backup
+  [<brick>]` writes a dated archive to a folder or to an object storage (the platform's own, or an external one),
+  `plugbricks restore <brick> <archive>` puts it back on a stopped consumer. A schedule is an environment's (a
+  Kubernetes CronJob rendered from the same task). Each backup is checked by restoring it once into a throwaway volume
+  in the tests.
+- **Questions for the owner.** Where may an archive go by default: only a folder of the machine, or the platform's own
+  object storage? Encrypt archives (with what key)?
+
+## D60. Schema evolution: breaking changes, brick versions, upgrades, and a check for CI
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E3. Items 3 and 4 of section 6 of the roadmap.
+- **Context:** `add` checks that the subgraphs compose today (D8); nothing says whether a new version of a subgraph
+  breaks a client of the old one (a field removed, an argument made required, a type narrowed). A change to an installed
+  brick needs `remove` then `add`, and a brick has no upgrade path. Teams want this in their pull requests.
+- **Proposal.**
+  - `plugbricks schema diff <brick> [--from <lock or ref>]`: the breaking and the safe changes between the composed
+    schema of the lock and the one the new brick would give, offline (from the files, like composition; `schema check`
+    of D33 already compares a file with a service).
+  - `plugbricks upgrade <brick> <path or name>`: replace an installed brick by a new version in one step, refused on a
+    breaking change unless `--allow-breaking`, keeping its volumes and secrets; the brick's `version` must grow (semver).
+  - `plugbricks check`: everything a CI needs and nothing that runs (manifests, composition, dependencies, the diff
+    against the base branch's lock, `doctor`'s checks that need no runtime), with an exit code and a JSON report.
+- **Questions for the owner.** What counts as breaking for an optional field added to an input? (Recommended: the rules
+  of GraphQL Inspector, written down in the decision.)
+- **Verify before code:** whether `wgc`'s schema check works without a Cosmo control plane (section 6 of the roadmap
+  says it is not verified).
+
+## D61. Supply chain: signed images, SBOMs, and checking them before running
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E4. Item 2 of section 8 of the roadmap.
+- **Context:** the npm packages are published with provenance (D24); the images of the examples are published by the
+  CI with labels (D29) but neither signed nor described by an SBOM, and nothing checks an image before it runs.
+- **Proposal.** The images workflow signs each image without a key (Sigstore cosign, with the CI's OIDC identity) and
+  attaches an SBOM (SPDX or CycloneDX) and a provenance attestation. `plugbricks verify` checks, for every image of a
+  platform, the signature against an identity the platform lists (`images.trust` in an environment), and `up` can be
+  set to refuse an unsigned or unknown image. The CLI's own release keeps npm provenance.
+- **Questions for the owner.** Refuse unsigned images by default in a production environment, or only warn?
+- **Verify before code:** cosign verification without network access to the transparency log, for closed networks.
+
+## D62. Bricks in an OCI registry: a company's catalogue
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E4.
+- **Context:** a brick comes from a folder: the project's `bricks/` (D25) or a path, copied into `.platform/bricks/`.
+  A company wants a platform team to publish validated bricks (a hardened PostgreSQL, the internal S3 of D55, the
+  company's identity provider) once, with versions, and every team to add them by name, from the registry it already
+  runs (D51).
+- **Proposal.** A brick packed as an OCI artifact (its folder, its media type, its version as the tag, its integrity
+  as the digest): `plugbricks brick push <dir> oci://harbor.example.com/bricks/postgres:1.2.0`, and
+  `plugbricks add oci://…/postgres:1.2.0` (or a name, with `catalogues` in `platform.json`). The lock records the
+  reference and the digest, so a pulled brick is the one that was checked; `upgrade` (D60) takes the next tag; D61's
+  signatures apply to bricks too. Registries that store OCI artifacts (Harbor, GitLab, GitHub, Artifactory) need
+  nothing else.
+- **Questions for the owner.** OCI artifacts only, or also a plain Git repository as a catalogue?
+- **Verify before code:** the artifact support of Harbor and GitLab for a custom media type, and a library to push and
+  pull without the `oras` binary.
+
+## D63. Company networks: proxies and internal certificate authorities
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E1.
+- **Context:** inside a company the way out goes through an HTTP proxy, and internal services (the registry, the
+  identity provider, an external subgraph) present certificates of the company's own authority. A container built
+  from the examples or by `create` knows neither: an image build fails to download its dependencies, and a service
+  calling an internal HTTPS address fails its TLS check.
+- **Proposal.** `network.proxy` and `network.caCertificates` in an environment (D53): the proxy variables
+  (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, with the platform's own service names always in `NO_PROXY`) and a bundle
+  mounted into every service and task, with `NODE_EXTRA_CA_CERTS`, `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` set; the
+  templates of `create` read them at build time too. The router gets the bundle for an external subgraph (D33).
+- **Questions for the owner.** Apply them to every service, or only to those whose brick declares it calls out?
+
+## D64. Running plugbricks as a product: versions, compatibility, support, and the CLI without Node
+
+- **Status:** proposed (2026-11-28), not accepted. Phase E4.
+- **Context:** while plugbricks is 0.x the contract may change in a minor version (D24), one person maintains it, and
+  the CLI needs Node 22 even for a team that writes only Go or Python. A company adopting it asks what it may rely on.
+- **Proposal.**
+  - **A 1.0 contract:** the manifest, `platform.json`, the lock, the error codes and the JSON reports are stable within
+    a major version; a deprecation is announced one minor version ahead, with a warning and a codemod when it can be
+    automated (`plugbricks migrate`).
+  - **A compatibility matrix** tested in CI and published in the guide: Docker Engine and Compose, the Kubernetes
+    versions (k3d plus one managed distribution), the pinned router, Node.
+  - **A supported version:** the latest minor gets fixes, the previous one security fixes for a stated time.
+  - **A standalone CLI:** a single executable per platform (Node's single executable applications) published with the
+    release, so that Node is not a prerequisite; npm stays the main channel.
+  - **The admin for a team:** its audit log (`.admin/audit.log`) exported to the company's collector, and its roles
+    (D15) mapped to the company's identity provider groups.
+- **Questions for the owner.** The support terms are a business decision: none (community), or an offer? When to call it
+  1.0: after which of the phases of section 10?
+
+## D65. Apollo Router as the platform's router, instead of Cosmo
+
+- **Status:** proposed (2026-11-28), not accepted; a study first, then code. Phase EA of section 10 of
+  `docs/roadmap.md`.
+- **Context:** the router is the Cosmo router, rendered by plugbricks from its own composition (D8, D9). Many companies
+  already run Apollo Router, often with GraphOS (Apollo's hosted service), and would keep it. What was checked on
+  2026-11-28 in Apollo's documentation (to check again before code, since terms change):
+  - Apollo Router Core and the Apollo Federation libraries from v2 are under the **Elastic License v2**. Internal use
+    is free; a licence key may not be circumvented, and offering routing as a service to third parties is restricted.
+    ELv2 is not an open source licence: plugbricks (Apache-2.0, D23) must not ship that code.
+  - The router reads a **supergraph** composed by Apollo's composition, which Rover runs in a plugin under ELv2 (in CI,
+    `APOLLO_ELV2_LICENSE=accept`). It does not read Cosmo's execution configuration.
+  - **Licensed features** (GraphOS, with a graph API key and a graph ref, or an offline licence that Enterprise
+    organisations get): JWT authentication of inbound requests, the `@authenticated`, `@requiresScopes` and `@policy`
+    directives, request limits, demand control, safelisting, subscriptions and query batching.
+  - It sends anonymous usage data to Apollo unless `APOLLO_TELEMETRY_DISABLED` is set.
+- **Proposal.** `router.kind` in `platform.json`, `cosmo` by default and `apollo` on request.
+  - **Composition:** plugbricks keeps composing with Cosmo's composition (Apache-2.0) to check every `add` and
+    `remove`, as today; for `apollo` it also builds the supergraph with Rover, a tool pinned in `tools.json` and
+    downloaded only for that kind, like `wgc` (D9), with the ELv2 accepted explicitly by the person
+    (`router.acceptElasticLicense: true`), never by plugbricks on their behalf. A composition that one accepts and the
+    other refuses is reported, with both messages.
+  - **Configuration:** a `router.yaml` for Apollo Router rendered from the same plan: the allowed origins (D17), the
+    token passed on per subgraph (D20, D33), no sandbox or introspection, `APOLLO_TELEMETRY_DISABLED`, its health
+    endpoint for Compose and Kubernetes, the router's image pinned by digest.
+  - **What needs a licence:** without one, the router cannot require a token (D19) nor apply the rules per field
+    (D42 to D45). The APIs still check the token and the roles themselves (D20, D22, D46, D48, D49), so the platform
+    stays protected, with one layer less: `add`, `up` and `doctor` say so. With a licence, the person gives its key
+    through a secret (D54), and the router gets the same rules as Cosmo's.
+  - **Refused with Apollo:** a gRPC subgraph (D35), which needs Cosmo Connect.
+- **The study, before code (like D35 and D42):** the Apollo Router version to pin and its image digest; Rover and its
+  composition plugin, pinned and run offline; the supergraph of the example platform composed and served; CORS and the
+  token passed on, through the real router; a network capture at startup with the telemetry off (as D9 did for Cosmo);
+  the exact list of what fails without a licence, on that version; the composition differences between Cosmo and
+  Apollo on the examples (`extends`, `@shareable`, the rules of D43).
+- **Questions for the owner.** Support `apollo` at all, given ELv2 and the licensed features? If so, with GraphOS (the
+  router connected to Apollo's service) or only self-contained (no connection, no licensed feature)?
+
+## D66. Coming from Apollo: import a federation, then move it at one's own pace
+
+- **Status:** proposed (2026-11-28), not accepted. Phase EA.
+- **Context:** a team that runs Apollo Federation has subgraphs written for it (Federation v2, `@key`, `@shareable`,
+  `@external`), a Rover configuration that lists them (`supergraph.yaml`: names, routing URLs, schema files), and a
+  router configuration. Its subgraphs are standard GraphQL services, and D33 can already federate a subgraph that runs
+  elsewhere without moving it.
+- **Proposal.**
+  - `plugbricks import <supergraph.yaml>`: one external brick (D33) per subgraph of the file, with its URL and its
+    schema (a file, or read once from the service with `_service { sdl }`, D33 step 2), then the composition check;
+    nothing of the team's services moves. A subgraph that does not compose with Cosmo, or uses a directive plugbricks
+    refuses, is reported with its reason, and the others are imported.
+  - **A migration guide** mapping Apollo Router's configuration to plugbricks: CORS to D17, JWT authentication to D19,
+    header propagation to D20, `@authenticated` and `@requiresScopes` to D42 to D44; and saying what has **no
+    equivalent**: Rhai scripts, coprocessors, Rust plugins, and GraphOS's services (managed federation, contracts,
+    its schema checks, persisted queries).
+  - **Then one service at a time:** an external brick becomes a brick with its container, its database, its token
+    check and its roles; `schema check` (D33) and `schema diff` (D60) say nothing broke on the way.
+- **Questions for the owner.** Read `subgraphs` from a GraphOS graph ref too (it needs an Apollo API key), or only from a
+  local `supergraph.yaml`?
+- **Verify before code:** the fields of `supergraph.yaml` across Rover versions, and how a Federation v1 subgraph
+  composes with Cosmo's composition.
+
+## D67. Keeping one's Apollo Router: plugbricks without its router
+
+- **Status:** proposed (2026-11-28), not accepted. Phase EA.
+- **Context:** a team may keep its Apollo Router and GraphOS in front, and want plugbricks for everything behind them:
+  services with their databases, queues and secrets, Keycloak, `create`, `dev`, `doctor`. Today plugbricks always
+  renders its router when a brick serves a subgraph, and publishes nothing else (D9): the team's router could not reach
+  the subgraphs.
+- **Proposal.**
+  - `router.kind: "none"`: no router rendered. plugbricks still composes with Cosmo, as a check (D8).
+  - **The subgraphs published** for the team's router, on an address an environment names (D53): loopback on Compose
+    for a router on the same machine; on Kubernetes a Service the router reaches in its own namespace (with D57's
+    NetworkPolicies allowing it). Every published subgraph checks the token itself (D20), so it is not left open; a
+    subgraph whose brick checks no token is refused in this mode, since nothing would stand in front of it.
+  - `plugbricks export rover <file>`: the `supergraph.yaml` that Rover and GraphOS read, with the subgraphs' published
+    URLs and schemas; Apollo composes, with its own tools. plugbricks never runs or ships Apollo's composition here.
+- **Questions for the owner.** Publish subgraphs at all (it is the rule D9 kept), and only in this mode? Which kinds of
+  address on Kubernetes: a Service only, or also an Ingress (D56)?
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
