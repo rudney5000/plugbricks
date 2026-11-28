@@ -2950,6 +2950,85 @@ status } }` answers `{"data":{"shipment":{"carrier":"ups","status":"SHIPPED"}}}`
 - **Questions for the owner.** The support terms are a business decision: none (community), or an offer? When to call it
   1.0: after which of the phases of section 10?
 
+## D65. Apollo Router as the platform's router, instead of Cosmo
+
+- **Status:** proposed (2026-11-28), not accepted; a study first, then code. Phase EA of section 10 of
+  `docs/roadmap.md`.
+- **Context:** the router is the Cosmo router, rendered by plugbricks from its own composition (D8, D9). Many companies
+  already run Apollo Router, often with GraphOS (Apollo's hosted service), and would keep it. What was checked on
+  2026-11-28 in Apollo's documentation (to check again before code, since terms change):
+  - Apollo Router Core and the Apollo Federation libraries from v2 are under the **Elastic License v2**. Internal use
+    is free; a licence key may not be circumvented, and offering routing as a service to third parties is restricted.
+    ELv2 is not an open source licence: plugbricks (Apache-2.0, D23) must not ship that code.
+  - The router reads a **supergraph** composed by Apollo's composition, which Rover runs in a plugin under ELv2 (in CI,
+    `APOLLO_ELV2_LICENSE=accept`). It does not read Cosmo's execution configuration.
+  - **Licensed features** (GraphOS, with a graph API key and a graph ref, or an offline licence that Enterprise
+    organisations get): JWT authentication of inbound requests, the `@authenticated`, `@requiresScopes` and `@policy`
+    directives, request limits, demand control, safelisting, subscriptions and query batching.
+  - It sends anonymous usage data to Apollo unless `APOLLO_TELEMETRY_DISABLED` is set.
+- **Proposal.** `router.kind` in `platform.json`, `cosmo` by default and `apollo` on request.
+  - **Composition:** plugbricks keeps composing with Cosmo's composition (Apache-2.0) to check every `add` and
+    `remove`, as today; for `apollo` it also builds the supergraph with Rover, a tool pinned in `tools.json` and
+    downloaded only for that kind, like `wgc` (D9), with the ELv2 accepted explicitly by the person
+    (`router.acceptElasticLicense: true`), never by plugbricks on their behalf. A composition that one accepts and the
+    other refuses is reported, with both messages.
+  - **Configuration:** a `router.yaml` for Apollo Router rendered from the same plan: the allowed origins (D17), the
+    token passed on per subgraph (D20, D33), no sandbox or introspection, `APOLLO_TELEMETRY_DISABLED`, its health
+    endpoint for Compose and Kubernetes, the router's image pinned by digest.
+  - **What needs a licence:** without one, the router cannot require a token (D19) nor apply the rules per field
+    (D42 to D45). The APIs still check the token and the roles themselves (D20, D22, D46, D48, D49), so the platform
+    stays protected, with one layer less: `add`, `up` and `doctor` say so. With a licence, the person gives its key
+    through a secret (D54), and the router gets the same rules as Cosmo's.
+  - **Refused with Apollo:** a gRPC subgraph (D35), which needs Cosmo Connect.
+- **The study, before code (like D35 and D42):** the Apollo Router version to pin and its image digest; Rover and its
+  composition plugin, pinned and run offline; the supergraph of the example platform composed and served; CORS and the
+  token passed on, through the real router; a network capture at startup with the telemetry off (as D9 did for Cosmo);
+  the exact list of what fails without a licence, on that version; the composition differences between Cosmo and
+  Apollo on the examples (`extends`, `@shareable`, the rules of D43).
+- **Questions for the owner.** Support `apollo` at all, given ELv2 and the licensed features? If so, with GraphOS (the
+  router connected to Apollo's service) or only self-contained (no connection, no licensed feature)?
+
+## D66. Coming from Apollo: import a federation, then move it at one's own pace
+
+- **Status:** proposed (2026-11-28), not accepted. Phase EA.
+- **Context:** a team that runs Apollo Federation has subgraphs written for it (Federation v2, `@key`, `@shareable`,
+  `@external`), a Rover configuration that lists them (`supergraph.yaml`: names, routing URLs, schema files), and a
+  router configuration. Its subgraphs are standard GraphQL services, and D33 can already federate a subgraph that runs
+  elsewhere without moving it.
+- **Proposal.**
+  - `plugbricks import <supergraph.yaml>`: one external brick (D33) per subgraph of the file, with its URL and its
+    schema (a file, or read once from the service with `_service { sdl }`, D33 step 2), then the composition check;
+    nothing of the team's services moves. A subgraph that does not compose with Cosmo, or uses a directive plugbricks
+    refuses, is reported with its reason, and the others are imported.
+  - **A migration guide** mapping Apollo Router's configuration to plugbricks: CORS to D17, JWT authentication to D19,
+    header propagation to D20, `@authenticated` and `@requiresScopes` to D42 to D44; and saying what has **no
+    equivalent**: Rhai scripts, coprocessors, Rust plugins, and GraphOS's services (managed federation, contracts,
+    its schema checks, persisted queries).
+  - **Then one service at a time:** an external brick becomes a brick with its container, its database, its token
+    check and its roles; `schema check` (D33) and `schema diff` (D60) say nothing broke on the way.
+- **Questions for the owner.** Read `subgraphs` from a GraphOS graph ref too (it needs an Apollo API key), or only from a
+  local `supergraph.yaml`?
+- **Verify before code:** the fields of `supergraph.yaml` across Rover versions, and how a Federation v1 subgraph
+  composes with Cosmo's composition.
+
+## D67. Keeping one's Apollo Router: plugbricks without its router
+
+- **Status:** proposed (2026-11-28), not accepted. Phase EA.
+- **Context:** a team may keep its Apollo Router and GraphOS in front, and want plugbricks for everything behind them:
+  services with their databases, queues and secrets, Keycloak, `create`, `dev`, `doctor`. Today plugbricks always
+  renders its router when a brick serves a subgraph, and publishes nothing else (D9): the team's router could not reach
+  the subgraphs.
+- **Proposal.**
+  - `router.kind: "none"`: no router rendered. plugbricks still composes with Cosmo, as a check (D8).
+  - **The subgraphs published** for the team's router, on an address an environment names (D53): loopback on Compose
+    for a router on the same machine; on Kubernetes a Service the router reaches in its own namespace (with D57's
+    NetworkPolicies allowing it). Every published subgraph checks the token itself (D20), so it is not left open; a
+    subgraph whose brick checks no token is refused in this mode, since nothing would stand in front of it.
+  - `plugbricks export rover <file>`: the `supergraph.yaml` that Rover and GraphOS read, with the subgraphs' published
+    URLs and schemas; Apollo composes, with its own tools. plugbricks never runs or ships Apollo's composition here.
+- **Questions for the owner.** Publish subgraphs at all (it is the rule D9 kept), and only in this mode? Which kinds of
+  address on Kubernetes: a Service only, or also an Ingress (D56)?
+
 ## Already applied (milestone 2)
 
 Points 1 to 3 of experiment D are in the manifest schema:
